@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "edge-voice"
+version = "0.1.0"
+description = "Multi-channel streaming voice transcription for edge devices (RPi5 / Jetson) using Silero VAD and Moonshine STT"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+
+# NOTE: keep these UNPINNED or loosely pinned (>=, ~=). This list declares
+# *what* the project needs, not *which exact build*. Exact reproducible
+# versions live in requirements.txt / requirements-dev.txt, generated via
+# pip-compile (see "Dependency tracking" in docs/design.md).
+dependencies = [
+    "torch",
+    "torchaudio",
+    "soundfile",
+    "numpy",
+    "silero-vad",
+    "useful-moonshine-onnx",
+    "onnxruntime",
+    "paho-mqtt>=2.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "structlog>=24.0",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "websockets",
+    "tenacity>=8.0",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov",
+    "pip-tools",
+    "ruff",
+    "mypy",
+]
+
+[project.scripts]
+edge-voice = "edge_voice.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: slower tests that exercise multiple components together",
+]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true

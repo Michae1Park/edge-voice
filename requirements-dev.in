@@ -1,0 +1,8 @@
+# This file exists only as a pip-compile *input* for the dev lockfile.
+# It pulls the [dev] extra defined in pyproject.toml.
+# Generate requirements-dev.txt with:
+#   pip-compile --extra dev -o requirements-dev.txt pyproject.toml
+#
+# You normally don't edit this file directly — add new dev tools to
+# pyproject.toml under [project.optional-dependencies.dev] instead.
+-e .
