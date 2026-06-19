@@ -14,6 +14,20 @@ source .venv/bin/activate
 pytest                            # run unit tests
 ```
 
+### Dev setup
+```bash
+cd edge-voice
+
+source venv/bin/activate
+
+pip install -U pip
+pip install -e ".[dev]"
+
+pytest
+ruff check .
+mypy src
+```
+
 ## Repo layout
 
 See `docs/design.md` → "Repository structure" for what lives where.
