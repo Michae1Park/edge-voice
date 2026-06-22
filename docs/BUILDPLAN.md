@@ -13,11 +13,13 @@ map onto packages:
 
 | Architecture stage          | Package(s)                  |
 |------------------------------|------------------------------|
-| (test-only) audio generation | `tools/audio_generation/` *(not shipped — see note below)* |
+| (test-only) audio generation | `tools/audio_generation/` *(not shipped — runs as a separate process, see note below)* |
 | Audio packet ingestion + routing | `audio_ingest/`, `channel/` |
 | VAD                          | `vad/`                       |
 | STT                          | `stt/`                       |
-| Orchestration / reliability   | `pipeline/`                  |
+| Composition / lifecycle      | `pipeline/orchestrator.py`   |
+| Fault tolerance              | `pipeline/supervisor.py`     |
+| Entry point                  | `cli.py`                     |
 | Config                       | `config/`                    |
 | Observability                | `observability/`              |
 | Health                       | `health/`                     |
@@ -25,14 +27,53 @@ map onto packages:
 **Note on `audio_generation`:** this is a dev/test tool, not a production
 package — it simulates the real-world audio source (a phone call leg) by
 either capturing the mic or replaying a `.wav` file and publishing it over
-MQTT exactly like a real call leg would. Because it's test-only, it lives
-under `tools/audio_generation/`, outside the `src/` packages that ship.
-Everything downstream of it (`audio_ingest` onward) can't tell the
-difference between it and a real call leg — that's the point.
+MQTT exactly like a real call leg would. It runs as its own **separate
+process**, in its own terminal, and is never imported by `cli.py` or
+`pipeline/orchestrator.py`. The two talk only through the MQTT broker —
+that's deliberate, not a shortcut: `audio_ingest` should never be able to
+tell the difference between a simulated leg and a real one, and the only
+way to guarantee that is to never let them share a process.
 
 Shared dataclasses (`AudioPacket`, `SpeechSegment`, `TranscriptEvent`) live in
 `pipeline/models.py` so that `audio_ingest`, `channel`, `vad`, and `stt` can
 all import them without depending on each other directly.
+
+### How the pieces wire together
+
+```text
+cli.py
+  │  parses args, loads config.settings.Settings
+  ▼
+pipeline/orchestrator.py
+  │  builds workers + queues from Settings, owns startup order
+  │  and graceful shutdown (stop-event + join, proven in Milestone 0)
+  ▼
+pipeline/supervisor.py
+  │  watches the worker threads orchestrator handed it, restarts
+  │  on unexpected exit, tracks restart counts / degraded status —
+  │  doesn't know or care what a "channel router" is, just supervises threads
+  ▼
+audio_ingest/  →  channel/  →  vad/  →  stt/   (the actual worker threads)
+```
+
+`tools/audio_generation/` sits entirely outside this tree. It's a separate
+process publishing to the same MQTT broker `audio_ingest` subscribes to —
+no import relationship in either direction.
+
+**`main.py` is Milestone-0-only scaffolding**, not a second entry point. It
+exists purely because Milestone 0 has no config system yet, so it hardcodes
+two channel IDs and wires the fake workers directly. Once `cli.py` and
+`config/settings.py` exist (Milestone 1), `main.py`'s wiring logic moves
+into `pipeline/orchestrator.py` and `main.py` is either deleted or shrunk to
+a 3-line dev convenience (`if __name__ == "__main__": cli.main()`) for
+running without installing the package.
+
+**Failure-granularity note for later (Milestone 5):** MQTT
+reconnect-with-backoff is a *connection-level* retry that lives inside
+`audio_ingest`'s MQTT client itself — it is not a thread restart and should
+never go through `supervisor`. `supervisor` only acts on the coarser,
+rarer case: a worker thread dying outright from an unhandled exception.
+Conflating the two will make restart-count metrics noisy and useless.
 
 ---
 
@@ -40,16 +81,16 @@ all import them without depending on each other directly.
 
 ```
 Last updated: 2026-06-22
-Current milestone: 0 - Fake end-to-end pipeline
-Done: nothing yet
-In progress: pipeline/models.py
-Next action: define AudioPacket, then write a throwaway test that constructs one
+Current milestone: 0 - Fake end-to-end pipeline (done)
+Done: nothing 
+In progress: Milestone 0
+Next action: n/a
 Blocked on: nothing
 ```
 
 ---
 
-## Milestone 0 — Fake end-to-end pipeline
+## Milestone 0 — Fake end-to-end pipeline 
 
 **Goal:** prove the queue/worker skeleton works before any real audio,
 routing, VAD, or STT is involved. Everything in this milestone is fake.
@@ -76,22 +117,51 @@ fake channels, exits cleanly on Ctrl-C with no orphaned threads.
 
 ---
 
-## Milestone 1 — Real config + real audio generation (test tool)
+## Milestone 1 — Real config + cli.py entry point + real audio generation
+
+**Goal:** replace the Milestone-0 throwaway wiring with the permanent
+shape — `cli.py → orchestrator → workers` — and get real (non-fake) audio
+flowing over MQTT, even though `audio_ingest` doesn't exist to consume it
+yet.
 
 1. `config/settings.py` — pydantic `Settings`, layered per §6:
    defaults → config file → local override file → env vars. Validate on load.
-2. `tools/audio_generation/mic_source.py` — captures from the system
+2. `pipeline/orchestrator.py` — move the wiring logic out of `main.py`
+   here, parameterized by `Settings` instead of hardcoded constants. Same
+   responsibilities `main.py` already proved out in Milestone 0: build
+   workers, build queues, own startup order, own graceful shutdown
+   (stop-event + join). Still wires the *fake* VAD/STT workers from
+   Milestone 0 — only the ingest side gets real this milestone.
+   - Expose a `get_status()`-shaped seam now (even if it just returns
+     `{"workers": [...]}` for the moment) — Milestones 6/7 will need to
+     query orchestrator/supervisor for live status, and retrofitting that
+     later is more painful than stubbing it now.
+3. `cli.py` — becomes the real entry point: parse args, load `Settings`,
+   call `orchestrator.build_and_run(settings)`. This is what the
+   `edge-voice` console script will point to.
+   - **Decision needed before writing arg parsing:** does `cli.py` take a
+     flag like `--with-ui` to optionally start the FastAPI app (Milestone
+     7) in the same process, or is the web UI a separate process that just
+     reads `health`/`observability` state? Write this down once decided —
+     it changes whether the orchestrator and the web app share an event
+     loop / thread set.
+4. Shrink `main.py` to a 3-line dev convenience that calls `cli.main()`, or
+   delete it outright — its wiring logic now lives in `orchestrator.py`.
+5. `tools/audio_generation/mic_source.py` — captures from the system
    microphone, publishes audio chunks over MQTT tagged with a `channel_id`.
-3. `tools/audio_generation/wav_source.py` — reads a `.wav` file and streams
+6. `tools/audio_generation/wav_source.py` — reads a `.wav` file and streams
    it over MQTT at real-time pace (not as fast as disk I/O allows), so it
    behaves like a live call leg for testing.
-4. Both `audio_generation` sources should be runnable standalone (no
-   pipeline dependency) so you can sanity-check MQTT traffic with a generic
-   MQTT client before `audio_ingest` exists.
+7. Both `audio_generation` sources must be runnable standalone, in their
+   own process/terminal, with **no import of `pipeline`, `cli`, or
+   `orchestrator`** — confirm this by checking their import lines, not just
+   by running them.
 
-**Done when:** running `wav_source.py` against a test broker produces
-correctly-paced, channel-tagged MQTT messages, confirmed independently
-(e.g. via `mosquitto_sub`) — no pipeline code involved yet.
+**Done when:** `cli.py` (or the installed `edge-voice` console script)
+starts the still-fake pipeline using real `Settings`, AND, in a separate
+terminal/process, `wav_source.py` produces correctly-paced, channel-tagged
+MQTT messages — confirmed independently (e.g. via `mosquitto_sub`), no
+pipeline code involved in that check.
 
 ---
 
@@ -99,7 +169,9 @@ correctly-paced, channel-tagged MQTT messages, confirmed independently
 
 1. `audio_ingest/mqtt_client.py`
    - Subscribes to per-channel MQTT topics
-   - Reconnects with exponential backoff (§5)
+   - Reconnects with exponential backoff (§5) — **this stays internal to
+     the MQTT client**, it is not surfaced to `supervisor` as a worker
+     restart (see failure-granularity note above)
    - Pushes raw packets onto the shared ingest queue
 2. `channel/router.py`
    - Consumes from the ingest queue
@@ -107,12 +179,15 @@ correctly-paced, channel-tagged MQTT messages, confirmed independently
      (e.g. last-seen timestamp for the freshness check in §7)
    - Hands packets off toward VAD unchanged at this stage — routing logic
      stays separate from VAD logic so each is testable in isolation
-3. Swap `tools/audio_generation` + fake routing for real
-   `audio_ingest` + `channel` in `main.py`. VAD/STT stay fake.
+3. Swap `tools/audio_generation`'s fake-worker counterparts for real
+   `audio_ingest` + `channel` inside `pipeline/orchestrator.py`. VAD/STT
+   stay fake.
 
 **Done when:** killing/restarting the MQTT broker connection mid-run
-triggers reconnect without crashing the process, and two channels driven by
-`wav_source.py` produce correctly-attributed (still-fake) transcripts.
+triggers reconnect (inside `audio_ingest`, invisible to `supervisor`)
+without crashing the process, and two channels driven by `wav_source.py`
+(running in its own process) produce correctly-attributed (still-fake)
+transcripts.
 
 ---
 
@@ -120,18 +195,18 @@ triggers reconnect without crashing the process, and two channels driven by
 
 1. `vad/worker.py`
    - One shared `Silero VAD` / `VADIterator` instance
-   - Per-channel state dict (this is the part that bit you in
-     `asr-coastguard` — **lock the full `vad_iter()` call, not just score
+   - Per-channel state dict (prototype had issues — **lock the full `vad_iter()` call, not just score
      calls**)
    - Port soft-cut logic (confidence-dip detection, `SOFT_CUT_S=5.0s`,
-     `MAX_SEGMENT_S=7.0s`) from `asr-coastguard`, adapted to per-channel state
+     `MAX_SEGMENT_S=7.0s`) from prototype, adapted to per-channel state
    - Window size `VAD_WINDOW_SAMPLES=512`
-2. Swap fake VAD for `vad/worker.py`. STT stays fake.
+2. Swap fake VAD for `vad/worker.py` inside `pipeline/orchestrator.py`. STT
+   stays fake.
 
-**Done when:** two channels (mic + wav, or two wav sources) interleaved on
-the ingest queue produce correctly-segmented, channel-attributed
-`SpeechSegment`s with no crash under concurrent channel activity — write
-the interleaving test explicitly, don't just eyeball logs.
+**Done when:** two channels (mic + wav, or two wav sources, each its own
+process) interleaved on the ingest queue produce correctly-segmented,
+channel-attributed `SpeechSegment`s with no crash under concurrent channel
+activity — write the interleaving test explicitly, don't just eyeball logs.
 
 ---
 
@@ -141,32 +216,36 @@ the interleaving test explicitly, don't just eyeball logs.
    - Single shared Moonshine STT instance (`tiny-ko`, quantized)
    - `STT_FEED_WINDOWS=64`, `STT_LANGUAGE="ko"`
    - Port `best_partial` tracking + unigram/bigram repetition guard from
-     `asr-coastguard` to handle beam-search collapse at awkward boundaries
-   - Decide here whether to keep `torch+cpu` or switch to the
-     `useful-moonshine-onnx` + `onnxruntime` backend you scoped earlier
-     (NEON via `.ort` + `InferenceSession`) — don't silently default back to
-     torch without writing down why.
-2. Swap fake STT for `stt/worker.py`. Full pipeline is now real, end to end:
-   `audio_generation` (test) → `audio_ingest` → `channel` → `vad` → `stt`.
+     prototype to handle beam-search collapse at awkward boundaries
+2. Swap fake STT for `stt/worker.py` inside `pipeline/orchestrator.py`.
+   Full pipeline is now real, end to end: `audio_generation` (separate
+   process, test-only) → `audio_ingest` → `channel` → `vad` → `stt`.
 
-**Done when:** a real two-channel `.wav`/MQTT fixture (via `wav_source.py`)
-produces correct Korean transcripts in order, attributed to the right
-channel.
+**Done when:** a real two-channel `.wav`/MQTT fixture (via `wav_source.py`,
+its own process) produces correct Korean transcripts in order, attributed
+to the right channel.
 
 ---
 
 ## Milestone 5 — Reliability
 
 1. `pipeline/supervisor.py` — restarts `audio_ingest`/`channel`/`vad`/`stt`
-   workers on unexpected exit, tracks restart counts, flags "degraded"
-   after N repeated failures (§5)
+   worker threads on unexpected exit, tracks restart counts, flags
+   "degraded" after N repeated failures (§5). `orchestrator.py` builds the
+   workers and hands them to `supervisor.py` to watch — `supervisor`
+   itself stays generic ("a thread died, restart it") rather than
+   knowing what a VAD worker is.
 2. Fault isolation: malformed packet / inference exception → log + drop,
    never kill the worker loop
 3. Bounded-queue backpressure: queue depth tracked per stage and exposed
    (feeds Milestone 6)
+4. Flesh out the `get_status()` seam stubbed in Milestone 1 so it reports
+   real per-worker state (running/restarting/degraded) sourced from
+   `supervisor`, not from grepping logs.
 
 **Done when:** deliberately raising inside `stt/worker.py` mid-run gets
-logged, the worker restarts, and the pipeline keeps transcribing.
+logged, the worker restarts via `supervisor`, and the pipeline keeps
+transcribing — and `orchestrator.get_status()` reflects the restart.
 
 ---
 
@@ -177,7 +256,9 @@ logged, the worker restarts, and the pipeline keeps transcribing.
 2. `observability/metrics.py` — in-memory aggregation of STT latency, queue
    depth, restart counts, MQTT status, emitted as log events (no Prometheus)
 3. `health/reporting.py` — health object: overall status, per-worker
-   status, queue depths, MQTT connectivity, per-channel activity freshness
+   status, queue depths, MQTT connectivity, per-channel activity freshness.
+   Sources worker/restart status from `orchestrator.get_status()` rather
+   than re-deriving it.
 
 **Done when:** you can trace one segment's full lifecycle (`audio_ingest` →
 `channel` → `vad` → `stt` → transcript) through logs alone, by `segment_id`.
@@ -186,11 +267,15 @@ logged, the worker restarts, and the pipeline keeps transcribing.
 
 ## Milestone 7 — Web UI
 
-1. FastAPI app (`web/app.py`) serving server-rendered pages
-2. Control: start/stop pipeline, restart workers
+1. FastAPI app (`tool/webui/app.py`) serving server-rendered pages
+2. Control: start/stop pipeline, restart workers — calls into
+   `pipeline/orchestrator.py` / `pipeline/supervisor.py`, doesn't duplicate
+   their logic
 3. Config: view effective config, edit local override, validate before apply
 4. Live monitoring: WebSocket transcript stream, health dashboard (reads
    `health/reporting.py`), metrics dashboard (reads `observability/metrics.py`)
+5. Resolve the `--with-ui` decision flagged in Milestone 1 here if it
+   wasn't already: same process as `cli.py`/`orchestrator`, or separate.
 
 **Done when:** you can start the pipeline, watch live transcripts, and
 restart a worker — all from the browser, no shell access needed.
@@ -200,9 +285,11 @@ restart a worker — all from the browser, no shell access needed.
 ## Milestone 8 — Testing & CI
 
 1. Unit tests: `channel` routing, `vad` segmentation logic, `config`
-   validation
+   validation, `pipeline/supervisor.py` restart behavior in isolation
+   (kill a fake thread, assert it restarts)
 2. Integration tests:
-   - `audio_generation` (wav_source) → `audio_ingest` → `channel` → `vad`
+   - `audio_generation` (wav_source, its own process) → `audio_ingest` →
+     `channel` → `vad`
    - Full end-to-end fixture through `stt`
 3. CI workflow running both (perf validation stays manual, on-device)
 
