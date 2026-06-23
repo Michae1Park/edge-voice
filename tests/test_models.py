@@ -22,7 +22,7 @@ def test_speech_segment_construction():
         channel_id="channel-1",
         start=0.0,
         end=1.5,
-        audio=b"\x00" * 10,
+        audio=b"\x00\x01" * 10,
         segment_id="seg-1",
     )
     assert segment.end > segment.start
