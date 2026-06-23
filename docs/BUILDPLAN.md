@@ -81,7 +81,7 @@ Conflating the two will make restart-count metrics noisy and useless.
 
 ```
 Last updated: 2026-06-22
-Current milestone: 0 - Fake end-to-end pipeline (done)
+Current milestone: 0 - Fake end-to-end pipeline 
 Done: nothing 
 In progress: Milestone 0
 Next action: n/a
