@@ -62,3 +62,5 @@ src = ["src", "tests"]
 [tool.mypy]
 python_version = "3.12"
 ignore_missing_imports = true
+explicit_package_bases = true
+mypy_path = "src"
