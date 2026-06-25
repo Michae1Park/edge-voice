@@ -26,7 +26,7 @@ PACKET_INTERVAL_S = 0.02
 FAKE_SAMPLE_PAYLOAD = (
     b"\x00" * 640
 )  # 16000 samples/sec × 0.020 sec = 320 samples; each sample is 16-bit: 320 samples × 2 bytes = 640 bytes
-PUT_TIMEOUT_S = 0.02
+PUT_TIMEOUT_S = 0.01  # should be almost 0
 
 
 class FakeAudioSource(threading.Thread):
@@ -38,7 +38,7 @@ class FakeAudioSource(threading.Thread):
         ingest_queue: "queue.Queue[AudioPacket]",
         channel_ids: list[str],
     ) -> None:
-        super().__init__(name="FakeAudioSource", daemon=False)
+        super().__init__(name="FakeAudioSource", daemon=False)  # non-daemon; critical
         self._ingest_queue = ingest_queue
         self._channel_ids = channel_ids
         self._stop_event = threading.Event()
@@ -51,7 +51,7 @@ class FakeAudioSource(threading.Thread):
         while not self._stop_event.is_set():
             for channel_id in self._channel_ids:
                 if self._stop_event.is_set():
-                    break
+                    return
                 packet = AudioPacket(
                     channel_id=channel_id,
                     timestamp=time.time(),
