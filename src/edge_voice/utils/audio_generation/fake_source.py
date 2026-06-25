@@ -10,6 +10,7 @@ real call leg would. This fake version skips MQTT entirely and pushes
 synthetic AudioPackets straight onto the ingest queue on a timer, just to
 exercise the rest of the skeleton.
 """
+
 from __future__ import annotations
 
 import logging
@@ -21,9 +22,11 @@ from pipeline.models import AudioPacket
 
 logger = logging.getLogger(__name__)
 
-PACKET_INTERVAL_S = 0.5
-FAKE_SAMPLE_PAYLOAD = b"\x00" * 320  # arbitrary placeholder "audio"
-PUT_TIMEOUT_S = 0.2
+PACKET_INTERVAL_S = 0.02
+FAKE_SAMPLE_PAYLOAD = (
+    b"\x00" * 640
+)  # 16000 samples/sec × 0.020 sec = 320 samples; each sample is 16-bit: 320 samples × 2 bytes = 640 bytes
+PUT_TIMEOUT_S = 0.02
 
 
 class FakeAudioSource(threading.Thread):
@@ -57,8 +60,6 @@ class FakeAudioSource(threading.Thread):
                 try:
                     self._ingest_queue.put(packet, timeout=PUT_TIMEOUT_S)
                 except queue.Full:
-                    logger.warning(
-                        "ingest_queue full, dropping fake packet for %s", channel_id
-                    )
+                    logger.warning("ingest_queue full, dropping fake packet for %s", channel_id)
             self._stop_event.wait(PACKET_INTERVAL_S)
         logger.info("FakeAudioSource stopped")
