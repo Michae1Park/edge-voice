@@ -10,10 +10,15 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
 
-# NOTE: keep these UNPINNED or loosely pinned (>=, ~=). This list declares
-# *what* the project needs, not *which exact build*. Exact reproducible
-# versions live in requirements.txt / requirements-dev.txt, generated via
-# pip-compile (see "Dependency tracking" in docs/design.md).
+# Keep dependencies unpinned or loosely pinned (>=, ~=).
+# This file declares what the project needs, not exact resolved versions.
+#
+# Exact versions live in requirements.txt and requirements-dev.txt,
+# generated with pip-compile.
+#
+# PyTorch build variants (CPU/CUDA) are controlled by the lock files
+# and installation environment, not here.
+
 dependencies = [
     "torch",
     "torchaudio",
