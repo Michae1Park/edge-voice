@@ -9,6 +9,7 @@ Run with:  python main.py
 Stop with: Ctrl-C, or wait — it auto-stops after RUN_SECONDS.
 Expect:    clean exit, no orphaned threads (each worker logs "stopped").
 """
+
 from __future__ import annotations
 
 import logging
@@ -19,8 +20,8 @@ from pipeline.models import TranscriptEvent
 from pipeline.queues import make_ingest_queue, make_segment_queue
 from utils.audio_generation.fake_source import FakeAudioSource
 
-RUN_SECONDS = 30
-CHANNEL_IDS = ["channel-1", "channel-2"]
+RUN_SECONDS = 10
+CHANNEL_IDS = ["audio-rx", "audio-tx"]
 JOIN_TIMEOUT_S = 5
 
 logging.basicConfig(

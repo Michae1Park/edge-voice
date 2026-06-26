@@ -4,6 +4,7 @@ These live here (rather than inside audio_ingest/channel/vad/stt) so every
 stage can import one shared vocabulary without depending on each other
 directly. See BUILD_PLAN.md "Package map" for the rationale.
 """
+
 from __future__ import annotations
 
 import time
