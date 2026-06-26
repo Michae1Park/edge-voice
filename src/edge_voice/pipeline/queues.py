@@ -4,6 +4,7 @@ Sizes are hardcoded for Milestone 0. Milestone 1 wires these up to
 config.settings.Settings instead, so the queue-construction functions stay
 the stable interface that callers (main.py, tests) depend on.
 """
+
 from __future__ import annotations
 
 import queue

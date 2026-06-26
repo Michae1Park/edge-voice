@@ -4,12 +4,14 @@ Just enough to confirm the shared dataclasses construct correctly. Real
 unit tests (channel routing, VAD segmentation, config validation) arrive in
 Milestone 8.
 """
+
 # from src.edge_voice.pipeline.models import AudioPacket, SpeechSegment, TranscriptEvent
 from edge_voice.pipeline.models import (
     AudioPacket,
     SpeechSegment,
     TranscriptEvent,
 )
+
 
 def test_audio_packet_construction():
     packet = AudioPacket(channel_id="channel-1", timestamp=1.0, samples=b"\x00\x01")
