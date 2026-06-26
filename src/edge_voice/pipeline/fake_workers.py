@@ -13,6 +13,7 @@ When the real implementation lands, the corresponding Fake* class is
 deleted and main.py swaps the import — the queue contracts (what goes in,
 what comes out) are designed to stay the same.
 """
+
 from __future__ import annotations
 
 import itertools
@@ -25,12 +26,33 @@ from pipeline.models import AudioPacket, SpeechSegment, TranscriptEvent
 
 logger = logging.getLogger(__name__)
 
-# How many packets to "collect" per channel before fabricating a segment.
-PACKETS_PER_FAKE_SEGMENT = 3
-FAKE_SEGMENT_DURATION_S = 1.5
 
-# How long each queue.get() blocks before re-checking the stop event.
-POLL_INTERVAL_S = 0.2
+"""
+Audio packet sizing reference:
+Format: 16-bit PCM, mono (2 bytes/sample)
+
+16 kHz sample rate:
+    512 samples = 32 ms = 1024 bytes
+    320 samples = 20 ms =  640 bytes
+    256 samples = 16 ms =  512 bytes
+
+8 kHz sample rate:
+    256 samples = 32 ms = 512 bytes
+    160 samples = 20 ms = 320 bytes
+    128 samples = 16 ms = 256 bytes
+
+NOTE: one of these will come in as a single AudioPacket
+"""
+
+# This is the property of a single audio packet coming in
+VAD_SAMPLE_RATE = 16000
+VAD_WINDOW_SAMPLES = 512
+
+# NOTE: this is arbitrary here. It will be determined by VAD later, and with max segment length cutoff
+PACKETS_PER_FAKE_SEGMENT = 10
+FAKE_SEGMENT_DURATION_S = (VAD_WINDOW_SAMPLES / VAD_SAMPLE_RATE) * PACKETS_PER_FAKE_SEGMENT
+
+QUEUE_GET_TIMEOUT_S = 0.2
 
 
 class StoppableWorker(threading.Thread):
@@ -76,7 +98,7 @@ class FakeRouter(StoppableWorker):
         logger.info("FakeRouter started")
         while not self.stopping:
             try:
-                packet = self._ingest_queue.get(timeout=POLL_INTERVAL_S)
+                packet = self._ingest_queue.get(timeout=QUEUE_GET_TIMEOUT_S)
             except queue.Empty:
                 continue
             self._routed_queue.put(packet)
@@ -107,7 +129,7 @@ class FakeVADWorker(StoppableWorker):
         logger.info("FakeVADWorker started")
         while not self.stopping:
             try:
-                packet = self._routed_queue.get(timeout=POLL_INTERVAL_S)
+                packet = self._routed_queue.get(timeout=QUEUE_GET_TIMEOUT_S)
             except queue.Empty:
                 continue
 
@@ -152,9 +174,11 @@ class FakeSTTWorker(StoppableWorker):
         logger.info("FakeSTTWorker started")
         while not self.stopping:
             try:
-                segment = self._segment_queue.get(timeout=POLL_INTERVAL_S)
+                segment = self._segment_queue.get(timeout=QUEUE_GET_TIMEOUT_S)
             except queue.Empty:
                 continue
+
+            # Transcribe using STT
 
             event = TranscriptEvent(
                 channel_id=segment.channel_id,
