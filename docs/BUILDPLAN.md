@@ -13,7 +13,7 @@ map onto packages:
 
 | Architecture stage          | Package(s)                  |
 |------------------------------|------------------------------|
-| (test-only) audio generation | `tools/audio_generation/` *(not shipped — runs as a separate process, see note below)* |
+| (test-only) audio generation | `utils/audio_generation/` *(not shipped — runs as a separate process, see note below)* |
 | Audio packet ingestion + routing | `audio_ingest/`, `channel/` |
 | VAD                          | `vad/`                       |
 | STT                          | `stt/`                       |
@@ -56,7 +56,7 @@ pipeline/supervisor.py
 audio_ingest/  →  channel/  →  vad/  →  stt/   (the actual worker threads)
 ```
 
-`tools/audio_generation/` sits entirely outside this tree. It's a separate
+`utils/audio_generation/` sits entirely outside this tree. It's a separate
 process publishing to the same MQTT broker `audio_ingest` subscribes to —
 no import relationship in either direction.
 
@@ -80,10 +80,10 @@ Conflating the two will make restart-count metrics noisy and useless.
 ## STATUS (update this every session, even with one line)
 
 ```
-Last updated: 2026-06-22
-Current milestone: 0 - Fake end-to-end pipeline 
-Done: nothing 
-In progress: Milestone 0
+Last updated: 2026-06-29
+Current milestone: 1  
+Done: ms 0
+In progress: ms 1
 Next action: n/a
 Blocked on: nothing
 ```
@@ -102,7 +102,7 @@ routing, VAD, or STT is involved. Everything in this milestone is fake.
 2. `pipeline/queues.py`
    - `ingest_queue`, `segment_queue` — bounded, sizes hardcoded for now
      (real config arrives in Milestone 1)
-3. `tools/audio_generation/fake_source.py`
+3. `utils/audio_generation/fake_source.py`
    - Pushes synthetic `AudioPacket`s on a timer for two fake `channel_id`s
    - No MQTT yet — pushes straight onto `ingest_queue`
 4. `pipeline/fake_workers.py`
@@ -147,9 +147,9 @@ yet.
      loop / thread set.
 4. Shrink `main.py` to a 3-line dev convenience that calls `cli.main()`, or
    delete it outright — its wiring logic now lives in `orchestrator.py`.
-5. `tools/audio_generation/mic_source.py` — captures from the system
+5. `utils/audio_generation/mic_source.py` — captures from the system
    microphone, publishes audio chunks over MQTT tagged with a `channel_id`.
-6. `tools/audio_generation/wav_source.py` — reads a `.wav` file and streams
+6. `utils/audio_generation/wav_source.py` — reads a `.wav` file and streams
    it over MQTT at real-time pace (not as fast as disk I/O allows), so it
    behaves like a live call leg for testing.
 7. Both `audio_generation` sources must be runnable standalone, in their
@@ -179,7 +179,7 @@ pipeline code involved in that check.
      (e.g. last-seen timestamp for the freshness check in §7)
    - Hands packets off toward VAD unchanged at this stage — routing logic
      stays separate from VAD logic so each is testable in isolation
-3. Swap `tools/audio_generation`'s fake-worker counterparts for real
+3. Swap `utils/audio_generation`'s fake-worker counterparts for real
    `audio_ingest` + `channel` inside `pipeline/orchestrator.py`. VAD/STT
    stay fake.
 
