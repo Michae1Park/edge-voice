@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import queue
 
-from pipeline.models import AudioPacket, SpeechSegment
+from edge_voice.pipeline.models import AudioPacket, SpeechSegment
 
 INGEST_QUEUE_MAXSIZE = 256
 SEGMENT_QUEUE_MAXSIZE = 64
