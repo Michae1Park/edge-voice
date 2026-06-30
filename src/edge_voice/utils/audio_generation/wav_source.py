@@ -55,11 +55,6 @@ def open_wav(path: str):
             if len(header) < 8:
                 raise ValueError("Reached end of file before finding data chunk")
             chunk_id, chunk_len = struct.unpack("<4sI", header)
-        while True:
-            header = f.read(8)
-            if len(header) < 8:
-                raise ValueError("Reached end of file before finding data chunk")
-            chunk_id, chunk_len = struct.unpack("<4sI", header)
             if chunk_id == b"fmt ":
                 fmt = struct.unpack("<H", f.read(2))[0]
                 if fmt != 1:
