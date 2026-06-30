@@ -28,7 +28,7 @@ vad:
 
 source:
   sample_rate: 16000
-  default_audio: ""
+  default_audio: "wav/conversation_60s.wav"
 
 stt:
   language: "ko"
