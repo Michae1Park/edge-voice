@@ -80,7 +80,7 @@ Conflating the two will make restart-count metrics noisy and useless.
 ## STATUS (update this every session, even with one line)
 
 ```
-Last updated: 2026-06-29
+Last updated: 2026-07-01
 Current milestone: 2  
 Done: ms 0, 1
 In progress: 2
