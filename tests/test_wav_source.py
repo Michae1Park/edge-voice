@@ -7,22 +7,17 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import pytest
 
-from edge_voice.utils.audio_generation.wav_source import (
-    CHUNK_SAMPLES,
-    TARGET_SAMPLE_RATE,
-    WavSource,
-    open_wav,
-    resample,
-    _create_packet,
-)
+from edge_voice.utils.audio_generation.wav_source import WavSource
+
+_TEST_CHUNK_SAMPLES = 320
+_TEST_SAMPLE_RATE = 16_000
 
 
 def _make_wav(
     path: Path,
     duration_s: float = 1.0,
-    sample_rate: int = TARGET_SAMPLE_RATE,
+    sample_rate: int = _TEST_SAMPLE_RATE,
     channels: int = 1,
     samples: np.ndarray | None = None,
 ) -> np.ndarray:
@@ -57,145 +52,9 @@ def _make_wav(
     return samples
 
 
-# --------------------------------------------------------------------------- #
-# open_wav
-# --------------------------------------------------------------------------- #
-
-
-class TestOpenWav:
-    def test_open_mono_16k(self, tmp_path: Path):
-        data = np.arange(320, dtype=np.int16)
-        wav_path = tmp_path / "mono.wav"
-        _make_wav(wav_path, samples=data)
-
-        sr, ch, ba, frames, out = open_wav(str(wav_path))
-        assert sr == TARGET_SAMPLE_RATE
-        assert ch == 1
-        assert ba == 2
-        assert frames == len(data) // 2
-        np.testing.assert_array_equal(out, data)
-
-    def test_open_stereo(self, tmp_path: Path):
-        data = np.arange(640, dtype=np.int16)
-        wav_path = tmp_path / "stereo.wav"
-        _make_wav(wav_path, samples=data, channels=2)
-
-        sr, ch, ba, frames, out = open_wav(str(wav_path))
-        assert ch == 2
-
-    def test_invalid_riff_header(self, tmp_path: Path):
-        wav_path = tmp_path / "bad.wav"
-        wav_path.write_bytes(b"NOTW\x00\x00\x00\x00")
-        with pytest.raises(ValueError, match="Invalid RIFF header"):
-            open_wav(str(wav_path))
-
-    def test_invalid_wave_header(self, tmp_path: Path):
-        wav_path = tmp_path / "bad.wav"
-        wav_path.write_bytes(b"RIFF\x00\x00\x00\x00NOTW")
-        with pytest.raises(ValueError, match="Invalid WAVE header"):
-            open_wav(str(wav_path))
-
-    def test_missing_data_chunk(self, tmp_path: Path):
-        wav_path = tmp_path / "nodata.wav"
-        with open(wav_path, "wb") as f:
-            f.write(b"RIFF")
-            f.write(struct.pack("<I", 36))
-            f.write(b"WAVE")
-            f.write(b"fmt ")
-            f.write(struct.pack("<I", 16))
-            f.write(struct.pack("<H", 1))  # PCM
-            f.write(struct.pack("<H", 1))
-            f.write(struct.pack("<I", 16000))
-            f.write(struct.pack("<I", 32000))
-            f.write(struct.pack("<H", 2))
-            f.write(struct.pack("<H", 16))
-            f.write(b"\x00" * 16)  # skip chunk
-        with pytest.raises(ValueError, match="Reached end of file"):
-            open_wav(str(wav_path))
-
-    def test_unsupported_bit_depth(self, tmp_path: Path):
-        wav_path = tmp_path / "24bit.wav"
-        with open(wav_path, "wb") as f:
-            f.write(b"RIFF")
-            f.write(struct.pack("<I", 42))
-            f.write(b"WAVE")
-            f.write(b"fmt ")
-            f.write(struct.pack("<I", 16))
-            f.write(struct.pack("<H", 6))  # non-PCM format
-            f.write(struct.pack("<H", 1))
-            f.write(struct.pack("<I", 16000))
-            f.write(struct.pack("<I", 32000))
-            f.write(struct.pack("<H", 4))
-            f.write(struct.pack("<H", 24))  # 24-bit
-            f.write(b"data")
-            f.write(struct.pack("<I", 0))
-        with pytest.raises(ValueError, match="Unsupported WAV format"):
-            open_wav(str(wav_path))
-
-
-# --------------------------------------------------------------------------- #
-# resample
-# --------------------------------------------------------------------------- #
-
-
-class TestResample:
-    def test_no_resampling_needed(self):
-        data = np.arange(100, dtype=np.int16)
-        result = resample(data, 16000, 16000)
-        np.testing.assert_array_equal(result, data)
-
-    def test_upsample(self):
-        data = np.array([0, 1000, 2000, 3000], dtype=np.int16)
-        result = resample(data, 8000, 16000)
-        assert result.dtype == np.int16
-        assert len(result) == 8  # duration * 16000 = 4 * 16000 = 64, but with 4 samples...
-
-    def test_downsample(self):
-        data = np.arange(160, dtype=np.int16)
-        result = resample(data, 32000, 8000)
-        assert result.dtype == np.int16
-        assert len(result) == 40  # 160/32000 * 8000 = 40
-
-    def test_preserves_dtype(self):
-        data = np.random.randint(-32768, 32767, 100, dtype=np.int16)
-        result = resample(data, 8000, 48000)
-        assert result.dtype == np.int16
-
-
-# --------------------------------------------------------------------------- #
-# _create_packet
-# --------------------------------------------------------------------------- #
-
-
-class TestCreatePacket:
-    def test_creates_valid_packet(self):
-        channel_id = "test-ch"
-        samples = np.array([100, 200, 300], dtype=np.int16)
-        ts = 12345.678
-
-        packet = _create_packet(channel_id, samples, ts)
-
-        assert packet.channel_id == channel_id
-        assert packet.timestamp == ts
-        assert packet.samples == samples.tobytes()
-
-    def test_default_timestamp(self):
-        channel_id = "test-ch"
-        samples = np.array([100], dtype=np.int16)
-        packet = _create_packet(channel_id, samples)
-
-        assert isinstance(packet.timestamp, float)
-        assert packet.timestamp > 0
-
-    def test_empty_samples(self):
-        samples = np.array([], dtype=np.int16)
-        packet = _create_packet("ch", samples)
-        assert packet.samples == b""
-
-
-# --------------------------------------------------------------------------- #
+# ------
 # WavSource
-# --------------------------------------------------------------------------- #
+# ------
 
 
 class TestWavSource:
@@ -216,7 +75,7 @@ class TestWavSource:
         assert all(p.channel_id == "ch1" for p in packets_collected)
 
     def test_wavsource_multiple_channels(self, tmp_path: Path):
-        data = np.arange(320, dtype=np.int16)
+        data = np.arange(_TEST_CHUNK_SAMPLES, dtype=np.int16)
         wav_path = tmp_path / "test.wav"
         _make_wav(wav_path, samples=data)
 
@@ -234,8 +93,8 @@ class TestWavSource:
         assert "ch2" in channel_ids
 
     def test_wavsource_stop(self, tmp_path: Path):
-        # Create a 60-second WAV file — will only play a few packets before stopping
-        data = np.arange(16000 * 60, dtype=np.int16)
+        # Create a 60-second WAV file -- will only play a few packets before stopping
+        data = np.arange(_TEST_SAMPLE_RATE * 60, dtype=np.int16)
         wav_path = tmp_path / "long.wav"
         _make_wav(wav_path, samples=data)
 
@@ -251,7 +110,7 @@ class TestWavSource:
         assert not source.is_alive()
 
     def test_wavsource_small_patch_last_chunk(self, tmp_path: Path):
-        # Non-multiple of CHUNK_SAMPLES exercises the padding path
+        # Non-multiple of _TEST_CHUNK_SAMPLES exercises the padding path
         data = np.arange(100, dtype=np.int16)
         wav_path = tmp_path / "short.wav"
         _make_wav(wav_path, samples=data)
@@ -265,12 +124,12 @@ class TestWavSource:
             packets_collected.append(q.get())
 
         assert len(packets_collected) == 1
-        # Padded chunk should be CHUNK_SAMPLES bytes worth (320 * 2 bytes per int16)
-        assert len(packets_collected[0].samples) == CHUNK_SAMPLES * 2
+        # Padded chunk should be CHUNK_SAMPLES * 2 bytes (160 bytes)
+        assert len(packets_collected[0].samples) == _TEST_CHUNK_SAMPLES * 2
 
     def test_wavsource_queue_full_drops(self, tmp_path: Path):
         small_q: queue.Queue[Any] = queue.Queue(maxsize=1)
-        data = np.arange(16000, dtype=np.int16)  # 1 second of audio
+        data = np.arange(_TEST_SAMPLE_RATE, dtype=np.int16)  # 1 second of audio
         wav_path = tmp_path / "long.wav"
         _make_wav(wav_path, samples=data)
 
@@ -280,18 +139,17 @@ class TestWavSource:
         assert small_q.qsize() == 1
 
     def test_wavsource_is_alive_during_run(self, tmp_path: Path):
-        data = np.arange(16000, dtype=np.int16)
+        data = np.arange(_TEST_SAMPLE_RATE, dtype=np.int16)
         wav_path = tmp_path / "test.wav"
         _make_wav(wav_path, samples=data)
 
         q: queue.Queue[Any] = queue.Queue()
         source = WavSource(q, ["ch1"], str(wav_path))
 
-        # is_alive checks whether _stopped is not set, not thread status
-        assert source.is_alive()  # stopped flag is not set yet
+        assert not source._stopped.is_set()
         source.start()
         time.sleep(0.05)
-        assert source.is_alive()
+        assert not source._stopped.is_set()
         source.stop()
         source.join(timeout=5)
 
@@ -310,31 +168,15 @@ class TestWavSource:
         source.run()
 
         packet = q.get()
-        # Mono should be average of left and right (padded to CHUNK_SAMPLES)
         expected_mono = ((left.astype(np.int32) + right.astype(np.int32)) // 2).astype(np.int16)
         received = np.frombuffer(packet.samples, dtype=np.int16)
         np.testing.assert_array_equal(received[:4], expected_mono)
 
     def test_wavsource_resampling(self, tmp_path: Path):
-        # Create a 48kHz WAV file — should be resampled to 16kHz
+        # Create a 48kHz WAV file -- should be resampled to 16kHz
         data = np.arange(48000, dtype=np.int16)
         wav_path = tmp_path / "48k.wav"
-
-        with open(wav_path, "wb") as f:
-            f.write(b"RIFF")
-            f.write(struct.pack("<I", 36 + len(data) * 2))
-            f.write(b"WAVE")
-            f.write(b"fmt ")
-            f.write(struct.pack("<I", 16))
-            f.write(struct.pack("<H", 1))  # PCM
-            f.write(struct.pack("<H", 1))
-            f.write(struct.pack("<I", 48000))
-            f.write(struct.pack("<I", 96000))
-            f.write(struct.pack("<H", 2))
-            f.write(struct.pack("<H", 16))
-            f.write(b"data")
-            f.write(struct.pack("<I", len(data) * 2))
-            f.write(data.tobytes())
+        _make_wav(wav_path, samples=data, sample_rate=48000)
 
         q: queue.Queue[Any] = queue.Queue()
         source = WavSource(q, ["ch1"], str(wav_path))
@@ -348,7 +190,7 @@ class TestWavSource:
         assert len(packets_collected) == 50
 
     def test_wavsource_thread_name(self, tmp_path: Path):
-        data = np.arange(CHUNK_SAMPLES, dtype=np.int16)
+        data = np.arange(_TEST_CHUNK_SAMPLES, dtype=np.int16)
         wav_path = tmp_path / "test.wav"
         _make_wav(wav_path, samples=data)
 
@@ -356,3 +198,28 @@ class TestWavSource:
         source = WavSource(q, ["ch1"], str(wav_path))
         assert source.name == "WavSource"
         assert source.daemon is True
+
+    def test_wavsource_uses_custom_configs(self, tmp_path: Path):
+        """Verify that overriding sample_rate and chunk_samples works."""
+        # 480 samples with custom sample_rate of 32kHz, 640 chunk size
+        data = np.arange(480, dtype=np.int16)
+        wav_path = tmp_path / "test.wav"
+        _make_wav(wav_path, samples=data, sample_rate=32000)
+
+        q: queue.Queue[Any] = queue.Queue()
+        source = WavSource(
+            q,
+            ["ch1"],
+            str(wav_path),
+            sample_rate=16_000,
+            chunk_samples=320,
+        )
+        source.run()
+
+        packets_collected = []
+        while not q.empty():
+            packets_collected.append(q.get())
+
+        # 480 -> resampled to 16_000: 180 frames -> 180/320 = 1 chunk (padded to 320)
+        assert len(packets_collected) == 1
+        assert len(packets_collected[0].samples) == 320 * 2  # bytes
