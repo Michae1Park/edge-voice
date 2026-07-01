@@ -37,6 +37,7 @@ class MQTTSettings(BaseModel):
 
 class AudioSettings(BaseModel):
     sample_rate: int = 16000
+    chunk_samples: int = 320
     channels: int = 1
     format: str = "int16"
 
