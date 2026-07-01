@@ -81,9 +81,9 @@ Conflating the two will make restart-count metrics noisy and useless.
 
 ```
 Last updated: 2026-06-29
-Current milestone: none  
+Current milestone: 2  
 Done: ms 0, 1
-In progress: none
+In progress: 2
 Next action: n/a
 Blocked on: nothing
 ```
