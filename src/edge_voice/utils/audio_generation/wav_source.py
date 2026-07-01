@@ -1,212 +1,139 @@
-"""Standalone WAV file audio source for testing/dev.
-
-Reads a .wav file, converts to the format expected by edge_voice pipeline,
-and publishes audio chunks to an ingest queue or MQTT broker tagged with a
-channel_id.
-
-Run standalone in its own terminal:
-    python wav_source.py --file test.wav --output-queue  # push to in-memory queue
-    python wav_source.py --file test.wav --mqtt           # push to MQTT broker
-
-This is NOT imported by cli.py or pipeline/orchestrator.py. It's a separate
-process, just like a real call leg would be.
-"""
+"""WAV file audio source that reads a file and pushes 20ms packets."""
 
 from __future__ import annotations
 
-import argparse
-from typing import Any
 import logging
 import math
 import queue
-import struct
 import threading
 import time
+from typing import Any
 
 import numpy as np
+import soundfile as sf
+import torch
+import torchaudio
 
 logger = logging.getLogger(__name__)
 
-# Audio format: 16-bit PCM, mono, 16kHz (matches default YAML config)
-TARGET_SAMPLE_RATE = 16000
-CHUNK_SAMPLES = 320  # 20ms chunks (160 bytes @ 16bit)
-PACKET_PUT_TIMEOUT = 0.01
-
-
-def open_wav(path: str):
-    """Open and parse a WAV file.
-
-    Returns: (sample_rate, num_channels, block_align, num_frames, data)
-    """
-    with open(path, "rb") as f:
-        # Read RIFF header
-        riff = f.read(4)
-        if riff != b"RIFF":
-            raise ValueError(f"Invalid RIFF header: {riff!r}")
-
-        struct.unpack("<I", f.read(4))
-        wave = f.read(4)
-        if wave != b"WAVE":
-            raise ValueError(f"Invalid WAVE header: {wave!r}")
-
-        # Read format chunk
-        while True:
-            header = f.read(8)
-            if len(header) < 8:
-                raise ValueError("Reached end of file before finding data chunk")
-            chunk_id, chunk_len = struct.unpack("<4sI", header)
-            if chunk_id == b"fmt ":
-                fmt = struct.unpack("<H", f.read(2))[0]
-                if fmt != 1:
-                    raise ValueError(f"Unsupported WAV format: {fmt}")
-                channels = struct.unpack("<H", f.read(2))[0]
-                sample_rate = struct.unpack("<I", f.read(4))[0]
-                _byte_rate = struct.unpack("<I", f.read(4))[0]
-                block_align = struct.unpack("<H", f.read(2))[0]
-                bits_per_sample = struct.unpack("<H", f.read(2))[0]
-                if bits_per_sample != 16:
-                    raise ValueError(f"Unsupported bit depth: {bits_per_sample}")
-                # Keep looking for the data chunk
-            elif chunk_id == b"data":
-                break
-            else:
-                f.read(chunk_len)
-
-        if chunk_id != b"data":
-            raise ValueError(f"Expected 'data' chunk, got {chunk_id!r}")
-        sample_data = bytearray(chunk_len)
-        f.readinto(sample_data)
-
-    data = np.frombuffer(sample_data, dtype=np.int16)
-    return sample_rate, channels, block_align, len(data) // block_align, data
-
-
-def resample(data: np.ndarray, src_rate: int, dst_rate: int) -> np.ndarray:
-    """Simple linear interpolation resampling."""
-    if src_rate == dst_rate:
-        return data
-
-    duration = len(data) / src_rate
-    dst_samples = int(duration * dst_rate)
-    indices = np.linspace(0, len(data) - 1, dst_samples)
-    resampled = np.interp(indices, np.arange(len(data)), data.astype(float))
-    return resampled.astype(np.int16)
-
 
 class WavSource(threading.Thread):
-    """Parses a .wav file and pushes 20ms audio packets onto a queue."""
+    """Parses a .wav file and pushes 20ms audio packets onto a queue.
+
+    All audio config is taken from Settings via *sample_rate* and
+    *chunk_samples* rather than from module-level constants.
+    """
 
     def __init__(
         self,
         ingest_queue: queue.Queue,
         channel_ids: list[str],
         wav_path: str,
+        sample_rate: int = 16_000,
+        chunk_samples: int = 320,  # 20 ms chunks (160 bytes @ 16bit mono)
     ) -> None:
         super().__init__(name="WavSource", daemon=True)
         self._ingest_queue = ingest_queue
         self._channel_ids = channel_ids
         self._wav_path = wav_path
+        self._sample_rate = sample_rate
+        self._chunk_samples = chunk_samples
         self._stopped = threading.Event()
 
+    # ------------------------------------------------------------------
+    # File helpers (moved from module scope into the class)
+    # ------------------------------------------------------------------
+
+    def _open_wav(self, path: str) -> tuple[int, int, np.ndarray]:
+        """Open an entire WAV file via soundfile (int16)."""
+        data, sr = sf.read(path, dtype="int16")
+        nch = 1 if data.ndim == 1 else data.shape[1]
+        return sr, nch, data
+
+    def _resample(self, data: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
+        """Resample with torchaudio (int16 → int16)."""
+        if src_sr == dst_sr:
+            return data
+        tensor = torch.as_tensor(data, dtype=torch.float32).unsqueeze(0)
+        resampler = torchaudio.transforms.Resample(src_sr, dst_sr, lowpass_filter_width=64)
+        return resampler(tensor).squeeze(0).numpy().astype(np.int16)
+
+    def _create_packet(
+        self,
+        channel_id: str,
+        samples: np.ndarray,
+        timestamp: float | None = None,
+    ) -> Any:
+        """Encode *samples* into an AudioPacket."""
+        from edge_voice.pipeline.models import AudioPacket
+
+        return AudioPacket(
+            channel_id=channel_id,
+            timestamp=timestamp or time.time(),
+            samples=samples.tobytes(),
+        )
+
+    # ------------------------------------------------------------------
+    # Worker lifecycle
+    # ------------------------------------------------------------------
+
     def run(self) -> None:
-        """Read WAV file and push packets."""
+        """Read the WAV file, convert to 16 kHz mono int16, and push 20 ms chunks.
+
+        Real-time pacing is maintained so playback speed matches wall-clock time.
+        """
         logger.info("WavSource: reading %s...", self._wav_path)
-        sample_rate, channels, block_align, num_frames, data = open_wav(self._wav_path)
+        file_sr, nch, data = self._open_wav(self._wav_path)
 
-        # Resample if needed
-        if sample_rate != TARGET_SAMPLE_RATE:
-            logger.info("WavSource: resampling %d -> %d Hz", sample_rate, TARGET_SAMPLE_RATE)
-            data = resample(data, sample_rate, TARGET_SAMPLE_RATE)
-            sample_rate = TARGET_SAMPLE_RATE
+        # --- Resample ---------------------------------------------------
+        if file_sr != self._sample_rate:
+            logger.info("WavSource: resampling %d → %d Hz", file_sr, self._sample_rate)
+            data = self._resample(data, file_sr, self._sample_rate)
 
-        # Convert stereo to mono if needed
-        if channels == 2:
-            mono = (data[0::2] + data[1::2]) // 2
-            # Handle odd length
-            if len(data) % 2 == 1:
-                mono = np.append(mono, data[-1] // 2)
-            data = mono
+        # --- Stereo → mono if necessary ---------------------------------
+        if nch == 2:
+            mono = (data[:, 0].astype(np.int32) + data[:, 1].astype(np.int32)) // 2
+            data = mono.astype(np.int16)
 
-        total_chunks = math.ceil(len(data) / CHUNK_SAMPLES)
+        total_chunks = math.ceil(len(data) / self._chunk_samples)
         start_time = time.time()
-
         packet_num = 0
-        for i in range(0, len(data), CHUNK_SAMPLES):
+
+        # --- Loop over 20 ms chunks -------------------------------------
+        for i in range(0, len(data), self._chunk_samples):
             if self._stopped.is_set():
                 break
-            chunk = data[i : i + CHUNK_SAMPLES]
-            # Pad if last chunk is short
-            if len(chunk) < CHUNK_SAMPLES:
-                chunk = np.pad(chunk, (0, CHUNK_SAMPLES - len(chunk)), "constant")
-            chunk_bytes = chunk.astype(np.int16).tobytes()
+
+            chunk = data[i : i + self._chunk_samples]
+            if len(chunk) < self._chunk_samples:
+                chunk = np.pad(chunk, (0, self._chunk_samples - len(chunk)), "constant")
 
             for channel_id in self._channel_ids:
-                from edge_voice.pipeline.models import AudioPacket
-
-                packet = AudioPacket(
-                    channel_id=channel_id,
-                    timestamp=time.time(),
-                    samples=chunk_bytes,
-                )
+                packet = self._create_packet(channel_id, chunk, time.time())
                 try:
-                    self._ingest_queue.put(packet, timeout=PACKET_PUT_TIMEOUT)
+                    self._ingest_queue.put(packet, timeout=0.01)
                     packet_num += 1
                 except queue.Full:
-                    logger.warning("ingest_queue full, dropping packet for %s", channel_id)
+                    logger.warning("ingest_queue full; dropping packet for %s", channel_id)
 
-            # Maintain real-time rate
+            # Real-time pacing
             elapsed = time.time() - start_time
-            expected = (packet_num * CHUNK_SAMPLES) / TARGET_SAMPLE_RATE
+            expected = (packet_num * self._chunk_samples) / self._sample_rate
             delay = expected - elapsed
             if delay > 0:
                 time.sleep(delay)
 
         logger.info(
-            "WavSource: played %d packets (%.2fs duration)", packet_num, total_chunks * 0.02
+            "WavSource: played %d packets (%.2fs duration)",
+            packet_num,
+            total_chunks * 0.02,
         )
 
     def stop(self) -> None:
+        """Signal the worker to stop after the current packet."""
         self._stopped.set()
 
     def is_alive(self) -> bool:
+        """Return *True* while the worker is not stopped — *not* the
+        underlying ``threading.Thread.is_alive()``."""
         return not self._stopped.is_set()
-
-
-def _create_packet(
-    channel_id: str,
-    samples: np.ndarray,
-    timestamp: float | None = None,
-) -> Any:
-    """Convert numpy array to AudioPacket."""
-    from edge_voice.pipeline.models import AudioPacket
-
-    return AudioPacket(
-        channel_id=channel_id,
-        timestamp=timestamp or time.time(),
-        samples=samples.tobytes(),
-    )
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="WavSource standalone test")
-    parser.add_argument("file", help="Path to WAV file")
-    parser.add_argument(
-        "-c", "--channels", type=str, default="ch1,ch2", help="Channel IDs (comma-separated)"
-    )
-    parser.add_argument("-q", "--queue-type", choices=["memory", "mqtt"], default="memory")
-    parser.add_argument("--debug", action="store_true")
-    args = parser.parse_args()
-
-    logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
-
-    if args.queue_type == "memory":
-        q: queue.Queue[Any] = queue.Queue(maxsize=256)
-        channels = [c.strip() for c in args.channels.split(",")]
-        source = WavSource(q, channels, args.file)
-        source.run()
-    else:
-        logger.info("MQTT mode not yet implemented")
-
-
-if __name__ == "__main__":
-    main()

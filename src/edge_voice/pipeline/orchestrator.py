@@ -14,26 +14,14 @@ import logging
 import queue
 import threading
 import time
-from dataclasses import dataclass, field
 from typing import Any
 
 from edge_voice.config.settings import Settings
 from edge_voice.pipeline.queues import make_ingest_queue, make_segment_queue
+from edge_voice.pipeline.models import WorkerStatus, PipelineStatus
 
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class WorkerStatus:
-    name: str
-    state: str  # "running", "stopped", "starting", "stopping"
-
-
-@dataclass
-class PipelineStatus:
-    workers: list[WorkerStatus] = field(default_factory=list)
-    running: bool = False
 
 
 class PipelineOrchestrator:
@@ -234,11 +222,10 @@ class PipelineOrchestrator:
 
         assert self._ingest_queue is not None
         channel_ids = [c.channel_id for c in self._settings.mqtt.channels]
-        return WavSource(self._ingest_queue, channel_ids, wav_file)
-
-
-def build_and_run(settings: Settings, duration_s: float = 30.0) -> PipelineStatus:
-    """Convenience function to build, run, and return final status."""
-    orch = PipelineOrchestrator(settings)
-    orch.run_with_timer(duration_s)
-    return orch.get_status()
+        return WavSource(
+            self._ingest_queue,
+            channel_ids,
+            wav_file,
+            sample_rate=self._settings.audio.sample_rate,
+            chunk_samples=self._settings.audio.chunk_samples,
+        )

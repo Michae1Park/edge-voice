@@ -50,3 +50,15 @@ class TranscriptEvent:
     start: float
     end: float
     created_at: float = field(default_factory=time.time)
+
+
+@dataclass
+class WorkerStatus:
+    name: str
+    state: str  # "running", "stopped", "starting", "stopping"
+
+
+@dataclass
+class PipelineStatus:
+    workers: list[WorkerStatus] = field(default_factory=list)
+    running: bool = False
