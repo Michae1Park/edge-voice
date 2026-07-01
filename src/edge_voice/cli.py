@@ -6,7 +6,7 @@ config, and starts the pipeline (and optionally the web UI) as configured.
 import argparse
 import logging
 
-from edge_voice.config.settings import Settings
+from edge_voice.config.settings import Settings, SourceSettings
 from edge_voice.pipeline.orchestrator import PipelineOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -75,7 +75,10 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.wav_file:
         settings = Settings(
-            source={"default_audio": args.wav_file, "sample_rate": settings.source.sample_rate},
+            source=SourceSettings(
+                default_audio=args.wav_file,
+                sample_rate=settings.source.sample_rate,
+            ),
         )
 
     orchestrator = PipelineOrchestrator(settings)

@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml  # type: ignore[import-untyped]
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class MQTTChannels(BaseModel):
@@ -146,7 +146,7 @@ class Settings(BaseSettings):
     webui: WebUISettings = WebUISettings()
     health: HealthSettings = HealthSettings()
 
-    model_config = ConfigDict(
+    model_config = SettingsConfigDict(
         env_prefix="EDGE_VOICE_",
         env_nested_delimiter="__",
         populate_by_name=True,

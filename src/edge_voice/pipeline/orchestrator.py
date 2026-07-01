@@ -135,7 +135,7 @@ class PipelineOrchestrator:
             }
         return PipelineStatus(
             running=True,
-            workers=[WorkerStatus(name=n, state=s["state"]) for n, s in worker_states.items()],
+            workers=[WorkerStatus(name=n, state=str(s["state"])) for n, s in worker_states.items()],
         )
 
     def run(self) -> None:
