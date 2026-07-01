@@ -219,3 +219,4 @@ __marimo__/
 
 # Test wav data dir
 wav/
+dumped_audio/
