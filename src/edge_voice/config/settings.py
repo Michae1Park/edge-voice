@@ -29,8 +29,8 @@ class MQTTSettings(BaseModel):
     broker_port: int = 1883
     channels: list[MQTTChannels] = Field(
         default_factory=lambda: [
-            MQTTChannels(topic="stt/audio_chunks1", channel_id="ch1"),
-            MQTTChannels(topic="stt/audio_chunks2", channel_id="ch2"),
+            MQTTChannels(topic="stt/audio_chunks_rx", channel_id="rx"),
+            MQTTChannels(topic="stt/audio_chunks_tx", channel_id="tx"),
         ]
     )
 

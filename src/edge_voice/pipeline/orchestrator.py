@@ -5,7 +5,8 @@ Owns startup, graceful shutdown, and failure-recovery (restart-on-crash)
 for each stage.
 
 Milestones 0-1 keep the fake VAD/STT workers. Real VAD arrives Milestone 3,
-real STT Milestone 4. By Milestone 1, only the ingest path is real (MQTT).
+real STT Milestone 4. Milestone 2 introduces real MQTT ingest and channel
+routing, replacing the fake router.
 """
 
 from __future__ import annotations
@@ -17,9 +18,8 @@ import time
 from typing import Any
 
 from edge_voice.config.settings import Settings
-from edge_voice.pipeline.queues import make_ingest_queue, make_segment_queue
+from edge_voice.pipeline.queues import make_ingest_queue, make_routed_queue, make_segment_queue
 from edge_voice.pipeline.models import WorkerStatus, PipelineStatus
-
 
 logger = logging.getLogger(__name__)
 
@@ -54,24 +54,21 @@ class PipelineOrchestrator:
     def build(self) -> None:
         """Create queues and workers from Settings.
 
-        Milestone 1: real MQTT subscriber for ingest, fake VAD/STT remain.
+        Milestone 2: real MQTT ingest + real channel router.
+        Fake VAD/STT remain for now.
         """
         self._stop_event.clear()
 
         # Create shared queues
         self._ingest_queue = make_ingest_queue()
-        self._routed_queue = make_ingest_queue()
+        self._routed_queue = make_routed_queue()
         self._segment_queue = make_segment_queue()
 
-        # Build audio source from settings config
-        wav_file = self._get_wav_file()
-        if wav_file:
-            self._audio_source = self._build_wav_source(wav_file)
-        else:
-            self._audio_source = self._build_mic_source()
+        # Always use MQTT subscriber for audio ingestion (Milestone 2)
+        self._audio_source = self._build_mqtt_subscriber()
 
-        # Channel router (stub - real router arriving Milestone 2)
-        self._router = self._build_fake_router()
+        # Channel router (swapped in for fake router in Milestone 2)
+        self._router = self._build_real_router()
 
         # VAD worker (fake - real VAD arriving Milestone 3)
         self._vad = self._build_fake_vad()
@@ -109,7 +106,7 @@ class PipelineOrchestrator:
             try:
                 w.stop()
             except AttributeError:
-                logger.debug(f"Worker {w} does not implement a stop method; skipping.")
+                logger.debug("Worker %s does not implement a stop method; skipping.", w)
         self._status.running = False
         self._status.workers = [WorkerStatus(name=w.name, state="stopped") for w in workers]
         logger.info("Pipeline stopped")
@@ -166,19 +163,24 @@ class PipelineOrchestrator:
             w for w in [self._audio_source, self._router, self._vad, self._stt] if w is not None
         ]
 
-    def _get_wav_file(self) -> str | None:
-        """Look for configured WAV file path in settings."""
-        default_audio = self._settings.source.default_audio
-        return default_audio if default_audio else None
+    def _build_mqtt_subscriber(self) -> Any:
+        """Build the MQTT subscriber worker (Milestone 2)."""
+        from edge_voice.audio_ingest.mqtt_client import MqttAudioIngest
 
-    def _build_fake_router(self) -> Any:
-        """Build the channel router worker."""
-        from edge_voice.pipeline.fake_workers import FakeRouter
+        if self._ingest_queue is None:
+            raise RuntimeError("Ingest queue not initialized")
 
-        if self._routed_queue is None or self._ingest_queue is None:
+        return MqttAudioIngest(self._settings.mqtt, self._ingest_queue)
+
+    def _build_real_router(self) -> Any:
+        """Build the real channel router worker (Milestone 2)."""
+        from edge_voice.channel.router import ChannelRouter
+
+        if self._ingest_queue is None or self._routed_queue is None:
             raise RuntimeError("Queues not initialized")
 
-        return FakeRouter(self._ingest_queue, self._routed_queue)
+        channel_ids = [c.channel_id for c in self._settings.mqtt.channels]
+        return ChannelRouter(self._ingest_queue, self._routed_queue, channel_ids)
 
     def _build_fake_vad(self) -> Any:
         """Build the VAD worker."""
@@ -207,25 +209,3 @@ class PipelineOrchestrator:
             )
 
         return FakeSTTWorker(self._segment_queue, _on_transcript)
-
-    def _build_mic_source(self) -> Any:
-        """Build a microphone audio source."""
-        from edge_voice.utils.audio_generation.mic_source import MicSource
-
-        assert self._ingest_queue is not None
-        channel_ids = [c.channel_id for c in self._settings.mqtt.channels]
-        return MicSource(self._ingest_queue, channel_ids)
-
-    def _build_wav_source(self, wav_file: str) -> Any:
-        """Build a WAV file audio source."""
-        from edge_voice.utils.audio_generation.wav_source import WavSource
-
-        assert self._ingest_queue is not None
-        channel_ids = [c.channel_id for c in self._settings.mqtt.channels]
-        return WavSource(
-            self._ingest_queue,
-            channel_ids,
-            wav_file,
-            sample_rate=self._settings.audio.sample_rate,
-            chunk_samples=self._settings.audio.chunk_samples,
-        )
