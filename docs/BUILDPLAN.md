@@ -167,6 +167,28 @@ coverage of resampling, stereo-to-mono, queue-full drop, custom configs).
 
 ## Milestone 2 — Real audio ingestion + channel routing
 
+WavSource process
+        |
+        | MQTT publish
+        v
+ MQTT broker
+        |
+        | MQTT subscribe
+        v
+audio_ingest/mqtt_client.py
+        |
+        v
+ingest_queue
+        |
+        v
+channel/router.py
+        |
+        v
+FakeVAD
+        |
+        v
+FakeSTT
+
 1. `audio_ingest/mqtt_client.py`
    - Subscribes to per-channel MQTT topics
    - Reconnects with exponential backoff (§5) — **this stays internal to
