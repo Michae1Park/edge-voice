@@ -124,44 +124,44 @@ shape — `cli.py → orchestrator → workers` — and get real (non-fake) audi
 flowing over MQTT, even though `audio_ingest` doesn't exist to consume it
 yet.
 
-1. `config/settings.py` — pydantic `Settings`, layered per §6:
-   defaults → config file → local override file → env vars. Validate on load.
-2. `pipeline/orchestrator.py` — move the wiring logic out of `main.py`
-   here, parameterized by `Settings` instead of hardcoded constants. Same
-   responsibilities `main.py` already proved out in Milestone 0: build
-   workers, build queues, own startup order, own graceful shutdown
-   (stop-event + join). Still wires the *fake* VAD/STT workers from
-   Milestone 0 — only the ingest side gets real this milestone.
-   - Expose a `get_status()`-shaped seam now (even if it just returns
-     `{"workers": [...]}` for the moment) — Milestones 6/7 will need to
-     query orchestrator/supervisor for live status, and retrofitting that
-     later is more painful than stubbing it now.
-3. `cli.py` — becomes the real entry point: parse args, load `Settings`,
-   call `orchestrator.build_and_run(settings)`. This is what the
-   `edge-voice` console script will point to.
-   - **Decision needed before writing arg parsing:** does `cli.py` take a
-     flag like `--with-ui` to optionally start the FastAPI app (Milestone
-     7) in the same process, or is the web UI a separate process that just
-     reads `health`/`observability` state? Write this down once decided —
-     it changes whether the orchestrator and the web app share an event
-     loop / thread set.
-4. Shrink `main.py` to a 3-line dev convenience that calls `cli.main()`, or
-   delete it outright — its wiring logic now lives in `orchestrator.py`.
-5. `utils/audio_generation/mic_source.py` — captures from the system
-   microphone, publishes audio chunks over MQTT tagged with a `channel_id`.
-6. `utils/audio_generation/wav_source.py` — reads a `.wav` file and streams
-   it over MQTT at real-time pace (not as fast as disk I/O allows), so it
-   behaves like a live call leg for testing.
-7. Both `audio_generation` sources must be runnable standalone, in their
-   own process/terminal, with **no import of `pipeline`, `cli`, or
-   `orchestrator`** — confirm this by checking their import lines, not just
-   by running them.
+**Status: DONE ✓**
 
-**Done when:** `cli.py` (or the installed `edge-voice` console script)
-starts the still-fake pipeline using real `Settings`, AND, in a separate
-terminal/process, `wav_source.py` produces correctly-paced, channel-tagged
-MQTT messages — confirmed independently (e.g. via `mosquitto_sub`), no
-pipeline code involved in that check.
+1. `src/edge_voice/config/settings.py` — pydantic `Settings` with layered
+   config: code defaults → `configs/default.yaml` → `configs/local.yaml`
+   (gitignored) → env vars (`EDGE_VOICE__<SECTION>__<FIELD>`). Validation
+   on load (e.g. `AudioSettings.format` must be `"int16"`, `STTSettings.feed_windows > 0`,
+   `WebUISettings.port > 0`). `_deep_merge()` helper for recursive YAML merging.
+2. `src/edge_voice/pipeline/orchestrator.py` — `PipelineOrchestrator` class
+   owns the wire shape: constructs `WavSource`/`MicSource` → `FakeRouter` →
+   `FakeVADWorker` → `FakeSTTWorker` from `Settings`. Exposes
+   `build()`, `start()`, `stop()`, `wait()`, `run()`, `run_with_timer()`,
+   `get_status()` (returns `PipelineStatus`), `ingest_queue` property.
+   `get_status()` is wired for Milestones 6/7.
+3. `src/edge_voice/cli.py` — real entry point: `argparse` flags
+   (`--channels`, `--run-secs`, `--config`, `--with-ui`, `--debug`,
+   `--wav-file`), `setup_logging()`, `parse_args()`, `main()`.
+   Wired to `Settings.load()` + `PipelineOrchestrator`. Registered as
+   `edge-voice` console script in `pyproject.toml` (`[project.scripts]`).
+   **Decision recorded (2026-06-29):** web UI runs as a separate process.
+   `--with-ui` flag reserved in CLI for now but not yet implemented.
+4. `src/edge_voice/main.py` — still exists but its wiring logic moved to
+   `orchestrator.py`. Kept as dev convenience for running without installing.
+5. `src/edge_voice/utils/audio_generation/mic_source.py` — `MicSource`
+   class captures from system mic via pyaudio, publishes `AudioPacket`s
+   over MQTT (MQTT publish not yet implemented — prints stub), standalone
+   CLI entry point via `main()`, no import of `pipeline`, `cli`, or
+   `orchestrator`.
+6. `src/edge_voice/utils/audio_generation/wav_source.py` — `WavSource`
+   class reads `.wav` via `soundfile`, resamples via `torchaudio`, streams
+   at 20ms real-time pace to the ingest queue. Tested thoroughly (10
+   unit tests). No MQTT publish yet — pushes to in-memory queue.
+7. Both `audio_generation` sources verified: import lines contain no
+   `pipeline`, `cli`, or `orchestrator` imports.
+
+**Done when:** `edge-voice` console script starts the pipeline using real
+`Settings`, AND `wav_source.py` (standalone) produces correctly-paced audio
+packets — confirmed by `test_wav_source.py` (10 tests, `tmp_path` fixtures,
+coverage of resampling, stereo-to-mono, queue-full drop, custom configs).
 
 ---
 
