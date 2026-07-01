@@ -17,18 +17,33 @@ audio:
   format: "int16"
 
 vad:
+  threshold: 0.5
+  sampling_rate: 16000
   window_samples: 512        # 32ms @ 16kHz
   soft_cut_s: 5.0
+  soft_cut_lookahead_s: 1.0
+  soft_cut_min_dip: 0.10
+  min_silence_ms: 300
   max_segment_s: 7.0
 
+source:
+  sample_rate: 16000
+  default_audio: "wav/conversation_60s.wav"
+
 stt:
-  model: "tiny-ko"
   language: "ko"
+  model: "tiny-ko"
+  model_arch: 0
   feed_windows: 64
+  max_tokens_per_second: "13.0"
+  identify_speakers: false
+  log_api_calls: false
+  save_input_wav_path: ""
+  return_audio_data: false
 
 logging:
   level: "INFO"
-  json: true                  # false -> pretty console renderer (dev)
+  structure: "json"                  # false -> pretty console renderer (dev)
 
 webui:
   host: "0.0.0.0"

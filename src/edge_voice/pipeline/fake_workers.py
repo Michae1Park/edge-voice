@@ -22,7 +22,7 @@ import queue
 import threading
 from typing import Callable
 
-from pipeline.models import AudioPacket, SpeechSegment, TranscriptEvent
+from edge_voice.pipeline.models import AudioPacket, SpeechSegment, TranscriptEvent
 
 logger = logging.getLogger(__name__)
 

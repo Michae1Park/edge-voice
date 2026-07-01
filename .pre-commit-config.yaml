@@ -9,5 +9,3 @@ repos:
     rev: v1.11.2
     hooks:
       - id: mypy
-        args: ["--package", "edge_voice"]
-        pass_filenames: false

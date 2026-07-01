@@ -18,7 +18,7 @@ import queue
 import threading
 import time
 
-from pipeline.models import AudioPacket
+from edge_voice.pipeline.models import AudioPacket
 
 logger = logging.getLogger(__name__)
 
