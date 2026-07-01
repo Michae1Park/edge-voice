@@ -51,3 +51,8 @@ webui:
 
 health:
   stale_segment_warning_s: 30   # warn if no segment finalized in this long
+
+dump:
+  enabled: true
+  output_dir: "./dumped_audio"
+  segment_secs: 10

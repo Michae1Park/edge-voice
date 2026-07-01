@@ -29,6 +29,7 @@ class ChannelRouter(threading.Thread):
     - Validate channel_id against the configured MQTT channels
     - Maintain per-channel freshness tracking (last-seen timestamp)
     - Forward packets to the routed queue unchanged
+    - Optionally fanout packets to a dump queue for debugging
     """
 
     def __init__(
@@ -36,10 +37,12 @@ class ChannelRouter(threading.Thread):
         ingest_queue: queue.Queue[AudioPacket],
         routed_queue: queue.Queue[AudioPacket],
         channel_ids: list[str],
+        dump_queue: queue.Queue[AudioPacket] | None = None,
     ) -> None:
         super().__init__(name="ChannelRouter", daemon=False)
         self._ingest_queue = ingest_queue
         self._routed_queue = routed_queue
+        self._dump_queue = dump_queue
         self._channel_ids = set(channel_ids)
         self._stop_event = threading.Event()
         self._channel_last_seen: dict[str, float] = {}

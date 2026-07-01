@@ -184,10 +184,13 @@ ingest_queue
 channel/router.py
         |
         v
-FakeVAD
-        |
+PacketCopier
+        |---------> routed_queue ------> FakeVAD
+        |                                      |
+        | dump_queue                           v
+        |                               FakeSTT
         v
-FakeSTT
+audio_ingest/audio_dump.py
 
 1. `audio_ingest/mqtt_client.py`
    - Subscribes to per-channel MQTT topics

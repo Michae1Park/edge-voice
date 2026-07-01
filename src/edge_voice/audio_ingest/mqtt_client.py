@@ -119,9 +119,9 @@ class MqttAudioIngest(threading.Thread):
         logger.info("Connected and subscribed to %d channel(s)", len(self._channels))
 
     def _on_disconnect(
-        self, client: mqtt.Client, userdata: Any, rc: int, *args: Any, **kwargs: Any
+        self, client: mqtt.Client, userdata: Any, rc: Any, *args: Any, **kwargs: Any
     ) -> None:
-        logger.warning("Disconnected from MQTT broker (rc=%d)", rc)
+        logger.warning("Disconnected from MQTT broker (rc=%s)", rc)
         self._connected_event.clear()
 
     def _on_message(self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> None:  # type: ignore[override]

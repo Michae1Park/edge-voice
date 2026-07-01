@@ -4,9 +4,12 @@ using the producer/consumer thread model described in docs/design.md.
 Owns startup, graceful shutdown, and failure-recovery (restart-on-crash)
 for each stage.
 
-Milestones 0-1 keep the fake VAD/STT workers. Real VAD arrives Milestone 3,
-real STT Milestone 4. Milestone 2 introduces real MQTT ingest and channel
-routing, replacing the fake router.
+Pipeline (Milestone 2):
+    MQTT subscriber -> ingest_queue -> ChannelRouter -> router_queue -> PacketCopier -> { routed_queue (VAD), dump_queue (dump) } -> segment_queue -> FakeVADWorker -> FakeSTTWorker
+
+The key insight: the dump worker must NOT share a queue with the VAD worker,
+because both would compete for packets and only one would get each packet.
+Instead, a PacketCopier fans out from router_queue to both.
 """
 
 from __future__ import annotations
@@ -36,12 +39,17 @@ class PipelineOrchestrator:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._ingest_queue: queue.Queue | None = None
-        self._routed_queue: queue.Queue | None = None
+        self._router_queue: queue.Queue | None = None  # direct router output
+        self._routed_queue: queue.Queue | None = None  # goes to VAD (via PacketCopier)
+        self._dump_queue: queue.Queue | None = None  # goes to dump worker (via PacketCopier)
         self._segment_queue: queue.Queue | None = None
         self._audio_source: Any = None
         self._router: Any = None
+        self._copier: Any = None
         self._vad: Any = None
         self._stt: Any = None
+        self._dump_worker: Any = None
+        self._tracker: Any = None
         self._status = PipelineStatus(running=False)
         self._stop_event = threading.Event()
 
@@ -61,14 +69,22 @@ class PipelineOrchestrator:
 
         # Create shared queues
         self._ingest_queue = make_ingest_queue()
-        self._routed_queue = make_routed_queue()
+        self._router_queue = make_routed_queue()  # router -> copier
+        self._routed_queue = make_routed_queue()  # copier -> VAD
+        self._dump_queue = make_routed_queue()  # copier -> dump (if enabled)
         self._segment_queue = make_segment_queue()
+
+        # AudioDumpWorker for debugging (optional)
+        self._build_audio_dump()
 
         # Always use MQTT subscriber for audio ingestion (Milestone 2)
         self._audio_source = self._build_mqtt_subscriber()
 
-        # Channel router (swapped in for fake router in Milestone 2)
+        # Channel router sends packets to router_queue (not directly to VAD)
         self._router = self._build_real_router()
+
+        # Central packet tracker (single source of truth for per-channel state)
+        self._tracker = self._build_packet_tracker()
 
         # VAD worker (fake - real VAD arriving Milestone 3)
         self._vad = self._build_fake_vad()
@@ -76,17 +92,27 @@ class PipelineOrchestrator:
         # STT worker (fake - real STT arriving Milestone 4)
         self._stt = self._build_fake_stt()
 
+        # PacketCopier fans out router_queue to both VAD queue and dump queue
+        self._build_packet_copier()
+
         self._status = PipelineStatus(
             workers=[
                 WorkerStatus(name="audio_source", state="built"),
                 WorkerStatus(name="router", state="built"),
+                WorkerStatus(name="packet_copier", state="built" if self._copier else "disabled"),
                 WorkerStatus(name="vad", state="built"),
                 WorkerStatus(name="stt", state="built"),
+                WorkerStatus(name="audio_dump", state="built" if self._dump_worker else "disabled"),
+                WorkerStatus(name="packet_tracker", state="built" if self._tracker else "disabled"),
             ],
             running=False,
         )
         logger.info(
             "Pipeline built with channels: %s", [c.channel_id for c in self._settings.mqtt.channels]
+        )
+        logger.info(
+            "Packet tracker enabled with %d channel(s)",
+            len(self._tracker.channel_ids) if self._tracker else 0,
         )
 
     def start(self) -> None:
@@ -160,7 +186,16 @@ class PipelineOrchestrator:
     def _get_workers(self) -> list[Any]:
         """Return workers in startup order."""
         return [
-            w for w in [self._audio_source, self._router, self._vad, self._stt] if w is not None
+            w
+            for w in [
+                self._audio_source,
+                self._router,
+                self._copier,
+                self._vad,
+                self._stt,
+                self._dump_worker,
+            ]
+            if w is not None
         ]
 
     def _build_mqtt_subscriber(self) -> Any:
@@ -173,14 +208,45 @@ class PipelineOrchestrator:
         return MqttAudioIngest(self._settings.mqtt, self._ingest_queue)
 
     def _build_real_router(self) -> Any:
-        """Build the real channel router worker (Milestone 2)."""
+        """Build the real channel router worker (Milestone 2).
+
+        Router sends valid packets to _router_queue (not directly to VAD).
+        The PacketCopier fans out from there.
+        """
         from edge_voice.channel.router import ChannelRouter
 
-        if self._ingest_queue is None or self._routed_queue is None:
-            raise RuntimeError("Queues not initialized")
+        if self._ingest_queue is None:
+            raise RuntimeError("Ingest queue not initialized")
+        if self._router_queue is None:
+            raise RuntimeError("Router queue not initialized")
 
         channel_ids = [c.channel_id for c in self._settings.mqtt.channels]
-        return ChannelRouter(self._ingest_queue, self._routed_queue, channel_ids)
+        return ChannelRouter(self._ingest_queue, self._router_queue, channel_ids)
+
+    def _build_packet_copier(self) -> None:
+        """Fan out packets from router_queue to both VAD and dump queues."""
+        from edge_voice.pipeline.packet_copier import PacketCopier
+
+        if self._router_queue is None or self._routed_queue is None:
+            raise RuntimeError("Router queues not initialized")
+
+        # Inject the tracker as the callback — all packets flow through here
+        track_cb = self._tracker.track if self._tracker else None
+        assert self._dump_queue is not None
+        self._copier = PacketCopier(
+            self._router_queue, self._routed_queue, self._dump_queue, track_cb
+        )
+
+    def _build_packet_tracker(self) -> Any:
+        """Build the central per-channel packet tracker.
+
+        Initialized with known channel IDs so it can report expected
+        channels even before any packets arrive.
+        """
+        from edge_voice.pipeline.packet_tracker import AudioPacketTracker
+
+        channel_ids = [c.channel_id for c in self._settings.mqtt.channels]
+        return AudioPacketTracker(channel_ids=channel_ids)
 
     def _build_fake_vad(self) -> Any:
         """Build the VAD worker."""
@@ -209,3 +275,28 @@ class PipelineOrchestrator:
             )
 
         return FakeSTTWorker(self._segment_queue, _on_transcript)
+
+    def _build_audio_dump(self) -> None:
+        """Build the AudioDumpWorker if enabled in settings."""
+        if not self._settings.dump.enabled:
+            logger.info("AudioDumpWorker disabled (dump.enabled=false)")
+            return
+
+        if self._dump_queue is None:
+            raise RuntimeError("Dump queue not initialized")
+        if self._segment_queue is None:
+            raise RuntimeError("Segment queue not initialized")
+
+        from edge_voice.audio_ingest.audio_dump import AudioDumpWorker
+
+        self._dump_worker = AudioDumpWorker(
+            routed_queue=self._dump_queue,
+            output_dir=self._settings.dump.output_dir,
+            channel_sample_rate=self._settings.audio.sample_rate,
+            segment_secs=self._settings.dump.segment_secs,
+        )
+        logger.info(
+            "AudioDumpWorker enabled: %s (segment=%ds)",
+            self._settings.dump.output_dir,
+            self._settings.dump.segment_secs,
+        )

@@ -14,6 +14,7 @@ from edge_voice.pipeline.models import AudioPacket, SpeechSegment
 INGEST_QUEUE_MAXSIZE = 256
 ROUTE_QUEUE_MAXSIZE = 128
 SEGMENT_QUEUE_MAXSIZE = 64
+DUMP_QUEUE_MAXSIZE = 256
 
 
 def make_ingest_queue() -> "queue.Queue[AudioPacket]":
@@ -31,3 +32,8 @@ def make_routed_queue() -> "queue.Queue[AudioPacket]":
 def make_segment_queue() -> "queue.Queue[SpeechSegment]":
     """Queue for finalized SpeechSegments, between vad and stt."""
     return queue.Queue(maxsize=SEGMENT_QUEUE_MAXSIZE)
+
+
+def make_dump_queue() -> "queue.Queue[AudioPacket]":
+    """Fan-out queue for dumping/persisting all routed packets separately."""
+    return queue.Queue(maxsize=DUMP_QUEUE_MAXSIZE)

@@ -123,6 +123,14 @@ class HealthSettings(BaseModel):
     stale_segment_warning_s: float = 30.0
 
 
+class DumpSettings(BaseModel):
+    """AudioDumpWorker configuration for debugging/verification."""
+
+    enabled: bool = False
+    output_dir: str = "./dumped_audio"
+    segment_secs: float = 10.0
+
+
 class Settings(BaseSettings):
     """Top-level application settings.
 
@@ -145,6 +153,7 @@ class Settings(BaseSettings):
     logging_: LoggingSettings = Field(default=LoggingSettings(), alias="logging")
     webui: WebUISettings = WebUISettings()
     health: HealthSettings = HealthSettings()
+    dump: DumpSettings = DumpSettings()
 
     model_config = SettingsConfigDict(
         env_prefix="EDGE_VOICE_",
