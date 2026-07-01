@@ -153,6 +153,8 @@ pooch==1.9.0
     # via librosa
 protobuf==7.35.1
     # via onnxruntime
+pyaudio==0.2.14
+    # via edge-voice (pyproject.toml)
 pycparser==3.0
     # via cffi
 pydantic==2.13.4
