@@ -80,12 +80,27 @@ Conflating the two will make restart-count metrics noisy and useless.
 ## STATUS (update this every session, even with one line)
 
 ```
-Last updated: 2026-07-01
-Current milestone: 2  
-Done: ms 0, 1
-In progress: 2
+Last updated: 2026-07-02
+Current milestone: 3
+Done: ms 0, 1, 2
+In progress: 3
 Next action: n/a
 Blocked on: nothing
+
+---
+
+## Milestone 3 — IP
+
+Implemented `vad/worker.py` with:
+
+- **Shared Silero VAD model** — single `_vad_model` loaded once via `_get_vad_model()`, serialised with global `_vad_lock`.
+- **Per-channel VADIterator + state** — `_Ch` class tracks `in_speech`, `seg_index`, `seg_start_s`, `win_buf`, `aud_buf`, `scores` per channel, guarded by per-channel lock.
+- **Soft-cut logic** — `_find_good_cut()` scans recent VAD scores for confidence dips after `SOFT_CUT_S`; `_try_cut()` splits segments at the dip point and re-arms for the next segment.
+- **Hard-cut logic** — segments exceeding `MAX_SEGMENT_S` are always capped.
+- **Score tracking** — `_score_win()` scores every window (not just start/end) so the soft-cut trace is complete.
+- **Dual-channel test coverage** — `tests/test_vad_worker.py` with 6 tests including concurrent dual-channel segmentation, hard-cut path, and shared model singleton.
+
+Swapped `FakeVADWorker` → `VadWorker` in `orchestrator.py` (`_build_real_vad()`).
 ```
 
 ---
@@ -123,8 +138,6 @@ fake channels, exits cleanly on Ctrl-C with no orphaned threads.
 shape — `cli.py → orchestrator → workers` — and get real (non-fake) audio
 flowing over MQTT, even though `audio_ingest` doesn't exist to consume it
 yet.
-
-**Status: DONE ✓**
 
 1. `src/edge_voice/config/settings.py` — pydantic `Settings` with layered
    config: code defaults → `configs/default.yaml` → `configs/local.yaml`
