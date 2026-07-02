@@ -1,0 +1,5 @@
+FROM qwen3.6:35b
+PARAMETER num_ctx 131072
+
+# ollama create qwen3.6-35b-128k -f Modelfile
+# ollama show qwen3.6-35b-128k
