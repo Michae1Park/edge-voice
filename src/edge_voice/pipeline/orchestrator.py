@@ -87,7 +87,7 @@ class PipelineOrchestrator:
         self._tracker = self._build_packet_tracker()
 
         # VAD worker (fake - real VAD arriving Milestone 3)
-        self._vad = self._build_fake_vad()
+        self._vad = self._build_vad()
 
         # STT worker (fake - real STT arriving Milestone 4)
         self._stt = self._build_fake_stt()
@@ -248,7 +248,7 @@ class PipelineOrchestrator:
         channel_ids = [c.channel_id for c in self._settings.mqtt.channels]
         return AudioPacketTracker(channel_ids=channel_ids)
 
-    def _build_fake_vad(self) -> Any:
+    def _build_vad(self) -> Any:
         """Build the VAD worker."""
         from edge_voice.pipeline.fake_workers import FakeVADWorker
 
