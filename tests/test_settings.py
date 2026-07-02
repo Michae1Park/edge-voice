@@ -41,8 +41,8 @@ def test_top_level_models_have_defaults():
 def test_mqtt_default_channels():
     s = MQTTSettings()
     assert len(s.channels) == 2
-    assert s.channels[0].channel_id == "ch1"
-    assert s.channels[1].channel_id == "ch2"
+    assert s.channels[0].channel_id == "rx"
+    assert s.channels[1].channel_id == "tx"
 
 
 def test_audio_settings_invalid_format():

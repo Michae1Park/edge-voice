@@ -80,10 +80,10 @@ Conflating the two will make restart-count metrics noisy and useless.
 ## STATUS (update this every session, even with one line)
 
 ```
-Last updated: 2026-06-29
-Current milestone: none  
+Last updated: 2026-07-01
+Current milestone: 2  
 Done: ms 0, 1
-In progress: none
+In progress: 2
 Next action: n/a
 Blocked on: nothing
 ```
@@ -166,6 +166,31 @@ coverage of resampling, stereo-to-mono, queue-full drop, custom configs).
 ---
 
 ## Milestone 2 — Real audio ingestion + channel routing
+
+WavSource process
+        |
+        | MQTT publish
+        v
+ MQTT broker
+        |
+        | MQTT subscribe
+        v
+audio_ingest/mqtt_client.py
+        |
+        v
+ingest_queue
+        |
+        v
+channel/router.py
+        |
+        v
+PacketCopier
+        |---------> routed_queue ------> FakeVAD
+        |                                      |
+        | dump_queue                           v
+        |                               FakeSTT
+        v
+audio_ingest/audio_dump.py
 
 1. `audio_ingest/mqtt_client.py`
    - Subscribes to per-channel MQTT topics

@@ -29,8 +29,8 @@ class MQTTSettings(BaseModel):
     broker_port: int = 1883
     channels: list[MQTTChannels] = Field(
         default_factory=lambda: [
-            MQTTChannels(topic="stt/audio_chunks1", channel_id="ch1"),
-            MQTTChannels(topic="stt/audio_chunks2", channel_id="ch2"),
+            MQTTChannels(topic="stt/audio_chunks_rx", channel_id="rx"),
+            MQTTChannels(topic="stt/audio_chunks_tx", channel_id="tx"),
         ]
     )
 
@@ -123,6 +123,14 @@ class HealthSettings(BaseModel):
     stale_segment_warning_s: float = 30.0
 
 
+class DumpSettings(BaseModel):
+    """AudioDumpWorker configuration for debugging/verification."""
+
+    enabled: bool = False
+    output_dir: str = "./dumped_audio"
+    segment_secs: float = 10.0
+
+
 class Settings(BaseSettings):
     """Top-level application settings.
 
@@ -145,6 +153,7 @@ class Settings(BaseSettings):
     logging_: LoggingSettings = Field(default=LoggingSettings(), alias="logging")
     webui: WebUISettings = WebUISettings()
     health: HealthSettings = HealthSettings()
+    dump: DumpSettings = DumpSettings()
 
     model_config = SettingsConfigDict(
         env_prefix="EDGE_VOICE_",

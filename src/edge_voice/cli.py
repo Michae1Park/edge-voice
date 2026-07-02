@@ -20,13 +20,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--channels",
         nargs="*",
-        choices=["ch1", "ch2", "rx", "tx"],
+        choices=["rx", "tx"],
         help="Override channels to listen on (default: all from config)",
     )
     parser.add_argument(
         "--run-secs",
         type=int,
-        default=30,
+        default=0,
         help="Run duration in seconds (0 = until Ctrl-C)",
     )
     parser.add_argument(

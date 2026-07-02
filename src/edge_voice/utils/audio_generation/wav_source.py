@@ -1,15 +1,26 @@
-"""WAV file audio source that reads a file and pushes 20ms packets."""
+"""WAV file audio source that publishes PCM frames to MQTT for the pipeline.
+
+Reads a WAV file, converts to target sample rate, splits into 20ms chunks,
+and publishes each frame as a JSON envelope to the configured MQTT topics:
+
+{"samples_b64": "<base64>", "timestamp": <float>}
+
+Run as a separate process:
+    python -m edge_voice.utils.audio_generation.wav_source --wav file.wav --channels rx tx
+"""
 
 from __future__ import annotations
 
+import argparse
+import base64
+import json
 import logging
 import math
-import queue
-import threading
 import time
-from typing import Any
+from collections.abc import Sequence
 
 import numpy as np
+import paho.mqtt.client as mqtt  # type: ignore[import-untyped]
 import soundfile as sf
 import torch
 import torchaudio
@@ -17,123 +28,104 @@ import torchaudio
 logger = logging.getLogger(__name__)
 
 
-class WavSource(threading.Thread):
-    """Parses a .wav file and pushes 20ms audio packets onto a queue.
+def _open_wav(path: str) -> tuple[int, np.ndarray]:
+    """Open WAV and return (sample_rate, data as int16 numpy array)."""
+    data, sr = sf.read(path, dtype="int16")
+    if data.ndim == 2:
+        data = (data[:, 0].astype(np.int32) + data[:, 1].astype(np.int32)) // 2
+        data = data.astype(np.int16)
+    return sr, data
 
-    All audio config is taken from Settings via *sample_rate* and
-    *chunk_samples* rather than from module-level constants.
-    """
 
-    def __init__(
-        self,
-        ingest_queue: queue.Queue,
-        channel_ids: list[str],
-        wav_path: str,
-        sample_rate: int = 16_000,
-        chunk_samples: int = 320,  # 20 ms chunks (160 bytes @ 16bit mono)
-    ) -> None:
-        super().__init__(name="WavSource", daemon=True)
-        self._ingest_queue = ingest_queue
-        self._channel_ids = channel_ids
-        self._wav_path = wav_path
-        self._sample_rate = sample_rate
-        self._chunk_samples = chunk_samples
-        self._stopped = threading.Event()
+def _resample(data: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
+    if src_sr == dst_sr:
+        return data
+    tensor = torch.as_tensor(data, dtype=torch.float32).unsqueeze(0)
+    resampler = torchaudio.transforms.Resample(src_sr, dst_sr, lowpass_filter_width=64)
+    return resampler(tensor).squeeze(0).numpy().astype(np.int16)
 
-    # ------------------------------------------------------------------
-    # File helpers (moved from module scope into the class)
-    # ------------------------------------------------------------------
 
-    def _open_wav(self, path: str) -> tuple[int, int, np.ndarray]:
-        """Open an entire WAV file via soundfile (int16)."""
-        data, sr = sf.read(path, dtype="int16")
-        nch = 1 if data.ndim == 1 else data.shape[1]
-        return sr, nch, data
+def main(argv: Sequence[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        description="Publish a WAV file to MQTT for the edge-voice pipeline"
+    )
+    parser.add_argument("--wav", required=True, help="Path to WAV file")
+    parser.add_argument("--broker", default="localhost", help="MQTT broker host")
+    parser.add_argument("--port", type=int, default=1883, help="MQTT broker port")
+    parser.add_argument(
+        "--channels",
+        nargs="+",
+        default=["rx", "tx"],
+        help="Channels to publish to (e.g. rx tx)",
+    )
+    parser.add_argument("--sr", type=int, default=16_000, help="Target sample rate")
+    parser.add_argument("--chunk", type=int, default=320, help="Chunk size in samples")
+    args = parser.parse_args(argv)
 
-    def _resample(self, data: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
-        """Resample with torchaudio (int16 → int16)."""
-        if src_sr == dst_sr:
-            return data
-        tensor = torch.as_tensor(data, dtype=torch.float32).unsqueeze(0)
-        resampler = torchaudio.transforms.Resample(src_sr, dst_sr, lowpass_filter_width=64)
-        return resampler(tensor).squeeze(0).numpy().astype(np.int16)
+    topic_map = {ch: f"stt/audio_chunks_{ch}" for ch in args.channels}
 
-    def _create_packet(
-        self,
-        channel_id: str,
-        samples: np.ndarray,
-        timestamp: float | None = None,
-    ) -> Any:
-        """Encode *samples* into an AudioPacket."""
-        from edge_voice.pipeline.models import AudioPacket
+    client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
+    connected = False
 
-        return AudioPacket(
-            channel_id=channel_id,
-            timestamp=timestamp or time.time(),
-            samples=samples.tobytes(),
-        )
+    def on_connect(_client, _userdata, flags, rc, props):
+        nonlocal connected
+        connected = True
 
-    # ------------------------------------------------------------------
-    # Worker lifecycle
-    # ------------------------------------------------------------------
+    client.on_connect = on_connect  # type: ignore[assignment]
+    client.connect(args.broker, args.port)
+    client.loop_start()
 
-    def run(self) -> None:
-        """Read the WAV file, convert to 16 kHz mono int16, and push 20 ms chunks.
+    while not connected:
+        time.sleep(0.05)
 
-        Real-time pacing is maintained so playback speed matches wall-clock time.
-        """
-        logger.info("WavSource: reading %s...", self._wav_path)
-        file_sr, nch, data = self._open_wav(self._wav_path)
+    file_sr, raw_data = _open_wav(args.wav)
+    if file_sr != args.sr:
+        logger.info("WavSource: resampling %d → %d Hz", file_sr, args.sr)
+        raw_data = _resample(raw_data, file_sr, args.sr)
 
-        # --- Resample ---------------------------------------------------
-        if file_sr != self._sample_rate:
-            logger.info("WavSource: resampling %d → %d Hz", file_sr, self._sample_rate)
-            data = self._resample(data, file_sr, self._sample_rate)
+    total_chunks = math.ceil(len(raw_data) / args.chunk)
+    logger.info(
+        "WavSource: %s %d Hz %d samples → %d frames × %d channel(s) → %s",
+        args.wav,
+        file_sr,
+        len(raw_data),
+        total_chunks,
+        len(args.channels),
+        args.broker,
+    )
 
-        # --- Stereo → mono if necessary ---------------------------------
-        if nch == 2:
-            mono = (data[:, 0].astype(np.int32) + data[:, 1].astype(np.int32)) // 2
-            data = mono.astype(np.int16)
+    start = time.time()
+    frame_num = 0
+    frame_duration_s = args.chunk / args.sr
 
-        total_chunks = math.ceil(len(data) / self._chunk_samples)
-        start_time = time.time()
-        packet_num = 0
+    for i in range(0, len(raw_data), args.chunk):
+        chunk = raw_data[i : i + args.chunk]
+        if len(chunk) < args.chunk:
+            chunk = np.pad(chunk, (0, args.chunk - len(chunk)), "constant")
 
-        # --- Loop over 20 ms chunks -------------------------------------
-        for i in range(0, len(data), self._chunk_samples):
-            if self._stopped.is_set():
-                break
+        for ch in args.channels:
+            topic = topic_map[ch]
+            payload = {
+                "samples_b64": base64.b64encode(chunk.tobytes()).decode(),
+                "timestamp": time.time(),
+            }
+            client.publish(topic, json.dumps(payload).encode(), qos=1)
+            frame_num += 1
 
-            chunk = data[i : i + self._chunk_samples]
-            if len(chunk) < self._chunk_samples:
-                chunk = np.pad(chunk, (0, self._chunk_samples - len(chunk)), "constant")
+        # Real-time pacing
+        elapsed = time.time() - start
+        expected = (frame_num / len(args.channels)) * frame_duration_s
+        time.sleep(max(0, expected - elapsed))
 
-            for channel_id in self._channel_ids:
-                packet = self._create_packet(channel_id, chunk, time.time())
-                try:
-                    self._ingest_queue.put(packet, timeout=0.01)
-                    packet_num += 1
-                except queue.Full:
-                    logger.warning("ingest_queue full; dropping packet for %s", channel_id)
+    client.loop_stop()
+    elapsed_total = time.time() - start
+    logger.info(
+        "WavSource: done — %d frames in %.2fs (%.1fx real-time)",
+        frame_num / len(args.channels),
+        elapsed_total,
+        (frame_num / len(args.channels) * frame_duration_s) / elapsed_total,
+    )
 
-            # Real-time pacing
-            elapsed = time.time() - start_time
-            expected = (packet_num * self._chunk_samples) / self._sample_rate
-            delay = expected - elapsed
-            if delay > 0:
-                time.sleep(delay)
 
-        logger.info(
-            "WavSource: played %d packets (%.2fs duration)",
-            packet_num,
-            total_chunks * 0.02,
-        )
-
-    def stop(self) -> None:
-        """Signal the worker to stop after the current packet."""
-        self._stopped.set()
-
-    def is_alive(self) -> bool:
-        """Return *True* while the worker is not stopped — *not* the
-        underlying ``threading.Thread.is_alive()``."""
-        return not self._stopped.is_set()
+if __name__ == "__main__":
+    main()
