@@ -81,7 +81,7 @@ class PipelineOrchestrator:
         self._audio_source = self._build_mqtt_subscriber()
 
         # Channel router sends packets to router_queue (not directly to VAD)
-        self._router = self._build_real_router()
+        self._router = self._build_router()
 
         # Central packet tracker (single source of truth for per-channel state)
         self._tracker = self._build_packet_tracker()
@@ -207,8 +207,8 @@ class PipelineOrchestrator:
 
         return MqttAudioIngest(self._settings.mqtt, self._ingest_queue)
 
-    def _build_real_router(self) -> Any:
-        """Build the real channel router worker (Milestone 2).
+    def _build_router(self) -> Any:
+        """Build channel router worker (Milestone 2).
 
         Router sends valid packets to _router_queue (not directly to VAD).
         The PacketCopier fans out from there.
