@@ -56,3 +56,7 @@ dump:
   enabled: true
   output_dir: "./dumped_audio"
   segment_secs: 10
+
+segment_dump:
+  enabled: true
+  output_dir: "./dumped_vad_segments"

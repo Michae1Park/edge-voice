@@ -131,6 +131,13 @@ class DumpSettings(BaseModel):
     segment_secs: float = 10.0
 
 
+class SegmentDumpSettings(BaseModel):
+    """SegmentAudioDumpWorker configuration for debugging VAD output."""
+
+    enabled: bool = False
+    output_dir: str = "./dumped_vad_segments"
+
+
 class Settings(BaseSettings):
     """Top-level application settings.
 
@@ -154,6 +161,7 @@ class Settings(BaseSettings):
     webui: WebUISettings = WebUISettings()
     health: HealthSettings = HealthSettings()
     dump: DumpSettings = DumpSettings()
+    segment_dump: SegmentDumpSettings = SegmentDumpSettings()
 
     model_config = SettingsConfigDict(
         env_prefix="EDGE_VOICE_",

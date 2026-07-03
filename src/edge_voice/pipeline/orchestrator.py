@@ -49,6 +49,7 @@ class PipelineOrchestrator:
         self._vad: Any = None
         self._stt: Any = None
         self._dump_worker: Any = None
+        self._segment_dump_worker: Any = None
         self._tracker: Any = None
         self._status = PipelineStatus(running=False)
         self._stop_event = threading.Event()
@@ -92,6 +93,9 @@ class PipelineOrchestrator:
         # STT worker (fake - real STT arriving Milestone 4)
         self._stt = self._build_fake_stt()
 
+        # SegmentAudioDumpWorker for debugging VAD output (optional)
+        self._build_segment_dump()
+
         # PacketCopier fans out router_queue to both VAD queue and dump queue
         self._build_packet_copier()
 
@@ -103,6 +107,9 @@ class PipelineOrchestrator:
                 WorkerStatus(name="vad", state="built"),
                 WorkerStatus(name="stt", state="built"),
                 WorkerStatus(name="audio_dump", state="built" if self._dump_worker else "disabled"),
+                WorkerStatus(
+                    name="segment_dump", state="built" if self._segment_dump_worker else "disabled"
+                ),
                 WorkerStatus(name="packet_tracker", state="built" if self._tracker else "disabled"),
             ],
             running=False,
@@ -194,6 +201,7 @@ class PipelineOrchestrator:
                 self._vad,
                 self._stt,
                 self._dump_worker,
+                self._segment_dump_worker,
             ]
             if w is not None
         ]
@@ -275,6 +283,27 @@ class PipelineOrchestrator:
             )
 
         return FakeSTTWorker(self._segment_queue, _on_transcript)
+
+    def _build_segment_dump(self) -> None:
+        """Build the SegmentAudioDumpWorker if enabled in settings."""
+        if not self._settings.segment_dump.enabled:
+            logger.info("SegmentAudioDumpWorker disabled (segment_dump.enabled=false)")
+            return
+
+        if self._segment_queue is None:
+            raise RuntimeError("Segment queue not initialized")
+
+        from edge_voice.audio_ingest.segment_audio_dump import SegmentAudioDumpWorker
+
+        self._segment_dump_worker = SegmentAudioDumpWorker(
+            segment_queue=self._segment_queue,
+            output_dir=self._settings.segment_dump.output_dir,
+            channel_sample_rate=self._settings.audio.sample_rate,
+        )
+        logger.info(
+            "SegmentAudioDumpWorker enabled: %s",
+            self._settings.segment_dump.output_dir,
+        )
 
     def _build_audio_dump(self) -> None:
         """Build the AudioDumpWorker if enabled in settings."""
