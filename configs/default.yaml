@@ -60,3 +60,9 @@ dump:
 segment_dump:
   enabled: true
   output_dir: "./dumped_vad_segments"
+
+queues:
+  ingest: 256
+  routed: 128
+  segment: 64
+  dump: 256

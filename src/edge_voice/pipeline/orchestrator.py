@@ -69,11 +69,17 @@ class PipelineOrchestrator:
         self._stop_event.clear()
 
         # Create shared queues
-        self._ingest_queue = make_ingest_queue()
-        self._router_queue = make_routed_queue()  # router -> copier
-        self._routed_queue = make_routed_queue()  # copier -> VAD
-        self._dump_queue = make_routed_queue()  # copier -> dump (if enabled)
-        self._segment_queue = make_segment_queue()
+        self._ingest_queue = make_ingest_queue(maxsize=self._settings.queues.ingest)
+        self._router_queue = make_routed_queue(
+            maxsize=self._settings.queues.routed
+        )  # router -> copier
+        self._routed_queue = make_routed_queue(
+            maxsize=self._settings.queues.routed
+        )  # copier -> VAD
+        self._dump_queue = make_routed_queue(
+            maxsize=self._settings.queues.dump
+        )  # copier -> dump (if enabled)
+        self._segment_queue = make_segment_queue(maxsize=self._settings.queues.segment)
 
         # AudioDumpWorker for debugging (optional)
         self._build_audio_dump()

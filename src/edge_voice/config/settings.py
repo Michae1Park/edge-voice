@@ -138,6 +138,15 @@ class SegmentDumpSettings(BaseModel):
     output_dir: str = "./dumped_vad_segments"
 
 
+class QueuesSettings(BaseModel):
+    """Queue sizes for pipeline stages."""
+
+    ingest: int = 256
+    routed: int = 128
+    segment: int = 64
+    dump: int = 256
+
+
 class Settings(BaseSettings):
     """Top-level application settings.
 
@@ -145,7 +154,8 @@ class Settings(BaseSettings):
     1. Code defaults (model field defaults)
     2. configs/default.yaml
     3. configs/local.yaml (gitignored)
-    4. Environment variables (EDGE_VOICE__<SECTION>__<FIELD>)
+    4. configs/queues.yaml
+    5. Environment variables (EDGE_VOICE__SECTION__<FIELD>)
 
     Usage:
         settings = Settings.load()
@@ -162,6 +172,7 @@ class Settings(BaseSettings):
     health: HealthSettings = HealthSettings()
     dump: DumpSettings = DumpSettings()
     segment_dump: SegmentDumpSettings = SegmentDumpSettings()
+    queues: QueuesSettings = QueuesSettings()
 
     model_config = SettingsConfigDict(
         env_prefix="EDGE_VOICE_",
