@@ -5,6 +5,7 @@ config, and starts the pipeline (and optionally the web UI) as configured.
 
 import argparse
 import logging
+import time
 
 from edge_voice.config.settings import Settings, SourceSettings
 from edge_voice.pipeline.orchestrator import PipelineOrchestrator
@@ -87,10 +88,11 @@ def main(argv: list[str] | None = None) -> None:
         orchestrator.run_with_timer(duration_s=args.run_secs)
     else:
         logger.info("Running until Ctrl-C...")
+        orchestrator.build()
+        orchestrator.start()
         try:
-            orchestrator.build()
-            orchestrator.start()
-            orchestrator.wait()
+            while not orchestrator._stop_event.is_set():
+                time.sleep(1)
         except KeyboardInterrupt:
             logger.info("Ctrl-C received, shutting down...")
         finally:
