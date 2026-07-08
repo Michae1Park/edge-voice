@@ -1,15 +1,11 @@
 """
 Wires together: channel router -> VAD/segmenter -> STT transcriber,
 using the producer/consumer thread model described in docs/design.md.
-Owns startup, graceful shutdown, and failure-recovery (restart-on-crash)
-for each stage.
+Owns startup, graceful shutdown for each stage.
 
-Pipeline (Milestone 2):
-    MQTT subscriber -> ingest_queue -> ChannelRouter -> router_queue -> PacketCopier -> { routed_queue (VAD), dump_queue (dump) } -> segment_queue -> FakeVADWorker -> FakeSTTWorker
-
-The key insight: the dump worker must NOT share a queue with the VAD worker,
-because both would compete for packets and only one would get each packet.
-Instead, a PacketCopier fans out from router_queue to both.
+Pipeline:
+    MQTT subscriber -> ingest_queue -> ChannelRouter -> router_queue -> PacketCopier
+        -> { routed_queue (VAD), dump_queue (dump) } -> segment_queue -> STT
 """
 
 from __future__ import annotations
@@ -18,41 +14,38 @@ import logging
 import queue
 import threading
 import time
-from typing import Any
 
 from edge_voice.config.settings import Settings
-from edge_voice.pipeline.queues import make_ingest_queue, make_routed_queue, make_segment_queue
-from edge_voice.pipeline.models import WorkerStatus, PipelineStatus
+from edge_voice.pipeline.queues import (
+    make_dump_queue,
+    make_ingest_queue,
+    make_routed_queue,
+    make_segment_queue,
+)
+from edge_voice.pipeline.queue_copier import QueueCopier
 
 logger = logging.getLogger(__name__)
 
 
 class PipelineOrchestrator:
-    """Builds and manages the full pipeline worker graph.
-
-    Responsibilities:
-    - Create queues and workers from Settings
-    - Own startup order and graceful shutdown
-    - Expose get_status() seam for health monitoring
-    """
+    """Builds and manages the full pipeline worker graph."""
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._ingest_queue: queue.Queue | None = None
-        self._router_queue: queue.Queue | None = None  # direct router output
-        self._routed_queue: queue.Queue | None = None  # goes to VAD (via PacketCopier)
-        self._dump_queue: queue.Queue | None = None  # goes to dump worker (via PacketCopier)
+        self._router_queue: queue.Queue | None = None
+        self._routed_queue: queue.Queue | None = None
+        self._dump_queue: queue.Queue | None = None
         self._segment_queue: queue.Queue | None = None
-        self._audio_source: Any = None
-        self._router: Any = None
-        self._copier: Any = None
-        self._vad: Any = None
-        self._stt: Any = None
-        self._dump_worker: Any = None
-        self._segment_dump_worker: Any = None
-        self._tracker: Any = None
-        self._status = PipelineStatus(running=False)
+        self._audio_source: threading.Thread | None = None
+        self._router: threading.Thread | None = None
+        self._copier: QueueCopier | None = None
+        self._vad: threading.Thread | None = None
+        self._stt: threading.Thread | None = None
+        self._dump_worker: threading.Thread | None = None
+        self._segment_dump_worker: threading.Thread | None = None
         self._stop_event = threading.Event()
+        self._running = False
 
     @property
     def ingest_queue(self) -> queue.Queue:
@@ -60,225 +53,145 @@ class PipelineOrchestrator:
             raise RuntimeError("Pipeline not built. Call build() first.")
         return self._ingest_queue
 
+    # ── Public lifecycle ────────────────────────────────────────
+
     def build(self) -> None:
-        """Create queues and workers from Settings.
-
-        Milestone 2: real MQTT ingest + real channel router.
-        Fake VAD/STT remain for now.
-        """
+        """Create queues and workers from Settings."""
         self._stop_event.clear()
+        self._running = False
 
-        # Create shared queues
+        # Queues
         self._ingest_queue = make_ingest_queue(maxsize=self._settings.queues.ingest)
-        self._router_queue = make_routed_queue(
-            maxsize=self._settings.queues.routed
-        )  # router -> copier
-        self._routed_queue = make_routed_queue(
-            maxsize=self._settings.queues.routed
-        )  # copier -> VAD
-        self._dump_queue = make_routed_queue(
-            maxsize=self._settings.queues.dump
-        )  # copier -> dump (if enabled)
+        self._router_queue = make_routed_queue(maxsize=self._settings.queues.routed)
+        self._routed_queue = make_routed_queue(maxsize=self._settings.queues.routed)
         self._segment_queue = make_segment_queue(maxsize=self._settings.queues.segment)
+        self._dump_queue = None
+        if self._settings.dump.enabled:
+            self._dump_queue = make_dump_queue(maxsize=self._settings.queues.dump)
 
-        # AudioDumpWorker for debugging (optional)
+        # Optional dump worker (needs _dump_queue)
         self._build_audio_dump()
 
-        # Always use MQTT subscriber for audio ingestion (Milestone 2)
+        # Core workers
         self._audio_source = self._build_mqtt_subscriber()
-
-        # Channel router sends packets to router_queue (not directly to VAD)
         self._router = self._build_router()
-
-        # Central packet tracker (single source of truth for per-channel state)
-        self._tracker = self._build_packet_tracker()
-
-        # VAD worker (fake - real VAD arriving Milestone 3)
-        self._vad = self._build_vad()
-
-        # STT worker (fake - real STT arriving Milestone 4)
-        self._stt = self._build_fake_stt()
-
-        # SegmentAudioDumpWorker for debugging VAD output (optional)
-        self._build_segment_dump()
-
-        # PacketCopier fans out router_queue to both VAD queue and dump queue
-        self._build_packet_copier()
-
-        self._status = PipelineStatus(
-            workers=[
-                WorkerStatus(name="audio_source", state="built"),
-                WorkerStatus(name="router", state="built"),
-                WorkerStatus(name="packet_copier", state="built" if self._copier else "disabled"),
-                WorkerStatus(name="vad", state="built"),
-                WorkerStatus(name="stt", state="built"),
-                WorkerStatus(name="audio_dump", state="built" if self._dump_worker else "disabled"),
-                WorkerStatus(
-                    name="segment_dump", state="built" if self._segment_dump_worker else "disabled"
-                ),
-                WorkerStatus(name="packet_tracker", state="built" if self._tracker else "disabled"),
-            ],
-            running=False,
+        self._copier = QueueCopier(
+            self._router_queue,
+            self._routed_queue,
+            self._dump_queue or self._routed_queue,
+            put_timeout=0.2,
         )
+        self._vad = self._build_vad()
+        self._stt = self._build_fake_stt()
+        if self._settings.segment_dump.enabled:
+            self._segment_dump_worker = self._build_segment_dump()
+
         logger.info(
             "Pipeline built with channels: %s", [c.channel_id for c in self._settings.mqtt.channels]
         )
-        logger.info(
-            "Packet tracker enabled with %d channel(s)",
-            len(self._tracker.channel_ids) if self._tracker else 0,
-        )
 
     def start(self) -> None:
-        """Start all workers in dependency order."""
-        workers = self._get_workers()
-        for w in workers:
+        """Start all workers. Only once."""
+        if self._running:
+            return
+        self._running = True
+        for w in self._get_workers():
             w.start()
-        self._status.running = True
-        self._status.workers = [WorkerStatus(name=w.name, state="running") for w in workers]
         logger.info("Pipeline started")
 
     def stop(self) -> None:
-        """Stop all workers in reverse dependency order."""
+        """Signal all workers to stop."""
+        self._running = False
         self._stop_event.set()
-        workers = self._get_workers()
-        for w in reversed(workers):
+        for w in reversed(self._get_workers()):
             try:
-                w.stop()
+                w.stop()  # type: ignore[attr-defined]
             except AttributeError:
-                logger.debug("Worker %s does not implement a stop method; skipping.", w)
-        self._status.running = False
-        self._status.workers = [WorkerStatus(name=w.name, state="stopped") for w in workers]
-        logger.info("Pipeline stopped")
+                pass
 
     def wait(self) -> None:
-        """Block until all workers finish or stop event is set."""
-        workers = self._get_workers()
-        for w in workers:
+        for w in self._get_workers():
             w.join(timeout=10)
-            alive = w.is_alive() if callable(w.is_alive) else False
-            if alive:
-                logger.warning("Worker %s did not stop within 10s", w.name)
+            if hasattr(w, "is_alive"):
+                alive = w.is_alive() if callable(w.is_alive) else w.is_alive
+                if alive:
+                    logger.warning("Worker %s did not stop within 10s", w.name)
 
-    def get_status(self) -> PipelineStatus:
-        """Return current pipeline status for health monitoring."""
-        worker_states = {}
-        workers = self._get_workers()
-        for w in workers:
-            alive = w.is_alive() if hasattr(w, "is_alive") else False
-            worker_states[w.name] = {
-                "alive": alive,
-                "state": "running" if alive else "stopped",
-            }
-        return PipelineStatus(
-            running=True,
-            workers=[WorkerStatus(name=n, state=str(s["state"])) for n, s in worker_states.items()],
-        )
+    def get_status(self) -> dict:
+        running = self._running
+        workers = {w.name: ("running" if w.is_alive() else "stopped") for w in self._get_workers()}
+        return {"running": running, "workers": workers}
 
     def run(self) -> None:
-        """Build, start, wait for completion, and shut down."""
         self.build()
         self.start()
         self.wait()
         self.stop()
 
-    def run_with_timer(self, duration_s: float = 30.0) -> None:
-        """Run for a limited time, then shut down."""
-        self.build()
+    # ── Timer variant ──────────────────────────────────────────
 
+    def run_with_timer(self, duration_s: float = 30.0) -> None:
+        self.build()
         try:
             self.start()
             end = time.time() + duration_s
-            while time.time() < end and not self._stop_event.is_set():
+            while time.time() < end:
                 self._stop_event.wait(1.0)
+                if not self._running:
+                    break
         except KeyboardInterrupt:
             logger.info("Ctrl-C received, shutting down...")
         finally:
-            self.stop()
+            self._running = False
+            for w in self._get_workers():
+                w.stop()  # type: ignore[attr-defined]
             self.wait()
 
-    def _get_workers(self) -> list[Any]:
-        """Return workers in startup order."""
-        return [
-            w
-            for w in [
-                self._audio_source,
-                self._router,
-                self._copier,
-                self._vad,
-                self._stt,
-                self._dump_worker,
-                self._segment_dump_worker,
-            ]
-            if w is not None
-        ]
+    # ── Worker tracking ────────────────────────────────────────
 
-    def _build_mqtt_subscriber(self) -> Any:
-        """Build the MQTT subscriber worker (Milestone 2)."""
+    def _get_workers(self) -> list[threading.Thread]:
+        workers = [
+            self._audio_source,
+            self._router,
+            self._copier,
+            self._vad,
+            self._stt,
+            self._dump_worker,
+            self._segment_dump_worker,
+        ]
+        return [w for w in workers if w is not None]
+
+    # ── Worker builders ────────────────────────────────────────
+
+    def _build_mqtt_subscriber(self) -> threading.Thread:
         from edge_voice.audio_ingest.mqtt_client import MqttAudioIngest
 
         if self._ingest_queue is None:
             raise RuntimeError("Ingest queue not initialized")
-
         return MqttAudioIngest(self._settings.mqtt, self._ingest_queue)
 
-    def _build_router(self) -> Any:
-        """Build channel router worker (Milestone 2).
-
-        Router sends valid packets to _router_queue (not directly to VAD).
-        The PacketCopier fans out from there.
-        """
+    def _build_router(self) -> threading.Thread:
         from edge_voice.channel.router import ChannelRouter
 
-        if self._ingest_queue is None:
-            raise RuntimeError("Ingest queue not initialized")
-        if self._router_queue is None:
-            raise RuntimeError("Router queue not initialized")
+        if self._ingest_queue is None or self._router_queue is None:
+            raise RuntimeError("Queues not initialized")
+        channels = [c.channel_id for c in self._settings.mqtt.channels]
+        return ChannelRouter(self._ingest_queue, self._router_queue, channels)
 
-        channel_ids = [c.channel_id for c in self._settings.mqtt.channels]
-        return ChannelRouter(self._ingest_queue, self._router_queue, channel_ids)
-
-    def _build_packet_copier(self) -> None:
-        """Fan out packets from router_queue to both VAD and dump queues."""
-        from edge_voice.pipeline.packet_copier import PacketCopier
-
-        if self._router_queue is None or self._routed_queue is None:
-            raise RuntimeError("Router queues not initialized")
-
-        # Inject the tracker as the callback — all packets flow through here
-        track_cb = self._tracker.track if self._tracker else None
-        assert self._dump_queue is not None
-        self._copier = PacketCopier(
-            self._router_queue, self._routed_queue, self._dump_queue, track_cb
-        )
-
-    def _build_packet_tracker(self) -> Any:
-        """Build the central per-channel packet tracker.
-
-        Initialized with known channel IDs so it can report expected
-        channels even before any packets arrive.
-        """
-        from edge_voice.pipeline.packet_tracker import AudioPacketTracker
-
-        channel_ids = [c.channel_id for c in self._settings.mqtt.channels]
-        return AudioPacketTracker(channel_ids=channel_ids)
-
-    def _build_vad(self) -> Any:
-        """Build the VAD worker."""
+    def _build_vad(self) -> threading.Thread:
         from edge_voice.pipeline.fake_workers import FakeVADWorker
 
         if self._routed_queue is None or self._segment_queue is None:
             raise RuntimeError("Queues not initialized")
-
         return FakeVADWorker(self._routed_queue, self._segment_queue)
 
-    def _build_fake_stt(self) -> Any:
-        """Build the STT worker."""
+    def _build_fake_stt(self) -> threading.Thread:
         from edge_voice.pipeline.fake_workers import FakeSTTWorker
 
         if self._segment_queue is None:
             raise RuntimeError("Segment queue not initialized")
 
-        def _on_transcript(event: Any) -> None:
+        def _on_transcript(event) -> None:
             logger.info(
                 "TRANSCRIPT channel=%s segment=%s [%.2f-%.2f] %r",
                 event.channel_id,
@@ -290,38 +203,20 @@ class PipelineOrchestrator:
 
         return FakeSTTWorker(self._segment_queue, _on_transcript)
 
-    def _build_segment_dump(self) -> None:
-        """Build the SegmentAudioDumpWorker if enabled in settings."""
-        if not self._settings.segment_dump.enabled:
-            logger.info("SegmentAudioDumpWorker disabled (segment_dump.enabled=false)")
-            return
+    def _build_segment_dump(self) -> threading.Thread:
+        from edge_voice.audio_ingest.segment_audio_dump import SegmentAudioDumpWorker
 
         if self._segment_queue is None:
             raise RuntimeError("Segment queue not initialized")
-
-        from edge_voice.audio_ingest.segment_audio_dump import SegmentAudioDumpWorker
-
-        self._segment_dump_worker = SegmentAudioDumpWorker(
+        return SegmentAudioDumpWorker(
             segment_queue=self._segment_queue,
             output_dir=self._settings.segment_dump.output_dir,
             channel_sample_rate=self._settings.audio.sample_rate,
         )
-        logger.info(
-            "SegmentAudioDumpWorker enabled: %s",
-            self._settings.segment_dump.output_dir,
-        )
 
     def _build_audio_dump(self) -> None:
-        """Build the AudioDumpWorker if enabled in settings."""
-        if not self._settings.dump.enabled:
-            logger.info("AudioDumpWorker disabled (dump.enabled=false)")
+        if not self._settings.dump.enabled or self._dump_queue is None:
             return
-
-        if self._dump_queue is None:
-            raise RuntimeError("Dump queue not initialized")
-        if self._segment_queue is None:
-            raise RuntimeError("Segment queue not initialized")
-
         from edge_voice.audio_ingest.audio_dump import AudioDumpWorker
 
         self._dump_worker = AudioDumpWorker(
@@ -330,8 +225,4 @@ class PipelineOrchestrator:
             channel_sample_rate=self._settings.audio.sample_rate,
             segment_secs=self._settings.dump.segment_secs,
         )
-        logger.info(
-            "AudioDumpWorker enabled: %s (segment=%ds)",
-            self._settings.dump.output_dir,
-            self._settings.dump.segment_secs,
-        )
+        logger.info("AudioDumpWorker enabled: %s", self._settings.dump.output_dir)

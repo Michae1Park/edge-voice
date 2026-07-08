@@ -1,4 +1,4 @@
-"""Tests for FakeVADWorker, PacketCopier, and PacketTracker."""
+"""Tests for FakeVADWorker and QueueCopier."""
 
 import queue
 import time
@@ -6,10 +6,9 @@ import time
 from edge_voice.pipeline.fake_workers import FakeVADWorker
 from edge_voice.pipeline.models import AudioPacket, SpeechSegment
 from edge_voice.pipeline.packet_copier import PacketCopier
-from edge_voice.pipeline.packet_tracker import AudioPacketTracker
 
 
-# ── helpers ──────────────────
+# ── helpers ────────────────
 
 
 def _make_packet(channel_id: str, ts: float, n_samples: int = 320) -> AudioPacket:
@@ -17,18 +16,16 @@ def _make_packet(channel_id: str, ts: float, n_samples: int = 320) -> AudioPacke
 
 
 def _wait_get(q: queue.Queue, timeout: float = 2.0) -> object:
-    """Get from queue with timeout, return None on timeout."""
     try:
         return q.get(timeout=timeout)
     except queue.Empty:
         return None
 
 
-# ── FakeVADWorker ──
+# ── FakeVADWorker ────────────
 
 
 def test_fake_vad_emits_segment_after_threshold():
-    """VAD emits a SpeechSegment after PACKETS_PER_FAKE_SEGMENT packets."""
     routed_q = queue.Queue()
     segment_q = queue.Queue()
     vad = FakeVADWorker(routed_q, segment_q)
@@ -47,19 +44,16 @@ def test_fake_vad_emits_segment_after_threshold():
 
 
 def test_fake_vad_buffer_resets_on_segment():
-    """VAD resets its per-channel buffer after emitting a segment."""
     routed_q = queue.Queue()
     segment_q = queue.Queue()
     vad = FakeVADWorker(routed_q, segment_q)
     vad.start()
 
-    # First segment
     for i in range(10):
         routed_q.put(_make_packet("rx", ts=float(i)))
     seg1 = _wait_get(segment_q)
     assert seg1 is not None
 
-    # Second segment
     for i in range(10):
         routed_q.put(_make_packet("rx", ts=float(i) + 100))
     seg2 = _wait_get(segment_q)
@@ -72,7 +66,6 @@ def test_fake_vad_buffer_resets_on_segment():
 
 
 def test_fake_vad_handles_multiple_channels():
-    """VAD tracks separate buffers per channel."""
     routed_q = queue.Queue()
     segment_q = queue.Queue()
     vad = FakeVADWorker(routed_q, segment_q)
@@ -102,7 +95,6 @@ def test_fake_vad_stops_cleanly():
 
 
 def test_fake_vad_ignores_empty_packets():
-    """VAD continues running even when no packets are sent."""
     routed_q = queue.Queue()
     segment_q = queue.Queue()
     vad = FakeVADWorker(routed_q, segment_q)
@@ -114,7 +106,7 @@ def test_fake_vad_ignores_empty_packets():
     assert segment_q.empty()
 
 
-# ── PacketCopier tests ──
+# ── QueueCopier (PacketCopier) tests ────────
 
 
 def test_packet_copier_fans_to_both_outputs():
@@ -127,7 +119,6 @@ def test_packet_copier_fans_to_both_outputs():
 
     pkt = _make_packet("rx", ts=0.0)
     src.put(pkt)
-    # Allow copier thread to process
     time.sleep(0.3)
 
     got1 = _wait_get(dst1)
@@ -140,7 +131,7 @@ def test_packet_copier_fans_to_both_outputs():
 
 
 def test_packet_copier_calls_track_callback():
-    """Tracker callback is invoked on each forwarded packet."""
+    """Track callback is invoked on each forwarded packet."""
     src = queue.Queue()
     dst1 = queue.Queue()
     dst2 = queue.Queue()
@@ -195,95 +186,3 @@ def test_packet_copier_handles_no_tracker():
 
     copier.stop()
     copier.join(timeout=3)
-
-
-# ── PacketTracker tests ──
-
-
-def test_track_creates_channel():
-    """First track calls on new channel auto-creates ChannelState."""
-    tracker = AudioPacketTracker(channel_ids=["rx", "tx"])
-    pkt = _make_packet("rx", ts=1.0)
-    snap = tracker.track(pkt)
-    assert snap["channel_id"] == "rx"
-    assert snap["packet_count"] == 1
-    assert snap["last_seen_age"] >= 0
-
-
-def test_track_updates_packet_count():
-    tracker = AudioPacketTracker()
-    for i in range(5):
-        tracker.track(_make_packet("rx", ts=float(i)))
-    snap = tracker.track(_make_packet("rx", ts=5.0))
-    assert snap["packet_count"] == 6
-
-
-def test_track_updating_segment_timestamps():
-    """Segment start/end timestamps advance as packets arrive."""
-    tracker = AudioPacketTracker()
-    tracker.track(_make_packet("rx", ts=0.5))
-    snap1 = tracker.track(_make_packet("rx", ts=1.0))
-    snap2 = tracker.track(_make_packet("rx", ts=1.5))
-    assert snap1["current_segment_start"] == 0.5
-    assert snap1["current_segment_end"] == 1.0
-    assert snap2["current_segment_end"] == 1.5
-    assert snap2["duration_s"] == 1.0
-
-
-def test_track_multiple_channels_independent():
-    """Channel packet counts are independent."""
-    tracker = AudioPacketTracker()
-    tracker.track(_make_packet("rx", ts=1.0))
-    tracker.track(_make_packet("tx", ts=1.0))
-    snaps = tracker.dump_channels()
-    counts = {s["channel_id"]: s["packet_count"] for s in snaps}
-    assert counts["rx"] == 1
-    assert counts["tx"] == 1
-
-
-def test_dump_channels_empty():
-    tracker = AudioPacketTracker()
-    assert tracker.dump_channels() == []
-
-
-def test_dump_channels_after_track():
-    tracker = AudioPacketTracker()
-    tracker.track(_make_packet("rx", ts=1.0))
-    tracker.track(_make_packet("tx", ts=1.0))
-    snaps = tracker.dump_channels()
-    assert len(snaps) == 2
-    assert {s["channel_id"] for s in snaps} == {"rx", "tx"}
-
-
-def test_on_segment_start_resets_counters():
-    tracker = AudioPacketTracker()
-    for _ in range(5):
-        tracker.track(_make_packet("rx", ts=1.0))
-    tracker.on_segment_start("rx")
-    snap = tracker.track(_make_packet("rx", ts=2.0))
-    assert snap["packet_count"] == 6  # total still counts
-    assert snap["current_segment_packets"] == 1
-
-
-def test_on_segment_start_with_no_channel_returns_none():
-    tracker = AudioPacketTracker()
-    assert tracker.on_segment_start("unknown") is None
-
-
-def test_on_segment_end_returns_channel():
-    tracker = AudioPacketTracker()
-    tracker.track(_make_packet("rx", ts=1.0))
-    result = tracker.on_segment_end("rx")
-    assert result is not None
-    assert result.channel_id == "rx"
-
-
-def test_on_segment_end_no_channel_returns_none():
-    tracker = AudioPacketTracker()
-    assert tracker.on_segment_end("unknown") is None
-
-
-def test_expected_channels_preserved_when_no_packets():
-    tracker = AudioPacketTracker(channel_ids=["rx", "tx"])
-    assert tracker.channel_ids == {"rx", "tx"}
-    assert tracker.dump_channels() == []

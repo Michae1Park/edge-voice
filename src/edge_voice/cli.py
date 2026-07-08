@@ -6,6 +6,7 @@ config, and starts the pipeline (and optionally the web UI) as configured.
 import argparse
 import logging
 import time
+import threading
 
 from edge_voice.config.settings import Settings, SourceSettings
 from edge_voice.pipeline.orchestrator import PipelineOrchestrator
@@ -58,7 +59,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def setup_logging(debug: bool = False) -> None:
-    """Configure structlog/console logging from args."""
     level = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(
         level=level,
@@ -69,8 +69,6 @@ def setup_logging(debug: bool = False) -> None:
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     setup_logging(debug=args.debug)
-
-    logger.info("Starting edge-voice %s", "in debug mode" if args.debug else "")
 
     settings = Settings.load()
 
@@ -83,19 +81,40 @@ def main(argv: list[str] | None = None) -> None:
         )
 
     orchestrator = PipelineOrchestrator(settings)
+    _stop_event = threading.Event()
 
     if args.run_secs > 0:
-        orchestrator.run_with_timer(duration_s=args.run_secs)
+        orchestrator.build()
+        orchestrator.start()
+
+        def _timer():
+            time.sleep(args.run_secs)
+            _stop_event.set()
+
+        t = threading.Thread(target=_timer, daemon=True)
+        t.start()
+
+        try:
+            while not _stop_event.is_set():
+                _stop_event.wait(0.5)
+        except KeyboardInterrupt:
+            logger.info("Ctrl-C received, shutting down...")
+        finally:
+            _stop_event.set()
+            orchestrator.stop()
+            orchestrator.wait()
+
     else:
         logger.info("Running until Ctrl-C...")
         orchestrator.build()
         orchestrator.start()
         try:
-            while not orchestrator._stop_event.is_set():
-                time.sleep(1)
+            while not _stop_event.is_set():
+                _stop_event.wait(1.0)
         except KeyboardInterrupt:
             logger.info("Ctrl-C received, shutting down...")
         finally:
+            _stop_event.set()
             orchestrator.stop()
             orchestrator.wait()
 

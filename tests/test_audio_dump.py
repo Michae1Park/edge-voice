@@ -96,11 +96,3 @@ def test_multiple_channels():
         file_channels = {f.stem.split("_")[0] for f in files}
         assert "rx" in file_channels
         assert "tx" in file_channels
-
-
-def test_channel_ids_property():
-    """Verify channel_ids property exists and returns expected channels."""
-    from edge_voice.pipeline.packet_tracker import AudioPacketTracker
-
-    tracker = AudioPacketTracker(channel_ids=["rx", "tx"])
-    assert set(tracker.channel_ids) == {"rx", "tx"}

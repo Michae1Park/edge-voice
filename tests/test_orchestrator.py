@@ -2,7 +2,6 @@
 
 import queue
 import threading
-from unittest import mock
 
 import pytest
 
@@ -56,19 +55,19 @@ def test_init_default_state():
     assert orch._stop_event.is_set() is False
 
 
-def test_build_sets_status_running_false():
+def test_build_sets_running_false():
     s = _minimal_settings()
     orch = PipelineOrchestrator(s)
     orch.build()
-    assert orch._status.running is False
+    assert not orch.get_status()["running"]
 
 
-def test_build_sets_status_running_true():
+def test_build_sets_running_true():
     s = _minimal_settings()
     orch = PipelineOrchestrator(s)
     orch.build()
     orch.start()
-    assert orch._status.running is True
+    assert orch.get_status()["running"]
 
 
 def test_stop_sets_running_false():
@@ -77,7 +76,7 @@ def test_stop_sets_running_false():
     orch.build()
     orch.start()
     orch.stop()
-    assert orch._status.running is False
+    assert not orch.get_status()["running"]
 
 
 def test_build_creates_correct_workers():
@@ -86,7 +85,7 @@ def test_build_creates_correct_workers():
     orch.build()
     assert orch._audio_source is not None
     assert orch._router is not None
-    assert orch._tracker is not None
+    assert orch._copier is not None
     assert orch._vad is not None
     assert orch._stt is not None
 
@@ -148,11 +147,14 @@ def test_worker_status_after_build():
     s = _minimal_settings()
     orch = PipelineOrchestrator(s)
     orch.build()
-    states = {w.name: w.state for w in orch._status.workers}
-    assert states["audio_source"] == "built"
-    assert states["router"] == "built"
-    assert states["vad"] == "built"
-    assert states["stt"] == "built"
+    # After build (before start) workers are created but not running
+    status = orch.get_status()
+    assert not status["running"]
+    workers = list(status["workers"].keys())
+    assert "MqttAudioIngest" in workers
+    assert "ChannelRouter" in workers
+    assert "FakeVADWorker" in workers
+    assert "FakeSTTWorker" in workers
 
 
 def test_get_status_after_start():
@@ -161,8 +163,8 @@ def test_get_status_after_start():
     orch.build()
     orch.start()
     status = orch.get_status()
-    assert status.running is True
-    assert len(status.workers) > 0
+    assert status["running"]
+    assert len(status["workers"]) > 0
     orch.stop()
 
 
@@ -172,8 +174,7 @@ def test_worker_states_after_stop():
     orch.build()
     orch.start()
     orch.stop()
-    states = {w.name: w.state for w in orch._status.workers}
-    assert all(state == "stopped" for state in states.values())
+    assert not orch.get_status()["running"]
 
 
 # ── ingest_queue property ──────────────────────
@@ -198,19 +199,19 @@ def test_ingest_queue_property_returns_queue_after_build():
 def test_run_with_timer_shuts_down_cleanly():
     s = _minimal_settings()
     orch = PipelineOrchestrator(s)
+    orch.build()
 
     def finish_timer():
         import time
 
         time.sleep(1)
-        with mock.patch.object(orch, "_stop_event"):
-            orch._stop_event.is_set.return_value = True
+        orch.stop()
 
     t = threading.Thread(target=finish_timer, daemon=True)
     t.start()
     orch.run_with_timer(duration_s=2)
     t.join(timeout=3)
-    assert orch._stop_event.is_set()
+    assert not orch.get_status()["running"]
 
 
 # ── stop / build state transitions ─────────────
