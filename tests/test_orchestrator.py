@@ -68,6 +68,8 @@ def test_build_sets_running_true():
     orch.build()
     orch.start()
     assert orch.get_status()["running"]
+    orch.stop()
+    orch.wait()
 
 
 def test_stop_sets_running_false():
@@ -76,6 +78,7 @@ def test_stop_sets_running_false():
     orch.build()
     orch.start()
     orch.stop()
+    orch.wait()
     assert not orch.get_status()["running"]
 
 
@@ -166,6 +169,7 @@ def test_get_status_after_start():
     assert status["running"]
     assert len(status["workers"]) > 0
     orch.stop()
+    orch.wait()
 
 
 def test_worker_states_after_stop():
@@ -174,6 +178,7 @@ def test_worker_states_after_stop():
     orch.build()
     orch.start()
     orch.stop()
+    orch.wait()
     assert not orch.get_status()["running"]
 
 
