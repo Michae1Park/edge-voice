@@ -74,3 +74,7 @@ class QueueCopier(threading.Thread):
 
     def stop(self) -> None:
         self._stop_event.set()
+
+    @property
+    def stopping(self) -> bool:
+        return self._stop_event.is_set()
