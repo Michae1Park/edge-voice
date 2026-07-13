@@ -25,6 +25,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def setup_logging(debug: bool = False) -> None:
+    """
+    This is the top level logger config shared across all modules
+    """
     level = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(
         level=level,
