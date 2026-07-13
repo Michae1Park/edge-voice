@@ -12,7 +12,7 @@ Design intent (see docs/design.md "Configuration"):
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml  # type: ignore[import-untyped]
 from pydantic import BaseModel, Field, field_validator
@@ -39,15 +39,14 @@ class AudioSettings(BaseModel):
     sample_rate: int = 16000
     chunk_samples: int = 320
     channels: int = 1
-    format: str = "int16"
+    format: Literal["int16", "int32", "float32"] = "int16"
 
-    @field_validator("format")
+    @field_validator("format", mode="before")
     @classmethod
-    def validate_format(cls, v: str) -> str:
-        valid = {"int16", "int32", "float32"}
-        if v not in valid:
-            raise ValueError(f"audio.format must be one of {valid}, got {v!r}")
-        return v
+    def normalize_format(cls, value: str):
+        if isinstance(value, str):
+            return value.lower()
+        return value
 
 
 class VADSettings(BaseModel):
@@ -65,36 +64,12 @@ class STTSettings(BaseModel):
     language: str = "ko"
     model: str = "tiny-ko"
     model_arch: int = 0
-    feed_windows: int = 64
+    feed_windows: int = Field(default=64, gt=0)
     max_tokens_per_second: str = "13.0"
     identify_speakers: bool = False
     log_api_calls: bool = False
     save_input_wav_path: str = ""
     return_audio_data: bool = False
-
-    @field_validator("feed_windows", mode="before")
-    @classmethod
-    def validate_feed_windows(cls, v: Any) -> Any:
-        if isinstance(v, str):
-            v = int(v)
-        if v <= 0:
-            raise ValueError("stt.feed_windows must be > 0")
-        return v
-
-    @field_validator(
-        "identify_speakers",
-        "log_api_calls",
-        "return_audio_data",
-        mode="before",
-    )
-    @classmethod
-    def validate_bool_or_str(cls, v: Any) -> Any:
-        if isinstance(v, str):
-            if v.lower() == "true":
-                return True
-            if v.lower() == "false":
-                return False
-        return v
 
 
 class SourceSettings(BaseModel):
@@ -109,14 +84,7 @@ class LoggingSettings(BaseModel):
 
 class WebUISettings(BaseModel):
     host: str = "0.0.0.0"
-    port: int = 8080
-
-    @field_validator("port")
-    @classmethod
-    def validate_port(cls, v: int) -> int:
-        if not (1 <= v <= 65535):
-            raise ValueError("webui.port must be 1-65535")
-        return v
+    port: int = Field(default=8080, ge=1, le=65535)
 
 
 class HealthSettings(BaseModel):
@@ -154,8 +122,7 @@ class Settings(BaseSettings):
     1. Code defaults (model field defaults)
     2. configs/default.yaml
     3. configs/local.yaml (gitignored)
-    4. configs/queues.yaml
-    5. Environment variables (EDGE_VOICE__SECTION__<FIELD>)
+    4. Environment variables (EDGE_VOICE__SECTION__<FIELD>)
 
     Usage:
         settings = Settings.load()
@@ -174,6 +141,7 @@ class Settings(BaseSettings):
     segment_dump: SegmentDumpSettings = SegmentDumpSettings()
     queues: QueuesSettings = QueuesSettings()
 
+    # For overriding configs. e.g. Docker/Kubernetes env vars
     model_config = SettingsConfigDict(
         env_prefix="EDGE_VOICE_",
         env_nested_delimiter="__",
@@ -183,14 +151,9 @@ class Settings(BaseSettings):
     @classmethod
     def load(cls) -> "Settings":
         """Load settings with layered overrides."""
-        base = cls()  # defaults
-
-        # Load merged YAML overrides
         merged = _load_config_files()
-        if merged:
-            base = cls(**merged)
-
-        return base
+        # return cls(**merged) if merged else cls()
+        return cls.model_validate(merged)
 
 
 def _load_config_files() -> dict[str, Any]:
