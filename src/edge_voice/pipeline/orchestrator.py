@@ -116,40 +116,32 @@ class PipelineOrchestrator:
     def wait(self) -> None:
         for w in self._get_workers():
             w.join(timeout=10)
-            if hasattr(w, "is_alive"):
-                alive = w.is_alive() if callable(w.is_alive) else w.is_alive
-                if alive:
-                    logger.warning("Worker %s did not stop within 10s", w.name)
+            if w.is_alive():
+                logger.warning("Worker %s did not stop within 10s", w.name)
 
     def get_status(self) -> dict:
         running = self._running
         workers = {w.name: ("running" if w.is_alive() else "stopped") for w in self._get_workers()}
         return {"running": running, "workers": workers}
 
-    def run(self) -> None:
-        self.build()
-        self.start()
-        self.wait()
-        self.stop()
-
-    # ── Timer variant ──────────────────────────────────────────
-
-    def run_with_timer(self, duration_s: float = 30.0) -> None:
+    def run(self, duration_s: float | None = None) -> None:
+        """Build, start, and run until stopped, Ctrl-C, or duration_s elapses."""
         self.build()
         try:
             self.start()
-            end = time.time() + duration_s
-            while time.time() < end:
-                self._stop_event.wait(1.0)
-                if not self._running:
+            end = time.time() + duration_s if duration_s is not None else None
+            while self._running:
+                if end is not None and time.time() >= end:
                     break
+                self._stop_event.wait(1.0)
         except KeyboardInterrupt:
             logger.info("Ctrl-C received, shutting down...")
         finally:
-            self._running = False
-            for w in self._get_workers():
-                w.stop()  # type: ignore[attr-defined]
+            self.stop()
             self.wait()
+
+    def run_with_timer(self, duration_s: float = 30.0) -> None:
+        self.run(duration_s=duration_s)
 
     # ── Worker tracking ────────────────────────────────────────
 
