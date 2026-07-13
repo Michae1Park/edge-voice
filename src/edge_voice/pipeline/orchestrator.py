@@ -23,6 +23,10 @@ from edge_voice.pipeline.queues import (
     make_segment_queue,
 )
 from edge_voice.pipeline.queue_copier import QueueCopier
+from edge_voice.audio_ingest.mqtt_client import MqttAudioIngest
+from edge_voice.channel.router import ChannelRouter
+from edge_voice.pipeline.fake_workers import FakeVADWorker
+from edge_voice.pipeline.fake_workers import FakeSTTWorker
 
 logger = logging.getLogger(__name__)
 
@@ -164,30 +168,22 @@ class PipelineOrchestrator:
     # ── Worker builders ────────────────────────────────────────
 
     def _build_mqtt_subscriber(self) -> threading.Thread:
-        from edge_voice.audio_ingest.mqtt_client import MqttAudioIngest
-
         if self._ingest_queue is None:
             raise RuntimeError("Ingest queue not initialized")
         return MqttAudioIngest(self._settings.mqtt, self._ingest_queue)
 
     def _build_router(self) -> threading.Thread:
-        from edge_voice.channel.router import ChannelRouter
-
         if self._ingest_queue is None or self._router_queue is None:
             raise RuntimeError("Queues not initialized")
         channels = [c.channel_id for c in self._settings.mqtt.channels]
         return ChannelRouter(self._ingest_queue, self._router_queue, channels)
 
     def _build_vad(self) -> threading.Thread:
-        from edge_voice.pipeline.fake_workers import FakeVADWorker
-
         if self._routed_queue is None or self._segment_queue is None:
             raise RuntimeError("Queues not initialized")
         return FakeVADWorker(self._routed_queue, self._segment_queue)
 
     def _build_fake_stt(self) -> threading.Thread:
-        from edge_voice.pipeline.fake_workers import FakeSTTWorker
-
         if self._segment_queue is None:
             raise RuntimeError("Segment queue not initialized")
 
