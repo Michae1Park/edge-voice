@@ -8,13 +8,13 @@ internally -- invisible to pipeline supervision.
 
 from __future__ import annotations
 
-from base64 import b64decode
 import binascii
 import json
 import logging
 import queue
-import time
 import threading
+import time
+from base64 import b64decode
 from collections.abc import Callable
 from typing import Any
 
@@ -83,9 +83,7 @@ class MqttAudioIngest(threading.Thread):
         if not self._connected_event.wait(timeout=CONNECT_TIMEOUT_S):
             logger.warning("Timed out waiting for MQTT connection")
 
-        # Main loop: just wait for stop signal
-        while not self._stop_event.wait(timeout=1.0):
-            pass
+        self._stop_event.wait()  # main loop: block until stop() is called
 
         self._client.loop_stop()
         self._client.disconnect()
@@ -98,9 +96,6 @@ class MqttAudioIngest(threading.Thread):
     @property
     def stopping(self) -> bool:
         return self._stop_event.is_set()
-
-    def is_alive(self) -> bool:
-        return not self._stop_event.is_set()
 
     def _on_connect(
         self,
@@ -126,9 +121,7 @@ class MqttAudioIngest(threading.Thread):
 
     def _on_message(self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> None:  # type: ignore[override]
         channel_id = self._resolve_channel(msg.topic)
-        raw = msg.payload
-
-        packet = self._parse_payload(raw, channel_id)
+        packet = self._parse_payload(msg.payload, channel_id)
         if packet is None:
             return
 
@@ -153,18 +146,14 @@ class MqttAudioIngest(threading.Thread):
             return None
 
         try:
-            raw_b64 = body["samples_b64"]
-            samples = b64decode(raw_b64)
+            samples = b64decode(body["samples_b64"])
         except (KeyError, binascii.Error, TypeError) as exc:
             logger.warning("Invalid samples_b64 field in message from %s: %s", channel_id, exc)
             return None
 
         ts = body.get("timestamp")
-        if ts is None:
-            ts = time.time()
-
         return AudioPacket(
             channel_id=channel_id,
-            timestamp=float(ts),
+            timestamp=float(ts) if ts is not None else time.time(),
             samples=samples,
         )
