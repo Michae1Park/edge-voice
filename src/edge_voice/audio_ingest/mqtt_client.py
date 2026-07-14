@@ -8,13 +8,10 @@ internally -- invisible to pipeline supervision.
 
 from __future__ import annotations
 
-from base64 import b64decode
-import binascii
-import json
 import logging
 import queue
-import time
 import threading
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -83,9 +80,7 @@ class MqttAudioIngest(threading.Thread):
         if not self._connected_event.wait(timeout=CONNECT_TIMEOUT_S):
             logger.warning("Timed out waiting for MQTT connection")
 
-        # Main loop: just wait for stop signal
-        while not self._stop_event.wait(timeout=1.0):
-            pass
+        self._stop_event.wait()  # main loop: block until stop() is called
 
         self._client.loop_stop()
         self._client.disconnect()
@@ -98,9 +93,6 @@ class MqttAudioIngest(threading.Thread):
     @property
     def stopping(self) -> bool:
         return self._stop_event.is_set()
-
-    def is_alive(self) -> bool:
-        return not self._stop_event.is_set()
 
     def _on_connect(
         self,
@@ -126,9 +118,7 @@ class MqttAudioIngest(threading.Thread):
 
     def _on_message(self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> None:  # type: ignore[override]
         channel_id = self._resolve_channel(msg.topic)
-        raw = msg.payload
-
-        packet = self._parse_payload(raw, channel_id)
+        packet = self._parse_payload(msg.payload, channel_id)
         if packet is None:
             return
 
@@ -145,26 +135,76 @@ class MqttAudioIngest(threading.Thread):
         return topic.split("/")[-1]
 
     def _parse_payload(self, payload: bytes, channel_id: str) -> AudioPacket | None:
-        """Parse a JSON message envelope into an AudioPacket."""
-        try:
-            body = json.loads(payload.decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-            logger.warning("Invalid MQTT message JSON from %s: %s", channel_id, exc)
+        """Parse a raw MQTT audio payload into an AudioPacket."""
+        if not payload:
+            logger.warning("Empty MQTT audio payload from %s", channel_id)
             return None
-
-        try:
-            raw_b64 = body["samples_b64"]
-            samples = b64decode(raw_b64)
-        except (KeyError, binascii.Error, TypeError) as exc:
-            logger.warning("Invalid samples_b64 field in message from %s: %s", channel_id, exc)
-            return None
-
-        ts = body.get("timestamp")
-        if ts is None:
-            ts = time.time()
 
         return AudioPacket(
             channel_id=channel_id,
-            timestamp=float(ts),
-            samples=samples,
+            timestamp=time.time(),
+            samples=payload,
         )
+
+    # def _parse_payload(self, payload: bytes, channel_id: str) -> AudioPacket | None:
+    #     """Parse a JSON message envelope into an AudioPacket."""
+    #     import binascii
+    #     import json
+    #     from base64 import b64decode
+    #     try:
+    #         body = json.loads(payload.decode("utf-8"))
+    #     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+    #         logger.warning("Invalid MQTT message JSON from %s: %s", channel_id, exc)
+    #         return None
+
+    #     try:
+    #         samples = b64decode(body["samples_b64"])
+    #     except (KeyError, binascii.Error, TypeError) as exc:
+    #         logger.warning("Invalid samples_b64 field in message from %s: %s", channel_id, exc)
+    #         return None
+
+    #     ts = body.get("timestamp")
+    #     return AudioPacket(
+    #         channel_id=channel_id,
+    #         timestamp=float(ts) if ts is not None else time.time(),
+    #         samples=samples,
+    #     )
+
+    # def _parse_payload(self, payload: bytes, channel_id: str) -> AudioPacket | None:
+    #     """Parse JSON envelope or raw audio payload."""
+    #     import binascii
+    #     import json
+    #     from base64 import b64decode
+    #
+    #     # Try JSON first
+    #     try:
+    #         body = json.loads(payload.decode("utf-8"))
+    #         samples = b64decode(body["samples_b64"])
+    #         ts = body.get("timestamp")
+
+    #         return AudioPacket(
+    #             channel_id=channel_id,
+    #             timestamp=float(ts) if ts is not None else time.time(),
+    #             samples=samples,
+    #         )
+
+    #     except (UnicodeDecodeError, json.JSONDecodeError):
+    #         pass
+
+    #     except (KeyError, binascii.Error, TypeError) as exc:
+    #         logger.warning(
+    #             "Malformed JSON audio packet from %s: %s",
+    #             channel_id,
+    #             exc,
+    #         )
+    #         return None
+
+    #     # Fall back to raw audio
+    #     if payload:
+    #         return AudioPacket(
+    #             channel_id=channel_id,
+    #             timestamp=time.time(),
+    #             samples=payload,
+    #         )
+    #     logger.warning("Empty MQTT payload from %s", channel_id)
+    #     return None

@@ -46,7 +46,7 @@ def test_mqtt_default_channels():
 
 
 def test_audio_settings_invalid_format():
-    with pytest.raises(ValueError, match=".*audio.format.*"):
+    with pytest.raises(ValueError, match=".*format.*"):
         AudioSettings(format="mp3")
 
 

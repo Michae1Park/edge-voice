@@ -220,3 +220,4 @@ __marimo__/
 # Test wav data dir
 wav/
 dumped_audio/
+dumped_vad_segments/

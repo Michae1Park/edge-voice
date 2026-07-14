@@ -12,7 +12,7 @@ mqtt:
       channel_id: "tx"
 
 audio:
-  sample_rate: 16000
+  sample_rate: 8000
   channels: 1
   format: "int16"
 
@@ -56,3 +56,13 @@ dump:
   enabled: true
   output_dir: "./dumped_audio"
   segment_secs: 10
+
+segment_dump:
+  enabled: true
+  output_dir: "./dumped_vad_segments"
+
+queues:
+  ingest: 256
+  routed: 128
+  segment: 64
+  dump: 256
