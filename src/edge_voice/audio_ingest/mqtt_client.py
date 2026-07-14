@@ -172,7 +172,10 @@ class MqttAudioIngest(threading.Thread):
 
     # def _parse_payload(self, payload: bytes, channel_id: str) -> AudioPacket | None:
     #     """Parse JSON envelope or raw audio payload."""
-
+    #     import binascii
+    #     import json
+    #     from base64 import b64decode
+    #
     #     # Try JSON first
     #     try:
     #         body = json.loads(payload.decode("utf-8"))
