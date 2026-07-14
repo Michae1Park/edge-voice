@@ -137,6 +137,18 @@ class MqttAudioIngest(threading.Thread):
                 return ch.channel_id
         return topic.split("/")[-1]
 
+    # def _parse_payload(self, payload: bytes, channel_id: str) -> AudioPacket | None:
+    #     """Parse a raw MQTT audio payload into an AudioPacket."""
+    #     if not payload:
+    #         logger.warning("Empty MQTT audio payload from %s", channel_id)
+    #         return None
+
+    #     return AudioPacket(
+    #         channel_id=channel_id,
+    #         timestamp=time.time(),
+    #         samples=payload,
+    #     )
+
     def _parse_payload(self, payload: bytes, channel_id: str) -> AudioPacket | None:
         """Parse a JSON message envelope into an AudioPacket."""
         try:
@@ -157,3 +169,39 @@ class MqttAudioIngest(threading.Thread):
             timestamp=float(ts) if ts is not None else time.time(),
             samples=samples,
         )
+
+    # def _parse_payload(self, payload: bytes, channel_id: str) -> AudioPacket | None:
+    #     """Parse JSON envelope or raw audio payload."""
+
+    #     # Try JSON first
+    #     try:
+    #         body = json.loads(payload.decode("utf-8"))
+    #         samples = b64decode(body["samples_b64"])
+    #         ts = body.get("timestamp")
+
+    #         return AudioPacket(
+    #             channel_id=channel_id,
+    #             timestamp=float(ts) if ts is not None else time.time(),
+    #             samples=samples,
+    #         )
+
+    #     except (UnicodeDecodeError, json.JSONDecodeError):
+    #         pass
+
+    #     except (KeyError, binascii.Error, TypeError) as exc:
+    #         logger.warning(
+    #             "Malformed JSON audio packet from %s: %s",
+    #             channel_id,
+    #             exc,
+    #         )
+    #         return None
+
+    #     # Fall back to raw audio
+    #     if payload:
+    #         return AudioPacket(
+    #             channel_id=channel_id,
+    #             timestamp=time.time(),
+    #             samples=payload,
+    #         )
+    #     logger.warning("Empty MQTT payload from %s", channel_id)
+    #     return None
