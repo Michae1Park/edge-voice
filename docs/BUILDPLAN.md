@@ -60,14 +60,6 @@ audio_ingest/  →  channel/  →  vad/  →  stt/   (the actual worker threads)
 process publishing to the same MQTT broker `audio_ingest` subscribes to —
 no import relationship in either direction.
 
-**`main.py` is Milestone-0-only scaffolding**, not a second entry point. It
-exists purely because Milestone 0 has no config system yet, so it hardcodes
-two channel IDs and wires the fake workers directly. Once `cli.py` and
-`config/settings.py` exist (Milestone 1), `main.py`'s wiring logic moves
-into `pipeline/orchestrator.py` and `main.py` is either deleted or shrunk to
-a 3-line dev convenience (`if __name__ == "__main__": cli.main()`) for
-running without installing the package.
-
 **Failure-granularity note for later (Milestone 5):** MQTT
 reconnect-with-backoff is a *connection-level* retry that lives inside
 `audio_ingest`'s MQTT client itself — it is not a thread restart and should
@@ -80,28 +72,12 @@ Conflating the two will make restart-count metrics noisy and useless.
 ## STATUS (update this every session, even with one line)
 
 ```
-Last updated: 2026-07-02
-Current milestone: 3
-Done: ms 0, 1, 2
-In progress: 3
+Last updated: 2026-07-14
+Current milestone: none
+Done: ms 0, 1, 2, 3
+In progress: none
 Next action: n/a
 Blocked on: nothing
-
----
-
-## Milestone 3 — IP
-
-Implemented `vad/worker.py` with:
-
-- **Shared Silero VAD model** — single `_vad_model` loaded once via `_get_vad_model()`, serialised with global `_vad_lock`.
-- **Per-channel VADIterator + state** — `_Ch` class tracks `in_speech`, `seg_index`, `seg_start_s`, `win_buf`, `aud_buf`, `scores` per channel, guarded by per-channel lock.
-- **Soft-cut logic** — `_find_good_cut()` scans recent VAD scores for confidence dips after `SOFT_CUT_S`; `_try_cut()` splits segments at the dip point and re-arms for the next segment.
-- **Hard-cut logic** — segments exceeding `MAX_SEGMENT_S` are always capped.
-- **Score tracking** — `_score_win()` scores every window (not just start/end) so the soft-cut trace is complete.
-- **Dual-channel test coverage** — `tests/test_vad_worker.py` with 6 tests including concurrent dual-channel segmentation, hard-cut path, and shared model singleton.
-
-Swapped `FakeVADWorker` → `VadWorker` in `orchestrator.py` (`_build_real_vad()`).
-```
 
 ---
 
@@ -229,22 +205,24 @@ transcripts.
 
 ---
 
-## Milestone 3 — Real shared Silero VAD
+## Milestone 3 — Real shared Silero VAD 
 
 1. `vad/worker.py`
-   - One shared `Silero VAD` / `VADIterator` instance
-   - Per-channel state dict (prototype had issues — **lock the full `vad_iter()` call, not just score
-     calls**)
-   - Port soft-cut logic (confidence-dip detection, `SOFT_CUT_S=5.0s`,
-     `MAX_SEGMENT_S=7.0s`) from prototype, adapted to per-channel state
+   - One shared `Silero VAD` model loaded once via `_get_vad_model()`, protected by a global `_vad_lock`
+   - Per-channel `VADIterator` and state (`_Ch`) with channel-local locking
+     - Tracks `in_speech`, `seg_index`, `seg_start_s`, `win_buf`, `aud_buf`, and `scores`
+   - Soft-cut logic ported from the prototype
+     - Confidence-dip detection after `SOFT_CUT_S=5.0s`
+     - `_find_good_cut()` and `_try_cut()` split long utterances at low-confidence regions
+   - Hard-cut logic enforcing `MAX_SEGMENT_S=7.0s`
    - Window size `VAD_WINDOW_SAMPLES=512`
-2. Swap fake VAD for `vad/worker.py` inside `pipeline/orchestrator.py`. STT
-   stays fake.
+   - Every VAD window is scored to maintain a complete confidence trace
 
-**Done when:** two channels (mic + wav, or two wav sources, each its own
-process) interleaved on the ingest queue produce correctly-segmented,
-channel-attributed `SpeechSegment`s with no crash under concurrent channel
-activity — write the interleaving test explicitly, don't just eyeball logs.
+2. Swapped fake VAD for `vad/worker.py` inside `pipeline/orchestrator.py`.
+   - `FakeVADWorker` replaced with `VadWorker`
+   - STT remains fake.
+
+**Done when:**  Two channels (mic + wav, or two wav sources, each its own process) interleaved on the ingest queue produce correctly segmented, channel-attributed `SpeechSegment`s with no crashes under concurrent channel activity. Explicit interleaving/concurrency tests added (`tests/test_vad_worker.py`, 6 tests including dual-channel segmentation, hard-cut behaviour, and shared-model singleton).
 
 ---
 
