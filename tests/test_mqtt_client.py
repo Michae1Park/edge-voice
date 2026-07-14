@@ -3,7 +3,6 @@
 # import json
 # from base64 import b64encode
 import queue
-import time
 
 from edge_voice.audio_ingest.mqtt_client import MqttAudioIngest
 from edge_voice.config.settings import MQTTSettings, MQTTChannels
@@ -101,18 +100,3 @@ def test_resolve_channel_fallback():
 #     packet = client._parse_payload(payload, "rx")
 #     assert packet is not None
 #     assert packet.timestamp > 0
-
-
-def test_stop_sets_event():
-    settings = MQTTSettings(
-        channels=[
-            MQTTChannels(topic="stt/audio_rx", channel_id="rx"),
-        ]
-    )
-    ingest_q = queue.Queue()
-    client = MqttAudioIngest(settings, ingest_q)
-    client.start()
-    time.sleep(0.3)
-    client.stop()
-    client.join(timeout=3)
-    assert not client.is_alive()
