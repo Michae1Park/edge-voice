@@ -58,7 +58,7 @@ dump:
   segment_secs: 10
 
 segment_dump:
-  enabled: true
+  enabled: false
   output_dir: "./dumped_vad_segments"
 
 queues:
