@@ -1,9 +1,9 @@
-"""Debug tool: collect AudioPackets from the ingest queue and save as WAV files.
+"""Debug tool: collect AudioPackets from a queue and save as WAV files.
 
 Usage:
     # From Python:
     from edge_voice.audio_ingest.audio_dump import AudioDumpWorker
-    dump = AudioDumpWorker(ingest_queue, output_dir="./dumped_audio")
+    dump = AudioDumpWorker(dump_queue, output_dir="./dumped_audio")
     dump.start(); ...; dump.stop()
 
     # Or as a standalone process with a queue created via IPC.
@@ -23,30 +23,32 @@ from edge_voice.pipeline.models import AudioPacket
 
 logger = logging.getLogger(__name__)
 
+BYTES_PER_SAMPLE = 2  # int16 PCM
+
 
 class AudioDumpWorker(threading.Thread):
-    """Consume packets from the routed queue and write per-channel rolling WAV files."""
+    """Consume packets from a dump queue and write per-channel rolling WAV files."""
 
     def __init__(
         self,
-        routed_queue: queue.Queue[AudioPacket],
+        dump_queue: queue.Queue[AudioPacket],
         output_dir: str = "./edge_voice/dumped_audio",
         channel_sample_rate: int = 16_000,
         segment_secs: float = 10.0,
     ) -> None:
         """
         Args:
-            routed_queue: shared queue where routed AudioPackets flow after channel validation.
+            dump_queue: queue of AudioPackets to dump (e.g. ChannelRouter's dump_queue).
             output_dir: directory where WAV files will be written.
             channel_sample_rate: sample rate for the output WAV.
             segment_secs: number of seconds of audio per output file.
         """
         super().__init__(name="AudioDumpWorker", daemon=False)
-        self._queue = routed_queue
+        self._queue = dump_queue
         self._output_dir = Path(output_dir)
         self._sr = channel_sample_rate
         self._segment_secs = segment_secs
-        self._threshold = int(segment_secs * self._sr * 2)
+        self._threshold = int(segment_secs * self._sr * BYTES_PER_SAMPLE)
         self._stop_event = threading.Event()
         self._buffers: dict[str, bytearray] = {}
         self._segments: dict[str, int] = {}
@@ -98,10 +100,7 @@ class AudioDumpWorker(threading.Thread):
 
                 self._buffers[packet.channel_id].extend(packet.samples)
 
-                while True:
-                    result = self._flush_full_segment(packet.channel_id)
-                    if result is None:
-                        break
+                while (result := self._flush_full_segment(packet.channel_id)) is not None:
                     written.append(result)
 
                 if not written:
@@ -132,6 +131,3 @@ class AudioDumpWorker(threading.Thread):
     @property
     def stopping(self) -> bool:
         return self._stop_event.is_set()
-
-    def is_alive(self) -> bool:
-        return not self._stop_event.is_set()

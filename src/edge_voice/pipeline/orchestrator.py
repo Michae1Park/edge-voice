@@ -201,7 +201,7 @@ class PipelineOrchestrator:
         from edge_voice.audio_ingest.audio_dump import AudioDumpWorker
 
         self._dump_worker = AudioDumpWorker(
-            routed_queue=self._dump_queue,
+            dump_queue=self._dump_queue,
             output_dir=self._settings.dump.output_dir,
             channel_sample_rate=self._settings.audio.sample_rate,
             segment_secs=self._settings.dump.segment_secs,
