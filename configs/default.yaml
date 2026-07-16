@@ -12,7 +12,7 @@ mqtt:
       channel_id: "tx"
 
 audio:
-  sample_rate: 8000
+  sample_rate: 16000
   channels: 1
   format: "int16"
 

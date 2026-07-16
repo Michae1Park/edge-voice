@@ -1,10 +1,11 @@
-"""WAV file audio source that publishes raw PCM bytes to MQTT for the pipeline.
+"""WAV file audio source that publishes PCM frames to MQTT for the pipeline.
 
 Reads a WAV file, converts to target sample rate, splits into 20ms chunks,
-and publishes each frame as raw bytes to the configured MQTT topics.
+and publishes each frame as raw PCM bytes (no envelope) to the configured
+MQTT topics.
 
 Run as a separate process:
-    python -m edge_voice.utils.audio_generation.wav_source_raw --wav file.wav --channels rx tx
+    python -m edge_voice.utils.audio_generation.wav_source --wav file.wav --channels rx tx
 """
 
 from __future__ import annotations
@@ -42,7 +43,9 @@ def _resample(data: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Publish a WAV file to MQTT as raw PCM bytes")
+    parser = argparse.ArgumentParser(
+        description="Publish a WAV file to MQTT for the edge-voice pipeline"
+    )
     parser.add_argument("--wav", required=True, help="Path to WAV file")
     parser.add_argument("--broker", default="localhost", help="MQTT broker host")
     parser.add_argument("--port", type=int, default=1883, help="MQTT broker port")
@@ -74,12 +77,12 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     file_sr, raw_data = _open_wav(args.wav)
     if file_sr != args.sr:
-        logger.info("WavSourceRaw: resampling %d → %d Hz", file_sr, args.sr)
+        logger.info("WavSource: resampling %d → %d Hz", file_sr, args.sr)
         raw_data = _resample(raw_data, file_sr, args.sr)
 
     total_chunks = math.ceil(len(raw_data) / args.chunk)
     logger.info(
-        "WavSourceRaw: %s %d Hz %d samples → %d frames × %d channel(s) → %s",
+        "WavSource: %s %d Hz %d samples → %d frames × %d channel(s) → %s",
         args.wav,
         file_sr,
         len(raw_data),
@@ -110,7 +113,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     client.loop_stop()
     elapsed_total = time.time() - start
     logger.info(
-        "WavSourceRaw: done — %d frames in %.2fs (%.1fx real-time)",
+        "WavSource: done — %d frames in %.2fs (%.1fx real-time)",
         frame_num / len(args.channels),
         elapsed_total,
         (frame_num / len(args.channels) * frame_duration_s) / elapsed_total,
