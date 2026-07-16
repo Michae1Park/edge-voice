@@ -16,6 +16,21 @@ audio:
   channels: 1
   format: "int16"
 
+dump:
+  enabled: true
+  output_dir: "./dumped_audio"
+  segment_secs: 10
+
+segment_dump:
+  enabled: false
+  output_dir: "./dumped_vad_segments"
+
+queues:
+  ingest: 256
+  routed: 128
+  segment: 64
+  dump: 256
+
 vad:
   threshold: 0.5
   sampling_rate: 16000
@@ -25,10 +40,6 @@ vad:
   soft_cut_min_dip: 0.10
   min_silence_ms: 300
   max_segment_s: 7.0
-
-source:
-  sample_rate: 16000
-  default_audio: "wav/conversation_60s.wav"
 
 stt:
   language: "ko"
@@ -51,18 +62,4 @@ webui:
 
 health:
   stale_segment_warning_s: 30   # warn if no segment finalized in this long
-
-dump:
-  enabled: true
-  output_dir: "./dumped_audio"
-  segment_secs: 10
-
-segment_dump:
-  enabled: false
-  output_dir: "./dumped_vad_segments"
-
-queues:
-  ingest: 256
-  routed: 128
-  segment: 64
-  dump: 256
+  
