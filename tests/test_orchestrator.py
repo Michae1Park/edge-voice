@@ -15,7 +15,7 @@ from edge_voice.config.settings import (
 from edge_voice.pipeline.orchestrator import PipelineOrchestrator
 
 
-# ── helpers ─────────────────────────────────────
+# -- helpers -----------------------------
 
 
 def _mock_mqtt_channels():
@@ -41,17 +41,17 @@ def _minimal_settings(queues: QueuesSettings | None = None) -> Settings:
     )
 
 
-# ── __init__ ─────────────────────────────────────
+# -- __init__ -----------------------------
 
 
 def test_init_default_state():
     s = _minimal_settings()
     orch = PipelineOrchestrator(s)
     assert orch._ingest_queue is None
-    assert orch._router_queue is None
     assert orch._routed_queue is None
-    assert orch._dump_queue is None
     assert orch._segment_queue is None
+    assert orch._dump_queue is None
+    assert orch._segment_dump_queue is None
     assert orch._stop_event.is_set() is False
 
 
@@ -88,7 +88,6 @@ def test_build_creates_correct_workers():
     orch.build()
     assert orch._audio_source is not None
     assert orch._router is not None
-    assert orch._copier is not None
     assert orch._vad is not None
     assert orch._stt is not None
 
@@ -109,7 +108,7 @@ def test_build_with_segment_dump_enabled():
     assert orch._segment_dump_worker is not None
 
 
-# ── queues ─────────────────────────────────────
+# -- queues -----------------------------
 
 
 def test_build_creates_queues():
@@ -117,7 +116,6 @@ def test_build_creates_queues():
     orch = PipelineOrchestrator(s)
     orch.build()
     assert isinstance(orch._ingest_queue, queue.Queue)
-    assert isinstance(orch._router_queue, queue.Queue)
     assert isinstance(orch._routed_queue, queue.Queue)
     assert isinstance(orch._segment_queue, queue.Queue)
 
@@ -143,7 +141,7 @@ def test_segment_queue_maxsize_from_settings():
     assert orch._segment_queue.maxsize == 128
 
 
-# ── status / get_status ─────────────────────────
+# -- status / get_status -------------------
 
 
 def test_worker_status_after_build():
@@ -182,7 +180,7 @@ def test_worker_states_after_stop():
     assert not orch.get_status()["running"]
 
 
-# ── ingest_queue property ──────────────────────
+# -- ingest_queue property ---------
 
 
 def test_ingest_queue_property_raises_before_build():
@@ -197,10 +195,9 @@ def test_ingest_queue_property_returns_queue_after_build():
     assert isinstance(orch.ingest_queue, queue.Queue)
 
 
-# ── run_with_timer ─────────────────────────────
+# -- run_with_timer --
 
 
-@pytest.mark.integration
 def test_run_with_timer_shuts_down_cleanly():
     s = _minimal_settings()
     orch = PipelineOrchestrator(s)
@@ -219,7 +216,7 @@ def test_run_with_timer_shuts_down_cleanly():
     assert not orch.get_status()["running"]
 
 
-# ── stop / build state transitions ─────────────
+# -- stop / build state transitions ----
 
 
 def test_build_clears_stop_event():

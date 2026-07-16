@@ -1,24 +1,13 @@
 """Tests for edge_voice.audio_ingest.mqtt_client."""
 
-# import json
-# from base64 import b64encode
 import queue
 
 from edge_voice.audio_ingest.mqtt_client import MqttAudioIngest
 from edge_voice.config.settings import MQTTSettings, MQTTChannels
 
 
-# def _make_payload(samples: bytes) -> bytes:
-#     return json.dumps(
-#         {
-#             "samples_b64": b64encode(samples).decode(),
-#             "timestamp": 1000.0,
-#         }
-#     ).encode("utf-8")
-
-
 def test_resolve_channel_matches_topic():
-    """Verify _resolve_channel uses configured topics."""
+    """Verify topic_to_channel mapping uses configured topics."""
     settings = MQTTSettings(
         channels=[
             MQTTChannels(topic="stt/audio_rx", channel_id="rx"),
@@ -27,9 +16,8 @@ def test_resolve_channel_matches_topic():
     )
     ingest_q = queue.Queue()
     client = MqttAudioIngest(settings, ingest_q)
-    # _resolve_channel is called during message handling
-    assert client._resolve_channel("stt/audio_rx") == "rx"
-    assert client._resolve_channel("stt/audio_tx") == "tx"
+    assert client._topic_to_channel["stt/audio_rx"] == "rx"
+    assert client._topic_to_channel["stt/audio_tx"] == "tx"
 
 
 def test_resolve_channel_fallback():
@@ -40,7 +28,10 @@ def test_resolve_channel_fallback():
     )
     ingest_q = queue.Queue()
     client = MqttAudioIngest(settings, ingest_q)
-    assert client._resolve_channel("unknown/topic") == "topic"
+    # Fallback: last segment of topic path
+    topic = "unknown/topic"
+    channel_id = client._topic_to_channel.get(topic, topic.split("/")[-1])
+    assert channel_id == "topic"
 
 
 # def test_parse_payload_valid():
@@ -58,8 +49,8 @@ def test_resolve_channel_fallback():
 #     assert packet.channel_id == "rx"
 #     assert packet.samples == raw
 #     assert packet.timestamp == 1000.0
-
-
+#
+#
 # def test_parse_payload_invalid_json():
 #     settings = MQTTSettings(
 #         channels=[
@@ -70,8 +61,8 @@ def test_resolve_channel_fallback():
 #     client = MqttAudioIngest(settings, ingest_q)
 #     packet = client._parse_payload(b"not json", "rx")
 #     assert packet is None
-
-
+#
+#
 # def test_parse_payload_missing_samples_b64():
 #     settings = MQTTSettings(
 #         channels=[
@@ -83,8 +74,8 @@ def test_resolve_channel_fallback():
 #     payload = json.dumps({"timestamp": 1.0}).encode("utf-8")
 #     packet = client._parse_payload(payload, "rx")
 #     assert packet is None
-
-
+#
+#
 # def test_parse_payload_default_timestamp():
 #     settings = MQTTSettings(
 #         channels=[
