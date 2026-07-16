@@ -1,3 +1,12 @@
+"""
+Channel-aware audio router.
+
+Consumes AudioPackets from the ingest queue, validates and tags each with its
+channel_id, maintains per-channel bookkeeping (last-seen timestamp for
+freshness checks), and forwards packets to the routed queue for downstream
+VAD/STT consumption. Optionally copies packets to a dump queue for debugging.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -5,6 +14,7 @@ import queue
 import threading
 import time
 
+from edge_voice.pipeline.fanout import fanout_put
 from edge_voice.pipeline.models import AudioPacket
 
 logger = logging.getLogger(__name__)
@@ -21,10 +31,12 @@ class ChannelRouter(threading.Thread):
         ingest_queue: queue.Queue[AudioPacket],
         routed_queue: queue.Queue[AudioPacket],
         channel_ids: list[str],
+        dump_queue: queue.Queue[AudioPacket] | None = None,
     ) -> None:
         super().__init__(name="ChannelRouter", daemon=False)
         self._ingest_queue = ingest_queue
         self._routed_queue = routed_queue
+        self._dump_queue = dump_queue
         self._channel_ids = set(channel_ids)
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
@@ -43,11 +55,9 @@ class ChannelRouter(threading.Thread):
                 continue
 
             self._mark_seen(packet.channel_id)
-
-            try:
-                self._routed_queue.put(packet, timeout=QUEUE_PUT_TIMEOUT_S)
-            except queue.Full:
-                logger.warning("Routed queue full -- dropping packet from %s", packet.channel_id)
+            fanout_put(
+                packet, self._routed_queue, self._dump_queue, put_timeout=QUEUE_PUT_TIMEOUT_S
+            )
 
         logger.info("ChannelRouter stopped")
 
