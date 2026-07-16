@@ -42,6 +42,10 @@ python -m edge_voice.cli
 
 ```bash
 python -m edge_voice.utils.audio_generation.wav_source --wav wav/conversation_60s.wav --channels rx tx
+
+python -m edge_voice.utils.audio_generation.wav_source_raw --wav wav/rx_recorded_1.wav --channels rx
+
+python -m edge_voice.utils.audio_generation.wav_source_raw --wav wav/rx_recorded_1.wav wav/tx_recorded_1.wav --channels rx tx
 ```
 
 ### Architecture
