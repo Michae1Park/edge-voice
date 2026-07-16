@@ -72,11 +72,6 @@ class STTSettings(BaseModel):
     return_audio_data: bool = False
 
 
-class SourceSettings(BaseModel):
-    sample_rate: int = 16000
-    default_audio: str = ""
-
-
 class LoggingSettings(BaseModel):
     level: str = "INFO"
     is_json: bool = Field(default=True, alias="json")
@@ -133,7 +128,6 @@ class Settings(BaseSettings):
     audio: AudioSettings = AudioSettings()
     vad: VADSettings = VADSettings()
     stt: STTSettings = STTSettings()
-    source: SourceSettings = SourceSettings()
     logging_: LoggingSettings = Field(default=LoggingSettings(), alias="logging")
     webui: WebUISettings = WebUISettings()
     health: HealthSettings = HealthSettings()
