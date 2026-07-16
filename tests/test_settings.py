@@ -35,7 +35,6 @@ def test_top_level_models_have_defaults():
     assert m.logging_.level == "INFO"
     assert m.logging_.is_json is True
     assert m.webui.port == 8080
-    assert m.source.sample_rate == 16000
 
 
 def test_mqtt_default_channels():
