@@ -54,7 +54,9 @@ class ChannelRouter(threading.Thread):
                 logger.warning("Unknown channel_id %s -- dropping packet", packet.channel_id)
                 continue
 
-            self._mark_seen(packet.channel_id)
+            with self._lock:
+                self._channel_last_seen[packet.channel_id] = time.time()
+
             fanout_put(
                 packet, self._routed_queue, self._dump_queue, put_timeout=QUEUE_PUT_TIMEOUT_S
             )
@@ -68,10 +70,6 @@ class ChannelRouter(threading.Thread):
     @property
     def stopping(self) -> bool:
         return self._stop_event.is_set()
-
-    def _mark_seen(self, channel_id: str) -> None:
-        with self._lock:
-            self._channel_last_seen[channel_id] = time.time()
 
     def get_freshness(self, channel_id: str) -> float | None:
         """Return seconds since last seen packet for a channel, or None."""
