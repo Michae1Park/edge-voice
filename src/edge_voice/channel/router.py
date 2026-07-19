@@ -121,6 +121,22 @@ class Repacketizer:
             start_ts += self._outgoing_s
 
         self._buffer_start_ts[packet.channel_id] = start_ts
+
+        if outgoing:
+            logger.debug(
+                "repacketizer out channel=%s emitted=%d bytes_each=%d carry=%dB",
+                packet.channel_id,
+                len(outgoing),
+                out_bytes,
+                len(buf),
+            )
+        else:
+            logger.debug(
+                "repacketizer out channel=%s emitted=0 carry=%dB",
+                packet.channel_id,
+                len(buf),
+            )
+
         return outgoing
 
     def reset_channel(self, channel_id: str) -> None:
