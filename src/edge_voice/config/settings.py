@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml  # type: ignore[import-untyped]
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -47,6 +47,20 @@ class AudioSettings(BaseModel):
         if isinstance(value, str):
             return value.lower()
         return value
+
+
+class RepacketizerSettings(BaseModel):
+    """Re-packetizes incoming audio frames to a fixed outgoing frame size
+    before they hit the VAD/STT pipeline (e.g. 20ms in -> 32ms out).
+
+    sample_rate is intentionally NOT a field here -- it always follows
+    audio.sample_rate (see Settings._check_repacketizer_matches_vad), so
+    there's exactly one place to change the pipeline's sample rate.
+    """
+
+    incoming_ms: float = Field(default=20.0, gt=0)
+    outgoing_ms: float = Field(default=32.0, gt=0)
+    bytes_per_sample: int = Field(default=2, ge=1)
 
 
 class VADSettings(BaseModel):
@@ -126,6 +140,7 @@ class Settings(BaseSettings):
 
     mqtt: MQTTSettings = MQTTSettings()
     audio: AudioSettings = AudioSettings()
+    repacketizer: RepacketizerSettings = RepacketizerSettings()
     vad: VADSettings = VADSettings()
     stt: STTSettings = STTSettings()
     logging_: LoggingSettings = Field(default=LoggingSettings(), alias="logging")
@@ -140,13 +155,27 @@ class Settings(BaseSettings):
         env_prefix="EDGE_VOICE_",
         env_nested_delimiter="__",
         populate_by_name=True,
+        extra="forbid",
     )
+
+    @model_validator(mode="after")
+    def _check_repacketizer_matches_vad(self) -> "Settings":
+        """repacketizer.outgoing_ms must produce exactly vad.window_samples
+        at audio.sample_rate, or VAD will receive mis-sized frames."""
+        expected_samples = self.repacketizer.outgoing_ms * self.audio.sample_rate / 1000.0
+        if round(expected_samples) != self.vad.window_samples:
+            raise ValueError(
+                f"repacketizer.outgoing_ms ({self.repacketizer.outgoing_ms}ms) must "
+                f"produce vad.window_samples ({self.vad.window_samples}) at "
+                f"audio.sample_rate ({self.audio.sample_rate}Hz), got "
+                f"{expected_samples} samples instead"
+            )
+        return self
 
     @classmethod
     def load(cls) -> "Settings":
         """Load settings with layered overrides."""
         merged = _load_config_files()
-        # return cls(**merged) if merged else cls()
         return cls.model_validate(merged)
 
 

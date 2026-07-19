@@ -31,9 +31,13 @@ queues:
   segment: 64
   dump: 256
 
+repacketizer:
+  incoming_ms: 20.0     # frame size arriving from ingest
+  outgoing_ms: 32.0     # frame size handed to VAD (must match vad.window_samples)
+  bytes_per_sample: 2   # 16-bit PCM mono
+
 vad:
   threshold: 0.5
-  sampling_rate: 16000
   window_samples: 512        # 32ms @ 16kHz
   soft_cut_s: 5.0
   soft_cut_lookahead_s: 1.0
@@ -54,7 +58,7 @@ stt:
 
 logging:
   level: "INFO"
-  structure: "json"                  # false -> pretty console renderer (dev)
+  json: true     # false -> pretty console renderer (dev)
 
 webui:
   host: "0.0.0.0"
