@@ -179,7 +179,12 @@ class PipelineOrchestrator:
         return VADWorker(
             self._routed_queue,
             self._segment_queue,
-            config=VADWorkerConfig(sample_rate=self._settings.audio.sample_rate),
+            config=VADWorkerConfig(
+                threshold=self._settings.vad.threshold,
+                sample_rate=self._settings.audio.sample_rate,
+                silence_rms_floor=self._settings.vad.silence_rms_floor,
+                preroll_chunks=self._settings.vad.preroll_chunks,
+            ),
         )
 
     def _build_fake_stt(self) -> threading.Thread:

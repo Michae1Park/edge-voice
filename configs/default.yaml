@@ -39,6 +39,9 @@ repacketizer:
 vad:
   threshold: 0.5
   window_samples: 512        # 32ms @ 16kHz
+  silence_rms_floor: 0.01    # CALIBRATE: normalized float32 RMS, not raw int16
+  preroll_chunks: 3
+  # Not yet consumed by VADWorker -- planned soft/hard-cut segment limits.
   soft_cut_s: 5.0
   soft_cut_lookahead_s: 1.0
   soft_cut_min_dip: 0.10
