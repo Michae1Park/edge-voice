@@ -104,7 +104,9 @@ class AudioDumpWorker(threading.Thread):
                     written.append(result)
 
                 if not written:
-                    current_sec = len(self._buffers[packet.channel_id]) / self._sr
+                    current_sec = len(self._buffers[packet.channel_id]) / (
+                        self._sr * BYTES_PER_SAMPLE
+                    )
                     logger.debug(
                         "AudioDumpWorker: %s buffer %.1f/%.1fs",
                         packet.channel_id,
