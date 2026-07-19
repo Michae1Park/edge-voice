@@ -24,7 +24,7 @@ from edge_voice.pipeline.queues import (
 )
 from edge_voice.audio_ingest.mqtt_client import MqttAudioIngest
 from edge_voice.channel.router import ChannelRouter, RepacketizerConfig
-from edge_voice.pipeline.fake_workers import FakeVADWorker
+from edge_voice.vad.vad_worker import VADWorker, VADWorkerConfig
 from edge_voice.pipeline.fake_workers import FakeSTTWorker
 
 logger = logging.getLogger(__name__)
@@ -175,7 +175,12 @@ class PipelineOrchestrator:
     def _build_vad(self) -> threading.Thread:
         if self._routed_queue is None or self._segment_queue is None:
             raise RuntimeError("Queues not initialized")
-        return FakeVADWorker(self._routed_queue, self._segment_queue)
+
+        return VADWorker(
+            self._routed_queue,
+            self._segment_queue,
+            config=VADWorkerConfig(sample_rate=self._settings.audio.sample_rate),
+        )
 
     def _build_fake_stt(self) -> threading.Thread:
         if self._segment_queue is None:
