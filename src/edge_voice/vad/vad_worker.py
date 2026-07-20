@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 class VADWorkerConfig:
     threshold: float = 0.5
     sample_rate: int = 16000
+    rms_gate_enabled: bool = True
     silence_rms_floor: float = 0.01  # CALIBRATE: normalized float32 RMS, not raw int16
     preroll_chunks: int = 3
 
@@ -108,11 +109,12 @@ class VADWorker(threading.Thread):
         )
 
         float_chunk = self._bytes_to_float_tensor(packet.samples)
-        rms = self._rms(float_chunk)
 
-        if not state.triggered and rms < self.config.silence_rms_floor:
-            self._push_preroll(state, packet)
-            return
+        if self.config.rms_gate_enabled and not state.triggered:
+            rms = self._rms(float_chunk)
+            if rms < self.config.silence_rms_floor:
+                self._push_preroll(state, packet)
+                return
 
         result = state.vad_iter(float_chunk, return_seconds=True)
 

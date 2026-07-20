@@ -74,6 +74,7 @@ class VADSettings(BaseModel):
 
     threshold: float = 0.5
     window_samples: int = 512
+    rms_gate_enabled: bool = True
     silence_rms_floor: float = 0.01  # CALIBRATE: normalized float32 RMS, not raw int16
     preroll_chunks: int = 3
     max_segment_s: float = 7.0

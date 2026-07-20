@@ -182,6 +182,7 @@ class PipelineOrchestrator:
             config=VADWorkerConfig(
                 threshold=self._settings.vad.threshold,
                 sample_rate=self._settings.audio.sample_rate,
+                rms_gate_enabled=self._settings.vad.rms_gate_enabled,
                 silence_rms_floor=self._settings.vad.silence_rms_floor,
                 preroll_chunks=self._settings.vad.preroll_chunks,
             ),
