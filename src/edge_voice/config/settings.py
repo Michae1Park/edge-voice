@@ -77,6 +77,8 @@ class VADSettings(BaseModel):
     rms_gate_enabled: bool = True
     silence_rms_floor: float = 0.01  # CALIBRATE: normalized float32 RMS, not raw int16
     preroll_chunks: int = 3
+    min_silence_duration_ms: int = 100  # Silero VADIterator: silence needed before `end` fires
+    speech_pad_ms: int = 30  # Silero VADIterator: padding appended around detected speech
     max_segment_s: float = 7.0
     soft_cut_s: float = 5.0
     soft_cut_lookahead_s: float = 1.0

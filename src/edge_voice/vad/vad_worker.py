@@ -33,6 +33,7 @@ from typing import Any
 import numpy as np
 import torch
 
+from edge_voice.pipeline.fanout import fanout_put
 from edge_voice.pipeline.models import AudioPacket, SpeechSegment
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,8 @@ class VADWorkerConfig:
     rms_gate_enabled: bool = True
     silence_rms_floor: float = 0.01  # CALIBRATE: normalized float32 RMS, not raw int16
     preroll_chunks: int = 3
+    min_silence_duration_ms: int = 100  # silence required before an `end` event fires
+    speech_pad_ms: int = 30  # padding Silero appends on both sides of detected speech
 
 
 @dataclass
@@ -67,10 +70,12 @@ class VADWorker(threading.Thread):
         config: VADWorkerConfig | None = None,
         model=None,
         name: str = "VADWorker",
+        dump_queue: "queue.Queue[SpeechSegment] | None" = None,
     ) -> None:
         super().__init__(name=name, daemon=True)
         self.routed_queue = routed_queue
         self.segment_queue = segment_queue
+        self.dump_queue = dump_queue
         self.config = config or VADWorkerConfig()
 
         if model is None:
@@ -142,7 +147,7 @@ class VADWorker(threading.Thread):
             audio=b"".join(state.segment_chunks),
             segment_id=f"{channel_id}-{state.segment_start_ts:.3f}-{state.seg_counter}",
         )
-        self.segment_queue.put(segment)
+        fanout_put(segment, self.segment_queue, self.dump_queue)
         state.segment_chunks = []
         state.segment_start_ts = None
 
@@ -155,6 +160,8 @@ class VADWorker(threading.Thread):
             self.model,
             threshold=self.config.threshold,
             sampling_rate=self.config.sample_rate,
+            min_silence_duration_ms=self.config.min_silence_duration_ms,
+            speech_pad_ms=self.config.speech_pad_ms,
         )
 
     def _bytes_to_float_tensor(self, pcm_bytes: bytes) -> torch.Tensor:

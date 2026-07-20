@@ -17,7 +17,7 @@ audio:
   format: "int16"
 
 dump:
-  enabled: true
+  enabled: false
   output_dir: "./dumped_audio"
   segment_secs: 10
 
@@ -37,11 +37,13 @@ repacketizer:
   bytes_per_sample: 2   # 16-bit PCM mono
 
 vad:
-  threshold: 0.5
+  threshold: 0.3
   window_samples: 512        # 32ms @ 16kHz
-  rms_gate_enabled: true
+  rms_gate_enabled: false
   silence_rms_floor: 0.01    # CALIBRATE: normalized float32 RMS, not raw int16
   preroll_chunks: 3
+  min_silence_duration_ms: 400  # silence required before Silero fires `end` (raise if tail-clipping)
+  speech_pad_ms: 30             # padding Silero appends around detected speech
   # Not yet consumed by VADWorker -- planned soft/hard-cut segment limits.
   soft_cut_s: 5.0
   soft_cut_lookahead_s: 1.0
