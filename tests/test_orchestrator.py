@@ -154,7 +154,7 @@ def test_worker_status_after_build():
     workers = list(status["workers"].keys())
     assert "MqttAudioIngest" in workers
     assert "ChannelRouter" in workers
-    assert "FakeVADWorker" in workers
+    assert "VADWorker" in workers
     assert "FakeSTTWorker" in workers
 
 

@@ -36,7 +36,7 @@ dependencies = [
     "websockets",
     "tenacity>=8.0",
     "PyYAML>=6.0",
-    "pyaudio>=0.2.14",
+    "sounddevice>=0.5.0",
 ]
 
 [project.optional-dependencies]

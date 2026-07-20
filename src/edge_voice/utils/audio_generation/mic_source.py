@@ -46,45 +46,42 @@ class MicSource(threading.Thread):
 
     def run(self) -> None:
         """Capture audio and push to ingest queue."""
-        import pyaudio
+        import sounddevice as sd
 
-        logger.info("MicSource: initializing pyaudio...")
-        pa = pyaudio.PyAudio()
+        logger.info("MicSource: initializing sounddevice...")
 
         if self._device_index is not None:
-            device_count = pa.get_device_count()
+            device_count = len(sd.query_devices())
             if self._device_index >= device_count:
                 raise ValueError(
                     f"Device index {self._device_index} out of range (0-{device_count - 1})"
                 )
             logger.info("MicSource: using device %d", self._device_index)
         else:
-            for i in range(pa.get_device_count()):
-                info = pa.get_device_info_by_index(i)
+            for i, info in enumerate(sd.query_devices()):
                 logger.info(
                     "  Device %d: %s (%d in, %d out)",
                     i,
                     info["name"],
-                    info["maxInputChannels"],
-                    info["maxOutputChannels"],
+                    info["max_input_channels"],
+                    info["max_output_channels"],
                 )
 
-        stream = pa.open(
-            format=pyaudio.paInt16,
+        stream = sd.RawInputStream(
+            samplerate=SAMPLE_RATE,
             channels=1,
-            rate=SAMPLE_RATE,
-            input=True,
-            frames_per_buffer=CHUNK_SAMPLES,
-            input_device_index=self._device_index,
+            dtype="int16",
+            blocksize=CHUNK_SAMPLES,
+            device=self._device_index,
         )
-        stream.start_stream()
+        stream.start()
         logger.info("MicSource: capturing on %s", self._channel_ids)
 
         packet_num = 0
         try:
             while not self._stopped.is_set():
-                raw = stream.read(CHUNK_SAMPLES)
-                chunk = _raw_to_numpy(raw)
+                raw, _overflowed = stream.read(CHUNK_SAMPLES)
+                chunk = _raw_to_numpy(bytes(raw))
 
                 for channel_id in self._channel_ids:
                     packet = _create_packet(channel_id, chunk)
@@ -100,9 +97,8 @@ class MicSource(threading.Thread):
         except Exception as e:
             logger.error("MicSource: error: %s", e)
         finally:
-            stream.stop_stream()
+            stream.stop()
             stream.close()
-            pa.terminate()
             logger.info("MicSource: stopped after %d packets", packet_num)
 
     def stop(self) -> None:
@@ -137,7 +133,7 @@ def _create_packet(
 def main() -> None:
     parser = argparse.ArgumentParser(description="MicSource standalone test")
     parser.add_argument(
-        "-d", "--device", type=int, default=None, help="PyAudio device index (default: auto)"
+        "-d", "--device", type=int, default=None, help="sounddevice device index (default: auto)"
     )
     parser.add_argument(
         "-c", "--channel", type=str, default="ch1", help="Channel ID to tag packets with"

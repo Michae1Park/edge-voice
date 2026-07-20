@@ -6,6 +6,7 @@ Owns startup, graceful shutdown for each stage.
 Pipeline:
     MQTT subscriber -> ingest_queue -> ChannelRouter -> routed_queue -> VAD -> segment_queue -> STT
                                                        -> dump_queue (optional, debug)
+                                                                     -> segment_dump_queue (optional, debug)
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from edge_voice.pipeline.queues import (
 )
 from edge_voice.audio_ingest.mqtt_client import MqttAudioIngest
 from edge_voice.channel.router import ChannelRouter, RepacketizerConfig
-from edge_voice.pipeline.fake_workers import FakeVADWorker
+from edge_voice.vad.vad_worker import VADWorker, VADWorkerConfig
 from edge_voice.pipeline.fake_workers import FakeSTTWorker
 
 logger = logging.getLogger(__name__)
@@ -175,7 +176,21 @@ class PipelineOrchestrator:
     def _build_vad(self) -> threading.Thread:
         if self._routed_queue is None or self._segment_queue is None:
             raise RuntimeError("Queues not initialized")
-        return FakeVADWorker(self._routed_queue, self._segment_queue)
+
+        return VADWorker(
+            self._routed_queue,
+            self._segment_queue,
+            dump_queue=self._segment_dump_queue,
+            config=VADWorkerConfig(
+                threshold=self._settings.vad.threshold,
+                sample_rate=self._settings.audio.sample_rate,
+                rms_gate_enabled=self._settings.vad.rms_gate_enabled,
+                silence_rms_floor=self._settings.vad.silence_rms_floor,
+                preroll_chunks=self._settings.vad.preroll_chunks,
+                min_silence_duration_ms=self._settings.vad.min_silence_duration_ms,
+                speech_pad_ms=self._settings.vad.speech_pad_ms,
+            ),
+        )
 
     def _build_fake_stt(self) -> threading.Thread:
         if self._segment_queue is None:

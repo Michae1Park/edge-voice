@@ -64,9 +64,21 @@ class RepacketizerSettings(BaseModel):
 
 
 class VADSettings(BaseModel):
+    """VADWorker tuning. sample_rate is intentionally NOT a field here -- it
+    always follows audio.sample_rate, same rationale as RepacketizerSettings.
+
+    soft_cut_s/soft_cut_lookahead_s/soft_cut_min_dip/max_segment_s are the
+    planned confidence-dip and hard-cut segment-length limits from
+    docs/BUILDPLAN.md milestone 3; VADWorker doesn't implement them yet.
+    """
+
     threshold: float = 0.5
-    sampling_rate: int = 16000
     window_samples: int = 512
+    rms_gate_enabled: bool = True
+    silence_rms_floor: float = 0.01  # CALIBRATE: normalized float32 RMS, not raw int16
+    preroll_chunks: int = 3
+    min_silence_duration_ms: int = 100  # Silero VADIterator: silence needed before `end` fires
+    speech_pad_ms: int = 30  # Silero VADIterator: padding appended around detected speech
     max_segment_s: float = 7.0
     soft_cut_s: float = 5.0
     soft_cut_lookahead_s: float = 1.0
