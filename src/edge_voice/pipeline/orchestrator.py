@@ -74,7 +74,7 @@ class PipelineOrchestrator:
 
         if self._settings.dump.enabled:
             self._dump_queue = make_dump_queue(maxsize=self._settings.queues.dump)
-            self._build_audio_dump()
+            self._dump_worker = self._build_audio_dump()
         if self._settings.segment_dump.enabled:
             self._segment_dump_queue = make_dump_queue(maxsize=self._settings.queues.dump)
             self._segment_dump_worker = self._build_segment_dump()
@@ -274,25 +274,28 @@ class PipelineOrchestrator:
         )
 
     def _build_segment_dump(self) -> threading.Thread:
-        from edge_voice.audio_ingest.segment_audio_dump import SegmentAudioDumpWorker
-
         if self._segment_dump_queue is None:
             raise RuntimeError("Segment dump queue not initialized")
-        return SegmentAudioDumpWorker(
+        from edge_voice.audio_ingest.segment_audio_dump import SegmentAudioDumpWorker
+
+        worker = SegmentAudioDumpWorker(
             segment_queue=self._segment_dump_queue,
             output_dir=self._settings.segment_dump.output_dir,
             channel_sample_rate=self._settings.audio.sample_rate,
         )
+        logger.info("SegmentAudioDumpWorker enabled: %s", self._settings.segment_dump.output_dir)
+        return worker
 
-    def _build_audio_dump(self) -> None:
+    def _build_audio_dump(self) -> threading.Thread:
         if self._dump_queue is None:
             raise RuntimeError("Dump queue not initialized")
         from edge_voice.audio_ingest.audio_dump import AudioDumpWorker
 
-        self._dump_worker = AudioDumpWorker(
+        worker = AudioDumpWorker(
             dump_queue=self._dump_queue,
             output_dir=self._settings.dump.output_dir,
             channel_sample_rate=self._settings.audio.sample_rate,
             segment_secs=self._settings.dump.segment_secs,
         )
         logger.info("AudioDumpWorker enabled: %s", self._settings.dump.output_dir)
+        return worker
