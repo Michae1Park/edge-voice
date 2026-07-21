@@ -11,7 +11,7 @@ MQTT audio channels
   Channel Router
         │
         ▼
- Shared Silero VAD
+ Per-channel Silero VAD
         │
         ▼
  Shared Moonshine STT
@@ -26,7 +26,7 @@ MQTT audio channels
 
 ## 1. Problem Statement
 
-`edge-voice` transcribes two-party Korean phone calls in near real time on resource-constrained edge devices such as Raspberry Pi 5 and Jetson.
+`edge-voice` transcribes two-party phone calls in near real time on resource-constrained edge devices such as Raspberry Pi 5 and Jetson. Korean is the default language; Moonshine also supports Arabic, English, Spanish, Japanese, Ukrainian, Vietnamese, and Chinese, selected via configuration.
 
 Each call leg arrives as a separate MQTT audio stream. The system must:
 
@@ -47,37 +47,41 @@ The following are intentionally out of scope for the initial release:
 
 ## 3. Architecture
 
-### Core Decision: Shared VAD and STT
+### Core Decision: Per-Channel VAD, Shared STT
 
-The system uses a single shared Silero VAD instance and a single shared Moonshine STT instance for all channels.
+The system runs one Silero VAD model instance per channel, but a single shared Moonshine STT instance across all channels.
 
-This differs from earlier prototypes that ran independent pipelines per audio source.
+This differs from earlier prototypes that ran fully independent pipelines per audio source, and from an earlier version of this design that used one shared VAD instance for all channels.
 
-Reasons:
+**VAD is per-channel, not shared.** A single shared model was tried first and reverted: `VADIterator` only holds the segmentation state machine, the LSTM hidden state used for inference lives inside the model instance itself. Two channels interleaving packets against one shared model corrupted each other's hidden state — measured as doubled, garbage segment counts against recorded call fixtures. Each channel therefore gets its own model instance (one `VADIterator` + one Silero model per `channel_id`), which also removes any need for cross-channel locking since a channel's state is only ever touched by that channel's packets. The extra cost (~4MB, ~0.06s load) per channel is negligible next to correctness.
+
+**STT remains shared.** Unlike VAD, Moonshine's `Transcriber.start()`/`stop()` fully resets its decoder state between segments (verified byte-for-byte against a fresh instance per segment), and the STT worker only ever processes one finalized segment at a time regardless of which channel it came from — there is no concurrent access to isolate. Sharing one instance also fits the turn-taking nature of phone conversations: the previous speaker's context shouldn't bleed into the next line regardless of channel, and it avoids holding a second copy of the model in memory (~175MB saved).
+
+Reasons this split still favors resource efficiency and conversation semantics over one independent pipeline per audio source:
 
 1. **Resource efficiency**
 
-   * Running multiple VAD/STT pipelines duplicates CPU and memory usage.
-   * Phone conversations are typically turn-based, making parallel model instances unnecessary.
+   * A full independent VAD+STT pipeline per channel would duplicate CPU and memory usage well beyond the per-channel VAD model's small footprint.
+   * Phone conversations are typically turn-based, making parallel STT instances unnecessary.
 
 2. **Conversation semantics**
 
    * Separate call legs represent one conversation rather than unrelated audio streams.
-   * Maintaining a unified pipeline preserves conversation ordering and simplifies downstream processing.
+   * A shared STT stage preserves conversation ordering and simplifies downstream processing.
 
 ### Routing Model
 
 ```text
-MQTT channel 1 ──┐
-                 ├─▶ Router ─▶ Shared VAD ─▶ Shared STT ─▶ Transcript
-MQTT channel 2 ──┘
+MQTT channel 1 ──┐               ┌─▶ VAD (channel 1) ─┐
+                 ├─▶ Router ─────┤                     ├─▶ Shared STT ─▶ Transcript
+MQTT channel 2 ──┘               └─▶ VAD (channel 2) ─┘
 ```
 
 * Incoming audio packets are tagged with `channel_id`.
 * Packets are placed onto a shared ingest queue.
-* VAD processes packets serially while maintaining independent state per channel.
+* VAD processes packets serially (one worker thread) but against independent per-channel model instances and state — no cross-channel interference, no locking required.
 * Finalized speech segments are placed onto a shared STT queue.
-* STT processes one segment at a time.
+* STT processes one segment at a time, against one shared model instance.
 * Channel attribution is preserved throughout the pipeline.
 
 ### Tradeoffs

@@ -18,11 +18,11 @@ map onto packages:
 | VAD                          | `vad/`                       |
 | STT                          | `stt/`                       |
 | Composition / lifecycle      | `pipeline/orchestrator.py`   |
-| Fault tolerance              | `pipeline/supervisor.py`     |
+| Fault tolerance              | `pipeline/supervisor.py` *(planned — Milestone 5, not yet built)* |
 | Entry point                  | `cli.py`                     |
 | Config                       | `config/`                    |
-| Observability                | `observability/`              |
-| Health                       | `health/`                     |
+| Observability                | `observability/` *(planned — Milestone 6, not yet built)* |
+| Health                       | `health/` *(planned — Milestone 6, not yet built)* |
 
 **Note on `audio_generation`:** this is a dev/test tool, not a production
 package — it simulates the real-world audio source (a phone call leg) by
@@ -72,16 +72,17 @@ Conflating the two will make restart-count metrics noisy and useless.
 ## STATUS (update this every session, even with one line)
 
 ```
-Last updated: 2026-07-14
+Last updated: 2026-07-21
 Current milestone: none
-Done: ms 0, 1, 2, 3
+Done: ms 0, 1, 2, 3, 4
 In progress: none
-Next action: n/a
+Next action: Milestone 5 — Reliability (pipeline/supervisor.py)
 Blocked on: nothing
+```
 
 ---
 
-## Milestone 0 — Fake end-to-end pipeline 
+## Milestone 0 — Fake end-to-end pipeline ✅ Done
 
 **Goal:** prove the queue/worker skeleton works before any real audio,
 routing, VAD, or STT is involved. Everything in this milestone is fake.
@@ -100,6 +101,8 @@ routing, VAD, or STT is involved. Everything in this milestone is fake.
    - Fake routing: passes packets through untouched
    - Fake VAD: emits fixed-length fake `SpeechSegment`s
    - Fake STT: emits a canned `TranscriptEvent`
+   - *(Removed once real `VADWorker`/`STTWorker` landed in Milestones 3–4 —
+     nothing imported it anymore.)*
 5. `main.py` wires the fake source + fake workers together, logs
    `TranscriptEvent`s to stdout.
 
@@ -108,7 +111,7 @@ fake channels, exits cleanly on Ctrl-C with no orphaned threads.
 
 ---
 
-## Milestone 1 — Real config + cli.py entry point + real audio generation
+## Milestone 1 — Real config + cli.py entry point + real audio generation ✅ Done
 
 **Goal:** replace the Milestone-0 throwaway wiring with the permanent
 shape — `cli.py → orchestrator → workers` — and get real (non-fake) audio
@@ -127,12 +130,13 @@ yet.
    `get_status()` (returns `PipelineStatus`), `ingest_queue` property.
    `get_status()` is wired for Milestones 6/7.
 3. `src/edge_voice/cli.py` — real entry point: `argparse` flags
-   (`--channels`, `--run-secs`, `--config`, `--with-ui`, `--debug`,
-   `--wav-file`), `setup_logging()`, `parse_args()`, `main()`.
+   (`--run-secs`, `--debug`), `setup_logging()`, `parse_args()`, `main()`.
    Wired to `Settings.load()` + `PipelineOrchestrator`. Registered as
    `edge-voice` console script in `pyproject.toml` (`[project.scripts]`).
-   **Decision recorded (2026-06-29):** web UI runs as a separate process.
-   `--with-ui` flag reserved in CLI for now but not yet implemented.
+   **Decision recorded (2026-06-29):** web UI runs as a separate process
+   (Milestone 7); no `--with-ui`/`--config`/`--channels`/`--wav-file` flags
+   exist yet — add them if/when the features behind them actually land,
+   not before.
 4. `src/edge_voice/main.py` — still exists but its wiring logic moved to
    `orchestrator.py`. Kept as dev convenience for running without installing.
 5. `src/edge_voice/utils/audio_generation/mic_source.py` — `MicSource`
@@ -142,19 +146,19 @@ yet.
    `orchestrator`.
 6. `src/edge_voice/utils/audio_generation/wav_source.py` — `WavSource`
    class reads `.wav` via `soundfile`, resamples via `torchaudio`, streams
-   at 20ms real-time pace to the ingest queue. Tested thoroughly (10
-   unit tests). No MQTT publish yet — pushes to in-memory queue.
+   at 20ms real-time pace to the ingest queue. No MQTT publish yet —
+   pushes to in-memory queue.
 7. Both `audio_generation` sources verified: import lines contain no
    `pipeline`, `cli`, or `orchestrator` imports.
 
 **Done when:** `edge-voice` console script starts the pipeline using real
 `Settings`, AND `wav_source.py` (standalone) produces correctly-paced audio
-packets — confirmed by `test_wav_source.py` (10 tests, `tmp_path` fixtures,
-coverage of resampling, stereo-to-mono, queue-full drop, custom configs).
+packets, covering resampling, stereo-to-mono, queue-full drop, and custom
+configs.
 
 ---
 
-## Milestone 2 — Real audio ingestion + channel routing
+## Milestone 2 — Real audio ingestion + channel routing ✅ Done
 
 WavSource process
         |
@@ -205,41 +209,56 @@ transcripts.
 
 ---
 
-## Milestone 3 — Real shared Silero VAD 
+## Milestone 3 — Real shared Silero VAD ✅ Done
 
-1. `vad/worker.py`
-   - One shared `Silero VAD` model loaded once via `_get_vad_model()`, protected by a global `_vad_lock`
-   - Per-channel `VADIterator` and state (`_Ch`) with channel-local locking
-     - Tracks `in_speech`, `seg_index`, `seg_start_s`, `win_buf`, `aud_buf`, and `scores`
-   - Soft-cut logic ported from the prototype
-     - Confidence-dip detection after `SOFT_CUT_S=5.0s`
-     - `_find_good_cut()` and `_try_cut()` split long utterances at low-confidence regions
-   - Hard-cut logic enforcing `MAX_SEGMENT_S=7.0s`
-   - Window size `VAD_WINDOW_SAMPLES=512`
-   - Every VAD window is scored to maintain a complete confidence trace
+1. `vad/vad_worker.py` — single-threaded, per-channel demuxing worker: one
+   `VADIterator` *and one Silero model instance* per `channel_id`, no lock
+   needed since calls are serialized by construction.
+   - **Diverged from the original plan below:** a single shared model
+     protected by a lock was tried first and dropped — `VADIterator` only
+     holds the state machine, the LSTM hidden state lives in the model
+     itself, so interleaved channels sharing one model instance corrupted
+     each other's state (measured as doubled, garbage segment counts on
+     the recorded call fixtures). Each channel gets its own model; the
+     extra ~4MB/channel is cheap.
+   - Soft/hard segment-length cuts (`soft_cut_s`, `max_segment_s`,
+     `soft_cut_lookahead_s`, `soft_cut_min_dip`) ported from the prototype,
+     gated behind `segment_limits_enabled` (default off — see Milestone 4).
+   - `idle_flush_s`: emits an in-progress segment after a channel goes
+     quiet with no packets at all, so the final utterance of a stream
+     isn't held until shutdown.
+2. Swapped fake VAD for `vad/vad_worker.py` inside `pipeline/orchestrator.py`.
 
-2. Swapped fake VAD for `vad/worker.py` inside `pipeline/orchestrator.py`.
-   - `FakeVADWorker` replaced with `VadWorker`
-   - STT remains fake.
-
-**Done when:**  Two channels (mic + wav, or two wav sources, each its own process) interleaved on the ingest queue produce correctly segmented, channel-attributed `SpeechSegment`s with no crashes under concurrent channel activity. Explicit interleaving/concurrency tests added (`tests/test_vad_worker.py`, 6 tests including dual-channel segmentation, hard-cut behaviour, and shared-model singleton).
+**Done when:** Two channels interleaved on the ingest queue produce
+correctly segmented, channel-attributed `SpeechSegment`s with no crashes
+under concurrent channel activity, verified against real recorded
+duplex-call fixtures (`wav/rx_recorded_1.wav`, `wav/tx_recorded_1.wav`) —
+see `tests/test_pipeline_integration.py`.
 
 ---
 
-## Milestone 4 — Real shared Moonshine STT
+## Milestone 4 — Real shared Moonshine STT ✅ Done
 
-1. `stt/worker.py`
-   - Single shared Moonshine STT instance (`tiny-ko`, quantized)
-   - `STT_FEED_WINDOWS=64`, `STT_LANGUAGE="ko"`
-   - Port `best_partial` tracking + unigram/bigram repetition guard from
-     prototype to handle beam-search collapse at awkward boundaries
-2. Swap fake STT for `stt/worker.py` inside `pipeline/orchestrator.py`.
+1. `stt/stt_worker.py`
+   - One shared `Transcriber` across *all* channels, not one per channel —
+     `start()`/`stop()` fully resets Moonshine's decoder state (verified
+     byte-for-byte against a fresh instance per segment), and `STTWorker`
+     only ever handles one segment at a time regardless of channel, so
+     there's no concurrency to isolate. Halves the memory footprint
+     (~175MB/channel not held open) and matches the turn-taking nature of
+     the audio.
+   - `feed_windows=64`, language + model arch configurable
+     (`STTSettings.language`, `STTSettings.model_arch`)
+   - Repetitive-output guard: falls back to the best partial line when the
+     decoder loops on itself (beam-search collapse at awkward boundaries)
+2. Swapped fake STT for `stt/stt_worker.py` inside `pipeline/orchestrator.py`.
    Full pipeline is now real, end to end: `audio_generation` (separate
    process, test-only) → `audio_ingest` → `channel` → `vad` → `stt`.
 
-**Done when:** a real two-channel `.wav`/MQTT fixture (via `wav_source.py`,
+**Done when:** a real two-channel `.wav`/MQTT fixture (via `wav_source_raw.py`,
 its own process) produces correct Korean transcripts in order, attributed
-to the right channel.
+to the right channel. Verified against `wav/rx_recorded_1.wav` +
+`wav/tx_recorded_1.wav`.
 
 ---
 
