@@ -5,7 +5,7 @@ Design intent (see docs/design.md "Configuration"):
 - One pydantic-settings model is the single source of truth for all tunable
   parameters (VAD thresholds, segment timing, MQTT topics, model paths, etc).
 - Defaults live in code; overrides come from config/*.yaml, then env vars
-  (EDGE_VOICE__SECTION__FIELD=value), so behavior is reproducible and
+  (EDGE_VOICE_SECTION__FIELD=value), so behavior is reproducible and
   diffable across deployments.
 """
 
@@ -16,7 +16,8 @@ from typing import Any, Literal
 
 import yaml  # type: ignore[import-untyped]
 from pydantic import BaseModel, Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic.fields import FieldInfo
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 
 class MQTTChannels(BaseModel):
@@ -170,6 +171,26 @@ class Settings(BaseSettings):
         extra="forbid",
     )
 
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Precedence (first wins): init kwargs > env vars > local.yaml >
+        default.yaml > code defaults. Sources earlier in this tuple win over
+        later ones (see pydantic_settings.BaseSettings._settings_build_values)."""
+        return (
+            init_settings,
+            env_settings,
+            _YamlConfigSettingsSource(settings_cls),
+            dotenv_settings,
+            file_secret_settings,
+        )
+
     @model_validator(mode="after")
     def _check_repacketizer_matches_vad(self) -> "Settings":
         """repacketizer.outgoing_ms must produce exactly vad.window_samples
@@ -186,9 +207,20 @@ class Settings(BaseSettings):
 
     @classmethod
     def load(cls) -> "Settings":
-        """Load settings with layered overrides."""
-        merged = _load_config_files()
-        return cls.model_validate(merged)
+        """Load settings with layered overrides (see settings_customise_sources)."""
+        return cls()
+
+
+class _YamlConfigSettingsSource(PydanticBaseSettingsSource):
+    """Deep-merged configs/default.yaml + configs/local.yaml as a settings source."""
+
+    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        # Required by the base class; unused since __call__ is overridden below
+        # to return the whole merged dict at once rather than per-field.
+        return None, field_name, False
+
+    def __call__(self) -> dict[str, Any]:
+        return _load_config_files()
 
 
 def _load_config_files() -> dict[str, Any]:

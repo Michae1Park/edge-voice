@@ -57,6 +57,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = ["-m", "not integration"]
 markers = [
     "integration: slower tests that exercise multiple components together",
 ]
