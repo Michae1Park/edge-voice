@@ -25,6 +25,7 @@ from edge_voice.pipeline.queues import (
 )
 from edge_voice.audio_ingest.mqtt_client import MqttAudioIngest
 from edge_voice.channel.router import ChannelRouter, RepacketizerConfig
+from edge_voice.pipeline.transcript_hub import TranscriptHub
 from edge_voice.vad.vad_worker import VADWorker, VADWorkerConfig
 from edge_voice.stt.stt_worker import STTWorker, STTWorkerConfig
 
@@ -51,12 +52,21 @@ class PipelineOrchestrator:
         self._segment_dump_worker: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._running = False
+        # Doesn't depend on queues/workers, so it's safe to create once here
+        # rather than in build() -- a webui/app.py holding a reference to it
+        # doesn't need to care whether build() has run yet.
+        self._transcript_hub = TranscriptHub(backlog=settings.webui.transcript_backlog)
 
     @property
     def ingest_queue(self) -> queue.Queue:
         if self._ingest_queue is None:
             raise RuntimeError("Pipeline not built. Call build() first.")
         return self._ingest_queue
+
+    @property
+    def transcripts(self) -> TranscriptHub:
+        """Subscribe here (webui/app.py) for a live TranscriptEvent feed."""
+        return self._transcript_hub
 
     # ── Public lifecycle ────────────────────────────────────────
 
@@ -252,6 +262,7 @@ class PipelineOrchestrator:
                 event.end,
                 event.text,
             )
+            self._transcript_hub.publish(event)
 
         stt = self._settings.stt
         return STTWorker(

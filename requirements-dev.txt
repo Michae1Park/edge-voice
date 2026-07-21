@@ -12,6 +12,7 @@ annotated-types==0.7.0
     # via pydantic
 anyio==4.14.1
     # via
+    #   httpx2
     #   starlette
     #   watchfiles
 ast-serialize==0.5.0
@@ -41,12 +42,19 @@ filelock==3.29.4
 fsspec==2026.6.0
     # via torch
 h11==0.16.0
-    # via uvicorn
+    # via
+    #   httpcore2
+    #   uvicorn
+httpcore2==2.7.0
+    # via httpx2
 httptools==0.8.0
     # via uvicorn
+httpx2==2.7.0
+    # via edge-voice (pyproject.toml)
 idna==3.18
     # via
     #   anyio
+    #   httpx2
     #   requests
 iniconfig==2.3.0
     # via pytest
@@ -153,10 +161,15 @@ torchaudio==2.11.0+cpu
     #   silero-vad
 tqdm==4.68.3
     # via moonshine-voice
+truststore==0.10.4
+    # via
+    #   httpcore2
+    #   httpx2
 typing-extensions==4.15.0
     # via
     #   anyio
     #   fastapi
+    #   httpx2
     #   mypy
     #   pydantic
     #   pydantic-core

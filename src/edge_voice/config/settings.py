@@ -136,8 +136,15 @@ class LoggingSettings(BaseModel):
 
 
 class WebUISettings(BaseModel):
-    host: str = "0.0.0.0"
+    # Deployment target has no network at all -- the only client is a kiosk
+    # browser on the device's own attached display -- so this binds loopback
+    # only, not 0.0.0.0. See docs/BUILDPLAN.md Milestone 5.
+    host: str = "127.0.0.1"
     port: int = Field(default=8080, ge=1, le=65535)
+    # TranscriptHub backlog: how many recent transcripts a browser that just
+    # (re)connected gets replayed with, so the feed isn't blank after a
+    # kiosk reload. Not "history" in any persistent sense -- in-memory only.
+    transcript_backlog: int = Field(default=50, ge=0)
 
 
 class HealthSettings(BaseModel):

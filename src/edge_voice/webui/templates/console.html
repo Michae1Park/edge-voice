@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Edge Voice — Live Session</title>
+<style>
+  :root {
+    --bg: #0b0d10;
+    --surface: #15181d;
+    --surface-2: #1b1f26;
+    --line: #262b33;
+    --line-soft: #1d2129;
+    --ink: #eceef1;
+    --ink-dim: #8890a0;
+    --ink-faint: #4d5462;
+    --tx: #ffb454;
+    --tx-dim: rgba(255, 180, 84, 0.15);
+    --rx: #4dd8c4;
+    --rx-dim: rgba(77, 216, 196, 0.15);
+    --live: #4ade80;
+    --stopped: #6b7280;
+    --radius: 5px;
+    --mono: "Berkeley Mono", "JetBrains Mono", "IBM Plex Mono", ui-monospace,
+      "SF Mono", "Cascadia Code", Consolas, monospace;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--mono);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--tx-dim);
+    color: var(--ink);
+  }
+
+  .console {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .console::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.028) 0px,
+      rgba(255, 255, 255, 0.028) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    opacity: 0.35;
+  }
+
+  /* ── header ─────────────────────────────────────────── */
+
+  .bar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    height: 60px;
+    padding: 0 20px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line);
+    z-index: 2;
+  }
+
+  .ident {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .ident-name {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--ink);
+  }
+
+  .ident-sub {
+    font-size: 12px;
+    color: var(--ink-faint);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .legend-group {
+    display: flex;
+    gap: 16px;
+    margin-left: auto;
+  }
+
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+  }
+
+  .right {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+
+  .clock {
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-dim);
+  }
+
+  .live-pill {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--live);
+    border: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 5px 10px 5px 8px;
+    transition: color 0.2s ease;
+  }
+  .live-pill.stopped { color: var(--stopped); }
+
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+  }
+  .dot.rx { background: var(--rx); }
+  .dot.tx { background: var(--tx); }
+  .dot.live { background: var(--live); }
+  .live-pill.stopped .dot.live { background: var(--stopped); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .live-pill:not(.stopped) .dot.live {
+      animation: pulse 1.8s ease-in-out infinite;
+    }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  /* ── feed ───────────────────────────────────────────── */
+
+  .feed {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    z-index: 1;
+    padding: 28px 20px 90px;
+  }
+
+  .feed-inner {
+    max-width: 880px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 100%;
+  }
+
+  .empty {
+    margin: auto;
+    color: var(--ink-faint);
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-align: center;
+  }
+  .empty[hidden] { display: none; }
+
+  .sys-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 4px 0 8px;
+    color: var(--ink-faint);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .sys-row::before,
+  .sys-row::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--line-soft);
+  }
+
+  .msg {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 68%;
+  }
+  .msg.rx { align-self: flex-start; align-items: flex-start; }
+  .msg.tx { align-self: flex-end; align-items: flex-end; }
+
+  @media (max-width: 720px) {
+    .msg { max-width: 88%; }
+  }
+
+  .msg-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+  }
+
+  .msg-time {
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-faint);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  .bubble {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 11px 14px;
+    font-size: 16.5px;
+    line-height: 1.55;
+    color: var(--ink);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .msg.rx .bubble { border-left: 2px solid var(--rx); }
+  .msg.tx .bubble { border-right: 2px solid var(--tx); }
+
+  .cursor-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding-top: 4px;
+    color: var(--ink-faint);
+    font-size: 12px;
+    letter-spacing: 0.05em;
+  }
+
+  .blink {
+    color: var(--live);
+    font-size: 14px;
+    transition: color 0.2s ease;
+  }
+  .blink.stopped { color: var(--ink-faint); }
+  @media (prefers-reduced-motion: no-preference) {
+    .blink:not(.stopped) { animation: blink 1s steps(1) infinite; }
+  }
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
+  /* ── jump-to-latest ─────────────────────────────────── */
+
+  .jump {
+    position: absolute;
+    left: 50%;
+    bottom: 26px;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    background: var(--surface-2);
+    color: var(--ink);
+    border: 1px solid var(--tx);
+    border-radius: var(--radius);
+    padding: 8px 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    cursor: pointer;
+    z-index: 3;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  }
+  .jump:hover { background: var(--tx-dim); }
+  .jump:focus-visible {
+    outline: 2px solid var(--tx);
+    outline-offset: 2px;
+  }
+  .jump[hidden] { display: none; }
+</style>
+</head>
+<body>
+
+<div class="console">
+  <header class="bar">
+    <div class="ident">
+      <span class="ident-name">EDGE-VOICE</span>
+      <span class="ident-sub">rpi5 · local session · no network</span>
+    </div>
+    <div class="legend-group">
+      <span class="legend"><span class="dot rx"></span>rx</span>
+      <span class="legend"><span class="dot tx"></span>tx</span>
+    </div>
+    <div class="right">
+      <span class="clock" id="clock">--:--:--</span>
+      <span class="live-pill stopped" id="livePill"><span class="dot live"></span><span id="liveLabel">connecting</span></span>
+    </div>
+  </header>
+
+  <main class="feed" id="feed">
+    <div class="feed-inner" id="feedInner">
+      <div class="empty" id="empty">no transcripts yet — waiting for speech</div>
+    </div>
+  </main>
+
+  <button class="jump" id="jumpBtn" type="button" hidden>&#8595; new lines</button>
+</div>
+
+<script>
+  (function () {
+    var feed = document.getElementById("feed");
+    var inner = document.getElementById("feedInner");
+    var empty = document.getElementById("empty");
+    var jumpBtn = document.getElementById("jumpBtn");
+    var clockEl = document.getElementById("clock");
+    var livePill = document.getElementById("livePill");
+    var liveLabel = document.getElementById("liveLabel");
+
+    var cursorRow = document.createElement("div");
+    cursorRow.className = "cursor-row";
+    cursorRow.innerHTML = '<span class="blink stopped" id="blink">&#9612;</span><span id="cursorText">connecting…</span>';
+    inner.appendChild(cursorRow);
+    var blink = document.getElementById("blink");
+    var cursorText = document.getElementById("cursorText");
+
+    function isNearBottom() {
+      return feed.scrollHeight - feed.scrollTop - feed.clientHeight < 90;
+    }
+
+    function scrollToBottom(smooth) {
+      feed.scrollTo({ top: feed.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+      jumpBtn.hidden = true;
+    }
+
+    function formatTime(epochSeconds) {
+      var d = new Date(epochSeconds * 1000);
+      return d.toLocaleTimeString([], { hour12: false });
+    }
+
+    function renderMessage(m) {
+      var wrap = document.createElement("div");
+      wrap.className = "msg " + m.channel_id;
+
+      var meta = document.createElement("div");
+      meta.className = "msg-meta";
+
+      var dot = document.createElement("span");
+      dot.className = "dot " + m.channel_id;
+      meta.appendChild(dot);
+
+      var tag = document.createElement("span");
+      tag.textContent = m.channel_id;
+      meta.appendChild(tag);
+
+      var time = document.createElement("span");
+      time.className = "msg-time";
+      time.textContent = formatTime(m.created_at);
+      meta.appendChild(time);
+
+      var bubble = document.createElement("div");
+      bubble.className = "bubble";
+      bubble.textContent = m.text;
+
+      wrap.appendChild(meta);
+      wrap.appendChild(bubble);
+      return wrap;
+    }
+
+    function appendMessage(m) {
+      empty.hidden = true;
+      var wasNearBottom = isNearBottom();
+      inner.insertBefore(renderMessage(m), cursorRow);
+      if (wasNearBottom) {
+        scrollToBottom(true);
+      } else {
+        jumpBtn.hidden = false;
+      }
+    }
+
+    jumpBtn.addEventListener("click", function () {
+      scrollToBottom(true);
+    });
+
+    feed.addEventListener("scroll", function () {
+      if (isNearBottom()) jumpBtn.hidden = true;
+    });
+
+    // ── live wall clock ───────────────────────────────────
+
+    function tickClock() {
+      clockEl.textContent = new Date().toLocaleTimeString([], { hour12: false });
+    }
+    tickClock();
+    setInterval(tickClock, 1000);
+
+    // ── transcript stream (SSE) ────────────────────────────
+    // EventSource reconnects on its own; nothing to manage here beyond
+    // rendering what arrives. Whether the *pipeline* is running is a
+    // separate question, answered by /api/status below -- the SSE
+    // connection itself stays open as long as the (same-process) server
+    // does, regardless of whether the pipeline is started or stopped.
+
+    var source = new EventSource("/api/transcripts/stream");
+    source.onmessage = function (e) {
+      appendMessage(JSON.parse(e.data));
+    };
+
+    // ── pipeline status poll ───────────────────────────────
+
+    function setRunning(running) {
+      livePill.classList.toggle("stopped", !running);
+      blink.classList.toggle("stopped", !running);
+      liveLabel.textContent = running ? "live" : "stopped";
+      cursorText.textContent = running ? "waiting for next line" : "pipeline stopped";
+    }
+
+    function pollStatus() {
+      fetch("/api/status")
+        .then(function (r) { return r.json(); })
+        .then(function (data) { setRunning(!!data.running); })
+        .catch(function () { setRunning(false); });
+    }
+    pollStatus();
+    setInterval(pollStatus, 3000);
+  })();
+</script>
+
+</body>
+</html>
