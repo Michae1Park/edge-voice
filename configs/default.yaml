@@ -44,6 +44,11 @@ vad:
   preroll_chunks: 3
   min_silence_duration_ms: 400  # silence required before Silero fires `end` (raise if tail-clipping)
   speech_pad_ms: 30             # padding Silero appends around detected speech
+  # Emit an in-progress segment after this many seconds of NO packets on a
+  # channel. Every other boundary rule needs packets to keep arriving, so
+  # without this the final utterance of a stream waits until shutdown.
+  # Raise it if network jitter can stall a channel mid-speech; 0 disables.
+  idle_flush_s: 2.0
   # Segment-length limits, for outlier cases only: speech that runs on with
   # no pause long enough for Silero to fire `end`. Such a run otherwise
   # buffers unbounded and the pipeline emits nothing until the speaker

@@ -27,6 +27,7 @@ from __future__ import annotations
 import logging
 import queue
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -48,6 +49,14 @@ class VADWorkerConfig:
     preroll_chunks: int = 3
     min_silence_duration_ms: int = 100  # silence required before an `end` event fires
     speech_pad_ms: int = 30  # padding Silero appends on both sides of detected speech
+
+    # Wall-clock seconds of *no packets at all* on a channel before its
+    # in-progress segment is emitted anyway. Every other boundary rule needs
+    # packets to keep arriving -- min_silence_duration_ms needs silent frames
+    # to fire `end`, max_segment_s needs frames to accumulate -- so if a
+    # sender simply stops (caller mutes, RTP gap, stream ends), the segment
+    # would otherwise sit buffered until shutdown. 0 disables.
+    idle_flush_s: float = 2.0
 
     # ── Segment-length limits (off by default) ──────────────────
     # For outlier cases only: speech that runs on with no pause long enough
@@ -96,6 +105,8 @@ class _ChannelState:
     segment_chunks: list = field(default_factory=list)  # list[bytes], during active speech
     segment_start_ts: float | None = None
     seg_counter: int = 0
+    # time.monotonic() of the last packet seen; drives idle_flush_s.
+    last_packet_at: float = 0.0
     # (chunk_index, score) pairs, only recorded once a segment approaches
     # soft_cut_s -- see _maybe_cut. Empty for normal-length segments.
     scores: list = field(default_factory=list)
@@ -135,6 +146,7 @@ class VADWorker(threading.Thread):
             try:
                 packet = self.routed_queue.get(timeout=0.5)
             except queue.Empty:
+                self._flush_idle()
                 continue
 
             if packet is None:  # shutdown sentinel
@@ -144,6 +156,11 @@ class VADWorker(threading.Thread):
                 self._handle_packet(packet)
             except Exception:
                 logger.exception("VADWorker failed on packet from channel=%s", packet.channel_id)
+
+            # Also check after a packet, not just on an empty queue: on a
+            # duplex call the other channel can keep the queue busy while
+            # this one has gone silent, so `Empty` may never be reached.
+            self._flush_idle()
 
         # Speech in progress when the stream stops would otherwise never be
         # emitted -- segments are only finalized on an `end` event.
@@ -156,23 +173,47 @@ class VADWorker(threading.Thread):
         (e.g. finite audio in tests). Runs on the worker thread from run(),
         so it does not race with _handle_packet.
         """
-        flushed = 0
-        for channel_id, state in self._channels.items():
-            if state.segment_start_ts is None or not state.segment_chunks:
-                continue
-            n_samples = sum(len(c) for c in state.segment_chunks) // 2  # int16
-            end_ts = state.segment_start_ts + n_samples / self.config.sample_rate
-            logger.info(
-                "VADWorker: flushing in-progress segment on channel=%s (%s, %.2fs)",
-                channel_id,
-                reason,
-                n_samples / self.config.sample_rate,
-            )
-            self._finalize_segment(channel_id, state, end_ts=end_ts)
-            state.triggered = False
-            state.scores.clear()
-            flushed += 1
-        return flushed
+        return sum(
+            self._flush_channel(channel_id, state, reason)
+            for channel_id, state in self._channels.items()
+        )
+
+    def _flush_idle(self) -> int:
+        """Emit segments on channels that have stopped receiving packets.
+
+        Without this the final utterance of a stream is only recovered at
+        shutdown -- every other boundary rule depends on packets continuing
+        to arrive. See VADWorkerConfig.idle_flush_s.
+        """
+        if self.config.idle_flush_s <= 0:
+            return 0
+        now = time.monotonic()
+        return sum(
+            self._flush_channel(channel_id, state, "idle")
+            for channel_id, state in self._channels.items()
+            if now - state.last_packet_at >= self.config.idle_flush_s
+        )
+
+    def _flush_channel(self, channel_id: str, state: _ChannelState, reason: str) -> int:
+        """Finalize one channel's in-progress segment. Returns 1 if emitted."""
+        if state.segment_start_ts is None or not state.segment_chunks:
+            return 0
+        n_samples = sum(len(c) for c in state.segment_chunks) // 2  # int16
+        duration_s = n_samples / self.config.sample_rate
+        logger.info(
+            "VADWorker: flushing in-progress segment on channel=%s (%s, %.2fs)",
+            channel_id,
+            reason,
+            duration_s,
+        )
+        self._finalize_segment(channel_id, state, end_ts=state.segment_start_ts + duration_s)
+        state.triggered = False
+        state.scores.clear()
+        # VADIterator still believes it is mid-speech; without resetting it
+        # would not emit another `start` when packets resume, silently
+        # swallowing the next utterance.
+        state.vad_iter.reset_states()
+        return 1
 
     # ── Per-packet handling ─────────────────────────────────────
 
@@ -181,6 +222,7 @@ class VADWorker(threading.Thread):
         if state is None:
             state = self._new_channel_state()
             self._channels[packet.channel_id] = state
+        state.last_packet_at = time.monotonic()
 
         float_chunk = self._bytes_to_float_tensor(packet.samples)
 

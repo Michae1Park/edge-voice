@@ -80,6 +80,9 @@ class VADSettings(BaseModel):
     preroll_chunks: int = 3
     min_silence_duration_ms: int = 100  # Silero VADIterator: silence needed before `end` fires
     speech_pad_ms: int = 30  # Silero VADIterator: padding appended around detected speech
+    # Seconds of no packets before an in-progress segment is emitted anyway;
+    # without it the last utterance waits for shutdown. 0 disables.
+    idle_flush_s: float = 2.0
     segment_limits_enabled: bool = False
     max_segment_s: float = 7.0
     soft_cut_s: float = 5.0
