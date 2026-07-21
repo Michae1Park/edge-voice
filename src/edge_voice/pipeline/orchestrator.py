@@ -26,7 +26,7 @@ from edge_voice.pipeline.queues import (
 from edge_voice.audio_ingest.mqtt_client import MqttAudioIngest
 from edge_voice.channel.router import ChannelRouter, RepacketizerConfig
 from edge_voice.vad.vad_worker import VADWorker, VADWorkerConfig
-from edge_voice.pipeline.fake_workers import FakeSTTWorker
+from edge_voice.stt.stt_worker import STTWorker, STTWorkerConfig
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class PipelineOrchestrator:
         self._audio_source = self._build_mqtt_subscriber()
         self._router = self._build_router()
         self._vad = self._build_vad()
-        self._stt = self._build_fake_stt()
+        self._stt = self._build_stt()
 
         logger.info(
             "Pipeline built with channels: %s", [c.channel_id for c in self._settings.mqtt.channels]
@@ -192,7 +192,7 @@ class PipelineOrchestrator:
             ),
         )
 
-    def _build_fake_stt(self) -> threading.Thread:
+    def _build_stt(self) -> threading.Thread:
         if self._segment_queue is None:
             raise RuntimeError("Segment queue not initialized")
 
@@ -206,7 +206,25 @@ class PipelineOrchestrator:
                 event.text,
             )
 
-        return FakeSTTWorker(self._segment_queue, _on_transcript)
+        stt = self._settings.stt
+        return STTWorker(
+            self._segment_queue,
+            _on_transcript,
+            config=STTWorkerConfig(
+                language=stt.language,
+                model_arch=stt.model_arch,
+                sample_rate=self._settings.audio.sample_rate,
+                feed_windows=stt.feed_windows,
+                feed_window_samples=self._settings.vad.window_samples,
+                options={
+                    "max_tokens_per_second": stt.max_tokens_per_second,
+                    "identify_speakers": str(stt.identify_speakers).lower(),
+                    "log_api_calls": str(stt.log_api_calls).lower(),
+                    "save_input_wav_path": stt.save_input_wav_path,
+                    "return_audio_data": str(stt.return_audio_data).lower(),
+                },
+            ),
+        )
 
     def _build_segment_dump(self) -> threading.Thread:
         from edge_voice.audio_ingest.segment_audio_dump import SegmentAudioDumpWorker

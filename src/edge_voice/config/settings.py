@@ -88,9 +88,24 @@ class VADSettings(BaseModel):
 
 
 class STTSettings(BaseModel):
+    """Moonshine STT tuning.
+
+    language + model_arch together select the model -- there's no separate
+    model-name field, because moonshine resolves downloaded models only via
+    get_model_for_language(language, arch). Not every arch exists for every
+    language (en has all of them, ko only has "tiny"); an unavailable
+    combination raises at startup with the list of what is available.
+    """
+
     language: str = "ko"
-    model: str = "tiny-ko"
-    model_arch: int = 0
+    model_arch: Literal[
+        "tiny",
+        "base",
+        "tiny-streaming",
+        "base-streaming",
+        "small-streaming",
+        "medium-streaming",
+    ] = "tiny"
     feed_windows: int = Field(default=64, gt=0)
     max_tokens_per_second: str = "13.0"
     identify_speakers: bool = False

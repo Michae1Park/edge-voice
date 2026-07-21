@@ -52,9 +52,13 @@ vad:
   max_segment_s: 7.0
 
 stt:
+  # language + model_arch select the model together.
+  #   language:   ar | en | es | ja | ko | uk | vi | zh
+  #   model_arch: tiny | base | tiny-streaming | small-streaming | medium-streaming
+  # en publishes every arch; ko only publishes "tiny". An unavailable
+  # combination fails at startup listing what that language does have.
   language: "ko"
-  model: "tiny-ko"
-  model_arch: 0
+  model_arch: "tiny"
   feed_windows: 64
   max_tokens_per_second: "13.0"
   identify_speakers: false

@@ -25,8 +25,9 @@ dependencies = [
     "soundfile",
     "numpy",
     "silero-vad",
-    "useful-moonshine-onnx",
-    "onnxruntime",
+    # Streaming Moonshine (Transcriber/start-add_audio-stop + listener events).
+    # Ships its own ONNX runtime in the wheel, so no separate onnxruntime dep.
+    "moonshine-voice",
     "paho-mqtt>=2.0",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
