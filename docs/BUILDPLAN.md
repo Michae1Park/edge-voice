@@ -18,11 +18,12 @@ map onto packages:
 | VAD                          | `vad/`                       |
 | STT                          | `stt/`                       |
 | Composition / lifecycle      | `pipeline/orchestrator.py`   |
-| Fault tolerance              | `pipeline/supervisor.py` *(planned — Milestone 5, not yet built)* |
+| Fault tolerance              | `pipeline/supervisor.py` *(planned — Milestone 6, not yet built)* |
 | Entry point                  | `cli.py`                     |
 | Config                       | `config/`                    |
-| Observability                | `observability/` *(planned — Milestone 6, not yet built)* |
-| Health                       | `health/` *(planned — Milestone 6, not yet built)* |
+| Web UI                       | `webui/` (in-process with `cli.py`/`orchestrator`) |
+| Observability                | `observability/` *(planned — Milestone 7, not yet built)* |
+| Health                       | `health/` *(planned — Milestone 7, not yet built)* |
 
 **Note on `audio_generation`:** this is a dev/test tool, not a production
 package — it simulates the real-world audio source (a phone call leg) by
@@ -60,7 +61,7 @@ audio_ingest/  →  channel/  →  vad/  →  stt/   (the actual worker threads)
 process publishing to the same MQTT broker `audio_ingest` subscribes to —
 no import relationship in either direction.
 
-**Failure-granularity note for later (Milestone 5):** MQTT
+**Failure-granularity note for later (Milestone 6):** MQTT
 reconnect-with-backoff is a *connection-level* retry that lives inside
 `audio_ingest`'s MQTT client itself — it is not a thread restart and should
 never go through `supervisor`. `supervisor` only acts on the coarser,
@@ -74,9 +75,9 @@ Conflating the two will make restart-count metrics noisy and useless.
 ```
 Last updated: 2026-07-21
 Current milestone: none
-Done: ms 0, 1, 2, 3, 4
+Done: ms 0, 1, 2, 3, 4, 5
 In progress: none
-Next action: Milestone 5 — Reliability (pipeline/supervisor.py)
+Next action: Milestone 6 — Reliability (pipeline/supervisor.py)
 Blocked on: nothing
 ```
 
@@ -133,10 +134,14 @@ yet.
    (`--run-secs`, `--debug`), `setup_logging()`, `parse_args()`, `main()`.
    Wired to `Settings.load()` + `PipelineOrchestrator`. Registered as
    `edge-voice` console script in `pyproject.toml` (`[project.scripts]`).
-   **Decision recorded (2026-06-29):** web UI runs as a separate process
-   (Milestone 7); no `--with-ui`/`--config`/`--channels`/`--wav-file` flags
-   exist yet — add them if/when the features behind them actually land,
-   not before.
+   **Decision recorded (2026-06-29), superseded 2026-07-21:** originally
+   planned as a separate process; revisited once the deployment target was
+   confirmed as a network-less SBC with a directly attached display — no
+   reverse proxy or IPC boundary buys anything when the only client is a
+   kiosk browser on the same machine, so the web UI now runs **in-process**
+   with `cli.py`/`orchestrator` (see Milestone 5). `--config`/`--channels`/
+   `--wav-file`/`--with-ui` flags still don't exist yet — add them if/when
+   the features behind them actually land, not before.
 4. `src/edge_voice/main.py` — still exists but its wiring logic moved to
    `orchestrator.py`. Kept as dev convenience for running without installing.
 5. `src/edge_voice/utils/audio_generation/mic_source.py` — `MicSource`
@@ -262,7 +267,85 @@ to the right channel. Verified against `wav/rx_recorded_1.wav` +
 
 ---
 
-## Milestone 5 — Reliability
+## Milestone 5 — Web UI ✅ Done (config editor deferred)
+
+**Moved ahead of Reliability/Observability (2026-07-21):** the deployment
+target is an SBC (RPi5-class) with no network at all, but with a display
+attached — so the UI's only client is a kiosk-mode browser on the same
+machine. That removed the reason to wait for Milestones 6/7 first: the UI
+is a consumer of the `get_status()` seam that's existed since Milestone 1,
+and it displays whatever that seam returns today — it'll show richer data
+automatically once Milestones 6/7 add it, no UI rework needed either time.
+
+1. FastAPI app — **`src/edge_voice/webui/app.py`** (not `tool/webui/`,
+   the path floated when this milestone was only planned; `webui/` sits
+   alongside `vad/`, `stt/`, `channel/` etc. as a top-level package, since
+   unlike `utils/audio_generation/` it's not a dev-only tool). Served on
+   `127.0.0.1` only (`WebUISettings.host`, was `0.0.0.0`). **Runs in-process
+   with `cli.py`/`orchestrator`** — supersedes the separate-process decision
+   recorded in Milestone 1. `cli.py main()`: the `--run-secs` path stays
+   headless/no-UI (used by `tests/test_pipeline_integration.py`, which
+   shouldn't need a port); the default (Ctrl-C) path now does
+   `orchestrator.build()` + `start()`, then blocks in `uvicorn.run(app, ...)`
+   instead of `orchestrator.run()`'s own wait loop, then `stop()` + `wait()`
+   in a `finally` once uvicorn returns — verified by hand that both a plain
+   Ctrl-C (SIGINT) and a `timeout`-style SIGTERM drain all workers and log a
+   final `{running: false, ...}` status before the process exits.
+2. Live transcript stream over **SSE** (`StreamingResponse`), not WebSocket
+   — one-directional (server → browser), so SSE avoids WebSocket's
+   handshake/framing for a channel nothing pushes back on. New
+   `pipeline/transcript_hub.py`: `TranscriptHub` is a small N-subscriber
+   pub/sub (same drop-and-log-on-`queue.Full` philosophy as `fanout_put`,
+   but a dedicated type — `fanout_put` itself is fixed to one-or-two
+   destinations, not a dynamic per-connection set). `orchestrator._on_transcript`
+   publishes to it alongside the existing log line; `orchestrator.transcripts`
+   exposes it. `subscribe()` pre-seeds the new queue with the recent backlog
+   (`WebUISettings.transcript_backlog`, default 50) so a kiosk reload isn't
+   blank while waiting for the next segment — a single queue shared across
+   reconnects was rejected for the reason recorded here originally: it either
+   drops everything published while a client was detached, or hands a stale
+   backlog to whichever client reconnects first.
+3. Control: `POST /api/start` / `POST /api/stop` call straight into
+   `orchestrator.start()`/`stop()`/`wait()` (run via `run_in_threadpool` —
+   `stop()` really does block on joining threads, so it can't run on the
+   event-loop thread). No UI buttons wired to these yet — only the transcript
+   feed and status pill were asked for this round. "Restart a single worker"
+   stays out of scope until `pipeline/supervisor.py` exists (Milestone 6).
+4. Status: `GET /api/status` is a plain passthrough of
+   `orchestrator.get_status()`, polled by the page every 3s — current state,
+   not a stream, so no queue. Drives the header's live/stopped pill. Same
+   endpoint gets restart counts/degraded flags for free once Milestone 6
+   lands, and the fuller health/metrics object once Milestone 7 lands.
+5. **Deferred, not built this round:** config view/edit/validate. Add when
+   there's an actual need to change config without shell access.
+6. **No MQTT anywhere in this milestone**, as intended — all UI ↔
+   orchestrator data flow is in-process (`TranscriptHub` for transcripts,
+   direct calls for status/control).
+
+**Visual design:** console/teleprinter identity, not a generic chat app —
+see `webui/templates/console.html`. Single committed dark theme (no
+light-mode variant): deliberate, since this runs on one dedicated always-on
+kiosk display with no OS theme to defer to, not an oversight. One monospace
+family throughout (hierarchy via size/weight/tracking, not a second
+typeface) — ties directly to the subject: a live speech-to-text feed is a
+modern teleprinter. Two functional channel hues instead of a decorative
+accent: `tx` (local/outgoing) amber `#FFB454`, `rx` (remote/incoming) cyan
+`#4DD8C4`, kept separate from the semantic `live`/`stopped` status color.
+Messages render as squared, LED-dot-tagged bubbles — rx left, tx right —
+not rounded chat cards. A prototype with staged sample dialogue was reviewed
+and approved before wiring in real data.
+
+**Done when:** on the device's attached display, a kiosk browser pointed at
+`localhost` shows live transcripts as they're produced (verified: SSE
+delivery, multi-subscriber fan-out, and backlog replay on connect all
+covered in `tests/test_webui_app.py` / `tests/test_transcript_hub.py`, plus
+a manual run against a live local pipeline) and shows the pipeline's
+running/stopped state. Start/stop reachable via API, not yet from the page
+itself; config editing not built.
+
+---
+
+## Milestone 6 — Reliability
 
 1. `pipeline/supervisor.py` — restarts `audio_ingest`/`channel`/`vad`/`stt`
    worker threads on unexpected exit, tracks restart counts, flags
@@ -273,18 +356,22 @@ to the right channel. Verified against `wav/rx_recorded_1.wav` +
 2. Fault isolation: malformed packet / inference exception → log + drop,
    never kill the worker loop
 3. Bounded-queue backpressure: queue depth tracked per stage and exposed
-   (feeds Milestone 6)
+   (feeds Milestone 7)
 4. Flesh out the `get_status()` seam stubbed in Milestone 1 so it reports
    real per-worker state (running/restarting/degraded) sourced from
-   `supervisor`, not from grepping logs.
+   `supervisor`, not from grepping logs — the Milestone 5 status panel
+   picks this up automatically, no UI change needed.
+5. Wire up the "restart worker" control left out of scope in Milestone 5,
+   now that `supervisor.py` exists for it to call into.
 
 **Done when:** deliberately raising inside `stt/worker.py` mid-run gets
-logged, the worker restarts via `supervisor`, and the pipeline keeps
-transcribing — and `orchestrator.get_status()` reflects the restart.
+logged, the worker restarts via `supervisor`, the pipeline keeps
+transcribing, `orchestrator.get_status()` reflects the restart, and that
+restart is visible on the Milestone 5 UI without touching UI code.
 
 ---
 
-## Milestone 6 — Observability + Health
+## Milestone 7 — Observability + Health
 
 1. `observability/logging.py` — structured JSON logs with `channel_id`,
    pipeline stage, `segment_id` on every relevant event
@@ -294,26 +381,14 @@ transcribing — and `orchestrator.get_status()` reflects the restart.
    status, queue depths, MQTT connectivity, per-channel activity freshness.
    Sources worker/restart status from `orchestrator.get_status()` rather
    than re-deriving it.
+4. Point the Milestone 5 status panel at `health/reporting.py` and
+   `observability/metrics.py` instead of the bare `get_status()` shape it
+   started with.
 
 **Done when:** you can trace one segment's full lifecycle (`audio_ingest` →
-`channel` → `vad` → `stt` → transcript) through logs alone, by `segment_id`.
-
----
-
-## Milestone 7 — Web UI
-
-1. FastAPI app (`tool/webui/app.py`) serving server-rendered pages
-2. Control: start/stop pipeline, restart workers — calls into
-   `pipeline/orchestrator.py` / `pipeline/supervisor.py`, doesn't duplicate
-   their logic
-3. Config: view effective config, edit local override, validate before apply
-4. Live monitoring: WebSocket transcript stream, health dashboard (reads
-   `health/reporting.py`), metrics dashboard (reads `observability/metrics.py`)
-5. Resolve the `--with-ui` decision flagged in Milestone 1 here if it
-   wasn't already: same process as `cli.py`/`orchestrator`, or separate.
-
-**Done when:** you can start the pipeline, watch live transcripts, and
-restart a worker — all from the browser, no shell access needed.
+`channel` → `vad` → `stt` → transcript) through logs alone, by `segment_id`
+— and the Milestone 5 UI's status panel reflects the same health/metrics
+data.
 
 ---
 
