@@ -85,8 +85,9 @@ logging:
   json: true     # false -> pretty console renderer (dev)
 
 webui:
-  host: "0.0.0.0"
+  host: "127.0.0.1"  # no network on target device; kiosk browser is local-only
   port: 8080
+  transcript_backlog: 50
 
 health:
   stale_segment_warning_s: 30   # warn if no segment finalized in this long
