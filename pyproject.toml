@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Multi-channel streaming voice transcription for edge devices (RPi5 / Jetson) using Silero VAD and Moonshine STT"
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "MIT" }
+# license = { text = "MIT" }
 
 # Keep dependencies unpinned or loosely pinned (>=, ~=).
 # This file declares what the project needs, not exact resolved versions.
