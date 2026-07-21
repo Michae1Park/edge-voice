@@ -47,6 +47,10 @@ dev = [
     "pip-tools",
     "ruff",
     "mypy",
+    # starlette.testclient (used via fastapi.testclient.TestClient in
+    # tests/test_webui_app.py) requires this at import time -- not pulled in
+    # by fastapi/starlette themselves, so it must be declared explicitly.
+    "httpx2",
 ]
 
 [project.scripts]
