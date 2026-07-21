@@ -68,9 +68,9 @@ class VADSettings(BaseModel):
     """VADWorker tuning. sample_rate is intentionally NOT a field here -- it
     always follows audio.sample_rate, same rationale as RepacketizerSettings.
 
-    soft_cut_s/soft_cut_lookahead_s/soft_cut_min_dip/max_segment_s are the
-    planned confidence-dip and hard-cut segment-length limits from
-    docs/BUILDPLAN.md milestone 3; VADWorker doesn't implement them yet.
+    The segment_limits_* group is gated behind segment_limits_enabled and
+    only engages on speech that runs past soft_cut_s without a pause; see
+    VADWorkerConfig for the mechanism.
     """
 
     threshold: float = 0.5
@@ -80,19 +80,50 @@ class VADSettings(BaseModel):
     preroll_chunks: int = 3
     min_silence_duration_ms: int = 100  # Silero VADIterator: silence needed before `end` fires
     speech_pad_ms: int = 30  # Silero VADIterator: padding appended around detected speech
+    # Seconds of no packets before an in-progress segment is emitted anyway;
+    # without it the last utterance waits for shutdown. 0 disables.
+    idle_flush_s: float = 2.0
+    segment_limits_enabled: bool = False
     max_segment_s: float = 7.0
     soft_cut_s: float = 5.0
     soft_cut_lookahead_s: float = 1.0
     soft_cut_min_dip: float = 0.10
-    min_silence_ms: int = 300
+
+    @model_validator(mode="after")
+    def _check_soft_cut_below_hard_cap(self) -> "VADSettings":
+        """soft_cut_s must leave room before max_segment_s, or the hard cap
+        always fires first and the natural-pause search never runs."""
+        if self.segment_limits_enabled and self.soft_cut_s >= self.max_segment_s:
+            raise ValueError(
+                f"vad.soft_cut_s ({self.soft_cut_s}s) must be less than "
+                f"vad.max_segment_s ({self.max_segment_s}s), otherwise the hard "
+                "cap preempts the soft-cut search entirely"
+            )
+        return self
 
 
 class STTSettings(BaseModel):
+    """Moonshine STT tuning.
+
+    language + model_arch together select the model -- there's no separate
+    model-name field, because moonshine resolves downloaded models only via
+    get_model_for_language(language, arch). Not every arch exists for every
+    language (en has all of them, ko only has "tiny"); an unavailable
+    combination raises at startup with the list of what is available.
+    """
+
     language: str = "ko"
-    model: str = "tiny-ko"
-    model_arch: int = 0
+    model_arch: Literal[
+        "tiny",
+        "base",
+        "tiny-streaming",
+        "base-streaming",
+        "small-streaming",
+        "medium-streaming",
+    ] = "tiny"
     feed_windows: int = Field(default=64, gt=0)
-    max_tokens_per_second: str = "13.0"
+    # See configs/default.yaml -- 13.0 truncates Korean mid-sentence.
+    max_tokens_per_second: str = "30.0"
     identify_speakers: bool = False
     log_api_calls: bool = False
     save_input_wav_path: str = ""

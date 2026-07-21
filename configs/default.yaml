@@ -44,19 +44,37 @@ vad:
   preroll_chunks: 3
   min_silence_duration_ms: 400  # silence required before Silero fires `end` (raise if tail-clipping)
   speech_pad_ms: 30             # padding Silero appends around detected speech
-  # Not yet consumed by VADWorker -- planned soft/hard-cut segment limits.
-  soft_cut_s: 5.0
-  soft_cut_lookahead_s: 1.0
-  soft_cut_min_dip: 0.10
-  min_silence_ms: 300
-  max_segment_s: 7.0
+  # Emit an in-progress segment after this many seconds of NO packets on a
+  # channel. Every other boundary rule needs packets to keep arriving, so
+  # without this the final utterance of a stream waits until shutdown.
+  # Raise it if network jitter can stall a channel mid-speech; 0 disables.
+  idle_flush_s: 2.0
+  # Segment-length limits, for outlier cases only: speech that runs on with
+  # no pause long enough for Silero to fire `end`. Such a run otherwise
+  # buffers unbounded and the pipeline emits nothing until the speaker
+  # stops, so this bounds emission latency as much as segment length.
+  # Ordinary turn-taking never reaches soft_cut_s and pays nothing.
+  segment_limits_enabled: false
+  soft_cut_s: 5.0            # past this, look for a natural pause to cut at
+  soft_cut_lookahead_s: 1.0  # how far back to scan for that pause
+  soft_cut_min_dip: 0.10     # dip must be this far below the current score
+  max_segment_s: 7.0         # hard cap if no suitable pause is found
 
 stt:
+  # language + model_arch select the model together.
+  #   language:   ar | en | es | ja | ko | uk | vi | zh
+  #   model_arch: tiny | base | tiny-streaming | small-streaming | medium-streaming
+  # en publishes every arch; ko only publishes "tiny". An unavailable
+  # combination fails at startup listing what that language does have.
   language: "ko"
-  model: "tiny-ko"
-  model_arch: 0
+  model_arch: "tiny"
   feed_windows: 64
-  max_tokens_per_second: "13.0"
+  # Decoder token budget. Too low truncates mid-sentence: Korean at 13.0
+  # cut ~20% of every segment's tail ("무엇을 도?" for "무엇을 도와드릴까요?").
+  # Output saturates at ~20 with no latency cost and no repetition up to 75;
+  # 30 leaves headroom for fast speakers. Must be set -- omitting the option
+  # entirely truncates worse than any explicit value.
+  max_tokens_per_second: "30.0"
   identify_speakers: false
   log_api_calls: false
   save_input_wav_path: ""

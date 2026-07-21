@@ -155,7 +155,7 @@ def test_worker_status_after_build():
     assert "MqttAudioIngest" in workers
     assert "ChannelRouter" in workers
     assert "VADWorker" in workers
-    assert "FakeSTTWorker" in workers
+    assert "STTWorker" in workers
 
 
 def test_get_status_after_start():

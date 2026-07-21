@@ -26,9 +26,11 @@ from edge_voice.pipeline.queues import (
 from edge_voice.audio_ingest.mqtt_client import MqttAudioIngest
 from edge_voice.channel.router import ChannelRouter, RepacketizerConfig
 from edge_voice.vad.vad_worker import VADWorker, VADWorkerConfig
-from edge_voice.pipeline.fake_workers import FakeSTTWorker
+from edge_voice.stt.stt_worker import STTWorker, STTWorkerConfig
 
 logger = logging.getLogger(__name__)
+
+WORKER_JOIN_TIMEOUT_S = 10
 
 
 class PipelineOrchestrator:
@@ -81,7 +83,7 @@ class PipelineOrchestrator:
         self._audio_source = self._build_mqtt_subscriber()
         self._router = self._build_router()
         self._vad = self._build_vad()
-        self._stt = self._build_fake_stt()
+        self._stt = self._build_stt()
 
         logger.info(
             "Pipeline built with channels: %s", [c.channel_id for c in self._settings.mqtt.channels]
@@ -97,20 +99,52 @@ class PipelineOrchestrator:
         logger.info("Pipeline started")
 
     def stop(self) -> None:
-        """Signal all workers to stop."""
+        """Stop workers upstream-first, draining each stage before the next.
+
+        Both the order and the per-stage join matter. VADWorker flushes any
+        in-progress segment when its run loop exits, so STT and the dump
+        workers must still be alive to receive it. Signalling every worker at
+        once (or downstream-first) races: VAD blocks up to its queue timeout
+        before noticing the stop, by which point the consumers it is about to
+        push to have already exited, and the stream's final utterance is
+        silently dropped.
+        """
         self._running = False
         self._stop_event.set()
-        for w in reversed(self._get_workers()):
-            try:
-                w.stop()  # type: ignore[attr-defined]
-            except AttributeError:
-                pass
+        workers = self._get_workers()
+        try:
+            for w in workers:  # producers before their consumers
+                self._signal(w)
+                self._join(w)
+        finally:
+            # A second Ctrl-C can interrupt the drain mid-loop. Most workers
+            # are non-daemon, so any left unsignalled would keep the process
+            # alive forever -- signal them all before propagating.
+            for w in workers:
+                self._signal(w)
 
     def wait(self) -> None:
+        # stop() already joins each worker in order; this is a backstop for
+        # callers that invoke wait() on its own.
         for w in self._get_workers():
-            w.join(timeout=10)
-            if w.is_alive():
-                logger.warning("Worker %s did not stop within 10s", w.name)
+            self._join(w)
+
+    @staticmethod
+    def _signal(worker: threading.Thread) -> None:
+        try:
+            worker.stop()  # type: ignore[attr-defined]
+        except AttributeError:
+            pass
+
+    @staticmethod
+    def _join(worker: threading.Thread) -> None:
+        # build() without start() is legal (tests do it), and join() raises
+        # on a thread that was never started.
+        if worker.ident is None:
+            return
+        worker.join(timeout=WORKER_JOIN_TIMEOUT_S)
+        if worker.is_alive():
+            logger.warning("Worker %s did not stop within %ss", worker.name, WORKER_JOIN_TIMEOUT_S)
 
     def get_status(self) -> dict:
         running = self._running
@@ -139,6 +173,13 @@ class PipelineOrchestrator:
     # ── Worker tracking ────────────────────────────────────────
 
     def _get_workers(self) -> list[threading.Thread]:
+        """Workers in producer-before-consumer order.
+
+        This ordering is load-bearing: stop() shuts down in this order so a
+        stage that emits on shutdown (VADWorker.flush) still has live
+        consumers. Keep producers ahead of anything reading their queues --
+        router feeds dump_worker, vad feeds both stt and segment_dump_worker.
+        """
         workers = [
             self._audio_source,
             self._router,
@@ -189,10 +230,16 @@ class PipelineOrchestrator:
                 preroll_chunks=self._settings.vad.preroll_chunks,
                 min_silence_duration_ms=self._settings.vad.min_silence_duration_ms,
                 speech_pad_ms=self._settings.vad.speech_pad_ms,
+                idle_flush_s=self._settings.vad.idle_flush_s,
+                segment_limits_enabled=self._settings.vad.segment_limits_enabled,
+                max_segment_s=self._settings.vad.max_segment_s,
+                soft_cut_s=self._settings.vad.soft_cut_s,
+                soft_cut_lookahead_s=self._settings.vad.soft_cut_lookahead_s,
+                soft_cut_min_dip=self._settings.vad.soft_cut_min_dip,
             ),
         )
 
-    def _build_fake_stt(self) -> threading.Thread:
+    def _build_stt(self) -> threading.Thread:
         if self._segment_queue is None:
             raise RuntimeError("Segment queue not initialized")
 
@@ -206,7 +253,25 @@ class PipelineOrchestrator:
                 event.text,
             )
 
-        return FakeSTTWorker(self._segment_queue, _on_transcript)
+        stt = self._settings.stt
+        return STTWorker(
+            self._segment_queue,
+            _on_transcript,
+            config=STTWorkerConfig(
+                language=stt.language,
+                model_arch=stt.model_arch,
+                sample_rate=self._settings.audio.sample_rate,
+                feed_windows=stt.feed_windows,
+                feed_window_samples=self._settings.vad.window_samples,
+                options={
+                    "max_tokens_per_second": stt.max_tokens_per_second,
+                    "identify_speakers": str(stt.identify_speakers).lower(),
+                    "log_api_calls": str(stt.log_api_calls).lower(),
+                    "save_input_wav_path": stt.save_input_wav_path,
+                    "return_audio_data": str(stt.return_audio_data).lower(),
+                },
+            ),
+        )
 
     def _build_segment_dump(self) -> threading.Thread:
         from edge_voice.audio_ingest.segment_audio_dump import SegmentAudioDumpWorker

@@ -39,12 +39,24 @@ AUDIO_DURATION_S = 30
 SETTLE_BUFFER_S = 7
 CLI_RUN_SECS = STARTUP_BUFFER_S + AUDIO_DURATION_S + SETTLE_BUFFER_S
 
-# Verified by manually running this exact reproduction against these exact
-# fixture files (see feat-vad branch session notes). A drift here means
-# something in the VAD/repacketizer/gate chain changed behavior, even if
-# the unit tests still pass -- re-verify by listening to the dumped
-# segments before updating these numbers, don't just bump them to pass.
-EXPECTED_SEGMENTS = {"rx": 4, "tx": 6}
+# Verified against these exact fixture files. A drift here means something in
+# the VAD/repacketizer/gate chain changed behavior, even if the unit tests
+# still pass -- re-verify by listening to the dumped segments before updating
+# these numbers, don't just bump them to pass.
+#
+# Was {"rx": 4, "tx": 6} until three VAD bugs were fixed:
+#   1. VADIterator was rebuilt per packet (dict.setdefault evaluates its
+#      default eagerly), and its __init__ calls model.reset_states() -- so
+#      Silero's LSTM state was wiped every 32ms.
+#   2. All channels shared one model instance, so interleaved rx/tx corrupted
+#      each other's LSTM state (counts doubled to 8/8 once #1 was fixed).
+#   3. Speech still active when the stream ended was never emitted, since
+#      segments only finalize on an `end` event. tx ends mid-utterance, so its
+#      last 2.62s ("신고자분은 현재 안전한 곳에 계십니까?") was silently
+#      dropped; VADWorker.flush() now emits it on shutdown.
+# The two sub-second tx fragments that vanished with #1/#2 were artifacts --
+# they transcribed as garbage ("그까"). tx legitimately has 5 utterances.
+EXPECTED_SEGMENTS = {"rx": 4, "tx": 5}
 
 
 def _broker_reachable(host: str = "localhost", port: int = 1883, timeout: float = 1.0) -> bool:
