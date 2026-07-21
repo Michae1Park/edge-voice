@@ -60,7 +60,9 @@ QUEUE_GET_TIMEOUT_S = 0.2
 
 def _default_options() -> dict[str, str]:
     return {
-        "max_tokens_per_second": "13.0",
+        # 13.0 (the scratch script's value) truncates Korean mid-sentence;
+        # see configs/default.yaml for the measurements behind 30.0.
+        "max_tokens_per_second": "30.0",
         "identify_speakers": "false",
         "log_api_calls": "false",
         "save_input_wav_path": "",

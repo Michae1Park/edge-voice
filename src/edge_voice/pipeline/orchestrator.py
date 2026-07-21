@@ -189,6 +189,11 @@ class PipelineOrchestrator:
                 preroll_chunks=self._settings.vad.preroll_chunks,
                 min_silence_duration_ms=self._settings.vad.min_silence_duration_ms,
                 speech_pad_ms=self._settings.vad.speech_pad_ms,
+                segment_limits_enabled=self._settings.vad.segment_limits_enabled,
+                max_segment_s=self._settings.vad.max_segment_s,
+                soft_cut_s=self._settings.vad.soft_cut_s,
+                soft_cut_lookahead_s=self._settings.vad.soft_cut_lookahead_s,
+                soft_cut_min_dip=self._settings.vad.soft_cut_min_dip,
             ),
         )
 
