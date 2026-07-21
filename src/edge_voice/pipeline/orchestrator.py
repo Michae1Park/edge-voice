@@ -220,8 +220,8 @@ class PipelineOrchestrator:
         )
 
     def _build_audio_dump(self) -> None:
-        if not self._settings.dump.enabled or self._dump_queue is None:
-            return
+        if self._dump_queue is None:
+            raise RuntimeError("Dump queue not initialized")
         from edge_voice.audio_ingest.audio_dump import AudioDumpWorker
 
         self._dump_worker = AudioDumpWorker(
