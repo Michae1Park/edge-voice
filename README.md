@@ -8,7 +8,6 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design doc and [
 
 - Python 3.12+
 - An MQTT broker reachable by the pipeline (e.g. [Mosquitto](https://mosquitto.org/)) — audio ingestion is MQTT-only, there is no direct-mic-to-pipeline path in production use
-- Linux/macOS with a working audio backend if using `mic_source.py` for local testing ([`sounddevice`](https://python-sounddevice.readthedocs.io/), no compiler toolchain required)
 
 ## Quick start
 
@@ -37,10 +36,6 @@ edge-voice
 **Terminal 2 — publish audio to it:**
 
 ```bash
-# Synthetic two-channel conversation
-python -m edge_voice.utils.audio_generation.wav_source \
-    --wav wav/conversation_60s.wav --channels rx tx
-
 # Real recorded call legs, one file per channel
 python -m edge_voice.utils.audio_generation.wav_source_raw \
     --wav wav/rx_recorded_1.wav wav/tx_recorded_1.wav --channels rx tx
@@ -100,7 +95,3 @@ CI (`.github/workflows/ci.yml`) runs `make ci` equivalent checks on every push a
 ## Project status
 
 Core pipeline (MQTT ingest → routing → VAD → STT) is real end-to-end. Reliability (worker supervision/restart), observability, health reporting, and the web UI are planned but not yet built — see [`docs/BUILDPLAN.md`](docs/BUILDPLAN.md) for the milestone-by-milestone breakdown.
-
-## License
-
-MIT — see `pyproject.toml`.
