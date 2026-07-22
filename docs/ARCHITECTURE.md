@@ -35,28 +35,36 @@ MQTT audio channels
   watchdog watches the whole process underneath that.
 ```
 
+
+
 ## 1. Problem Statement
 
 `edge-voice` transcribes two-party phone calls in near real time on resource-constrained edge devices such as Raspberry Pi 5 and Jetson. Korean is the default language; Moonshine also supports Arabic, English, Spanish, Japanese, Ukrainian, Vietnamese, and Chinese, selected via configuration.
 
 Each call leg arrives as a separate MQTT audio stream. The system must:
 
-* Produce ordered, channel-attributed transcripts.
-* Operate reliably despite transient failures.
-* Provide enough observability to diagnose issues without direct shell access.
-* Run efficiently on limited CPU and memory resources.
+- Produce ordered, channel-attributed transcripts.
+- Operate reliably despite transient failures.
+- Provide enough observability to diagnose issues without direct shell access.
+- Run efficiently on limited CPU and memory resources.
+
+
 
 ## 2. Non-Goals (v0.1)
 
 The following are intentionally out of scope for the initial release:
 
-* Docker packaging.
-* External metrics systems (Prometheus, Grafana, etc.).
-* Multi-tenant deployments.
-* Speaker diarization beyond channel attribution.
-* Transcript persistence beyond logs and live streaming.
+- Docker packaging.
+- External metrics systems (Prometheus, Grafana, etc.).
+- Multi-tenant deployments.
+- Speaker diarization beyond channel attribution.
+- Transcript persistence beyond logs and live streaming.
+
+
 
 ## 3. Architecture
+
+
 
 ### Core Decision: Per-Channel VAD, Shared STT
 
@@ -71,14 +79,13 @@ This differs from earlier prototypes that ran fully independent pipelines per au
 Reasons this split still favors resource efficiency and conversation semantics over one independent pipeline per audio source:
 
 1. **Resource efficiency**
-
-   * A full independent VAD+STT pipeline per channel would duplicate CPU and memory usage well beyond the per-channel VAD model's small footprint.
-   * Phone conversations are typically turn-based, making parallel STT instances unnecessary.
-
+  - A full independent VAD+STT pipeline per channel would duplicate CPU and memory usage well beyond the per-channel VAD model's small footprint.
+  - Phone conversations are typically turn-based, making parallel STT instances unnecessary.
 2. **Conversation semantics**
+  - Separate call legs represent one conversation rather than unrelated audio streams.
+  - A shared STT stage preserves conversation ordering and simplifies downstream processing.
 
-   * Separate call legs represent one conversation rather than unrelated audio streams.
-   * A shared STT stage preserves conversation ordering and simplifies downstream processing.
+
 
 ### Routing Model
 
@@ -88,13 +95,15 @@ MQTT channel 1 ──┐               ┌─▶ VAD (channel 1) ─┐
 MQTT channel 2 ──┘               └─▶ VAD (channel 2) ─┘
 ```
 
-* Incoming audio packets are tagged with `channel_id`.
-* Packets are placed onto a shared ingest queue.
-* The router re-packetizes each channel's stream to a fixed outgoing frame size (independently configurable from the incoming frame size — e.g. 20ms arriving frames re-chunked to the 32ms window VAD expects) before handing packets on.
-* VAD processes packets serially (one worker thread) but against independent per-channel model instances and state — no cross-channel interference, no locking required.
-* Finalized speech segments are placed onto a shared STT queue.
-* STT processes one segment at a time, against one shared model instance.
-* Channel attribution is preserved throughout the pipeline.
+- Incoming audio packets are tagged with `channel_id`.
+- Packets are placed onto a shared ingest queue.
+- The router re-packetizes each channel's stream to a fixed outgoing frame size (independently configurable from the incoming frame size — e.g. 20ms arriving frames re-chunked to the 32ms window VAD expects) before handing packets on.
+- VAD processes packets serially (one worker thread) but against independent per-channel model instances and state — no cross-channel interference, no locking required.
+- Finalized speech segments are placed onto a shared STT queue.
+- STT processes one segment at a time, against one shared model instance.
+- Channel attribution is preserved throughout the pipeline.
+
+
 
 ### Tradeoffs
 
@@ -110,35 +119,43 @@ The pipeline consists of four long-lived worker threads connected by bounded que
 
 ### MQTT Ingest
 
-* Subscribes to per-channel MQTT topics; receives audio packets.
-* Tags packets with channel metadata.
-* Pushes packets onto the ingest queue.
-* Performs no expensive processing. Reconnects on its own (§5) — this is invisible to the supervisor, which only acts on a worker thread dying outright, not on a connection blip.
+- Subscribes to per-channel MQTT topics; receives audio packets.
+- Tags packets with channel metadata.
+- Pushes packets onto the ingest queue.
+- Performs no expensive processing. Reconnects on its own (§5) — this is invisible to the supervisor, which only acts on a worker thread dying outright, not on a connection blip.
+
+
 
 ### Channel Router
 
-* Consumes packets from the ingest queue.
-* Validates `channel_id`, tracks per-channel last-seen timestamps.
-* Re-packetizes to the fixed outgoing frame size VAD expects (see Routing Model above).
-* Pushes re-packetized packets onto the routed queue; optionally mirrors raw packets to a debug dump queue.
+- Consumes packets from the ingest queue.
+- Validates `channel_id`, tracks per-channel last-seen timestamps.
+- Re-packetizes to the fixed outgoing frame size VAD expects (see Routing Model above).
+- Pushes re-packetized packets onto the routed queue; optionally mirrors raw packets to a debug dump queue.
+
+
 
 ### VAD Worker
 
-* Consumes packets from the routed queue.
-* Maintains per-channel VAD state (own model instance, own segmentation state machine, own preroll buffer).
-* Produces finalized speech segments onto the segment queue; optionally mirrors segments to a debug dump queue.
+- Consumes packets from the routed queue.
+- Maintains per-channel VAD state (own model instance, own segmentation state machine, own preroll buffer).
+- Produces finalized speech segments onto the segment queue; optionally mirrors segments to a debug dump queue.
+
+
 
 ### STT Worker
 
-* Consumes finalized segments from the segment queue.
-* Runs Moonshine inference against the one shared `Transcriber`.
-* Emits transcript events.
+- Consumes finalized segments from the segment queue.
+- Runs Moonshine inference against the one shared `Transcriber`.
+- Emits transcript events.
+
+
 
 ### Supervisor
 
-* Watches all four workers above (not the optional debug dump workers).
-* Restarts a worker that crashes or wedges; see §5 for the detection rules and the OS-level layer underneath it.
-* Runs as its own thread with the same start/stop lifecycle as every other worker, so it works identically whether the process is running headless or hosting the web UI.
+- Watches all four workers above (not the optional debug dump workers).
+- Restarts a worker that crashes or wedges; see §5 for the detection rules and the OS-level layer underneath it.
+- Runs as its own thread with the same start/stop lifecycle as every other worker, so it works identically whether the process is running headless or hosting the web UI.
 
 This producer/consumer architecture prevents transcription latency from blocking audio ingestion.
 
@@ -155,12 +172,12 @@ OS-level watchdog underneath it is for.
 Workers are supervised by a single generic thread-watchdog and restarted after
 two distinct kinds of unexpected failure:
 
-* **Crash** — a worker thread exits without having been asked to stop.
-* **Stall** — a worker is still alive, has work waiting on its input queue, but
-  hasn't made progress in longer than a configured threshold (a deadlock, or a
-  hang inside a native call). Exit-based detection alone would miss this
-  entirely, since nothing exits; a worker that is simply idle with an empty
-  queue is never flagged.
+- **Crash** — a worker thread exits without having been asked to stop.
+- **Stall** — a worker is still alive, has work waiting on its input queue, but
+hasn't made progress in longer than a configured threshold (a deadlock, or a
+hang inside a native call). Exit-based detection alone would miss this
+entirely, since nothing exits; a worker that is simply idle with an empty
+queue is never flagged.
 
 Restarting a crashed worker means constructing a fresh instance on the same
 queues, since a Python thread cannot be restarted once it has exited. A
@@ -257,9 +274,9 @@ Structured JSON logs are the primary operational interface.
 
 Log events include contextual information such as:
 
-* Channel ID
-* Pipeline stage
-* Segment ID
+- Channel ID
+- Pipeline stage
+- Segment ID
 
 This allows a segment's lifecycle to be traced across the pipeline.
 
@@ -269,20 +286,24 @@ Metrics are emitted as structured log events and aggregated in memory.
 
 Examples include:
 
-* STT inference latency
-* Queue depth
-* Worker restart counts
-* MQTT connection status
+- STT inference latency
+- Queue depth
+- Worker restart counts
+- MQTT connection status
+
+
 
 ### Health Reporting
 
 A health endpoint exposes:
 
-* Overall system status
-* Worker status and restart counts
-* Queue depths
-* MQTT connectivity
-* Per-channel activity freshness
+- Overall system status
+- Worker status and restart counts
+- Queue depths
+- MQTT connectivity
+- Per-channel activity freshness
+
+
 
 ## 8. Web UI
 
@@ -301,21 +322,25 @@ The web interface provides:
 
 ### Control
 
-* Start pipeline
-* Stop pipeline
-* Restart workers
+- Start pipeline
+- Stop pipeline
+- Restart workers
+
+
 
 ### Configuration
 
-* View effective configuration
-* Edit local configuration
-* Validate changes before applying
+- View effective configuration
+- Edit local configuration
+- Validate changes before applying
+
+
 
 ### Live Monitoring
 
-* Real-time transcript stream
-* Health dashboard
-* Metrics dashboard
+- Real-time transcript stream
+- Health dashboard
+- Metrics dashboard
 
 The initial implementation uses server-rendered pages and WebSockets to minimize complexity and resource usage.
 
@@ -343,8 +368,8 @@ Exercise multiple real components together using realistic MQTT and audio fixtur
 
 Examples include:
 
-* MQTT → Router → VAD
-* End-to-end transcription pipeline (real recorded duplex-call fixtures, checked against known-good segment counts)
+- MQTT → Router → VAD
+- End-to-end transcription pipeline (real recorded duplex-call fixtures, checked against known-good segment counts)
 
 This one is marked opt-in (needs a live MQTT broker) and excluded from the
 default local/CI test run; run it explicitly with `pytest -m integration`.
@@ -359,14 +384,14 @@ validation — performance is still verified manually, on target hardware.
 
 ## 10. Deferred Decisions
 
-* Transcript persistence backend.
-* Enhanced overlap handling.
-* Deployment/installation tooling beyond the systemd unit (`deploy/edge-voice.service`) — containerization itself remains a non-goal (§2), but packaging/distribution beyond "copy the repo and install a unit file" is still open.
+- Transcript persistence backend.
+- Deployment/installation tooling beyond the systemd unit (`deploy/edge-voice.service`) — containerization itself remains a non-goal (§2), but packaging/distribution beyond "copy the repo and install a unit file" is still open.
 
 Resolved since the last revision of this document:
 
-* **Threads vs. asyncio** — decided as a hybrid, not exclusively one or the
-  other: every pipeline worker (including the supervisor) is a
-  `threading.Thread`; asyncio is used only at the FastAPI/web UI boundary,
-  bridging into the thread-based pipeline via a thread pool for any call that
-  blocks (e.g. stopping the pipeline).
+- **Threads vs. asyncio** — decided as a hybrid, not exclusively one or the
+other: every pipeline worker (including the supervisor) is a
+`threading.Thread`; asyncio is used only at the FastAPI/web UI boundary,
+bridging into the thread-based pipeline via a thread pool for any call that
+blocks (e.g. stopping the pipeline).
+
