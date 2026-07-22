@@ -347,27 +347,119 @@ itself; config editing not built.
 
 ## Milestone 6 — Reliability
 
+**Runs unattended on a no-internet edge box — no one is coming to SSH in and
+restart it.** That constraint means two independent layers, because each
+catches a failure mode the other structurally cannot:
+
+- **In-process supervision** (1–2) only works if the process is still
+  scheduling threads at all. It cannot rescue a deadlock, a hang inside a
+  native call (torch/silero/moonshine), or an OOM — the supervisor is
+  wedged right along with everything else in that case.
+- **OS-level watchdog** (3) is the layer underneath that catches exactly
+  that case, restarting the whole process from outside it.
+
 1. `pipeline/supervisor.py` — restarts `audio_ingest`/`channel`/`vad`/`stt`
    worker threads on unexpected exit, tracks restart counts, flags
-   "degraded" after N repeated failures (§5). `orchestrator.py` builds the
-   workers and hands them to `supervisor.py` to watch — `supervisor`
-   itself stays generic ("a thread died, restart it") rather than
-   knowing what a VAD worker is.
+   "degraded" after N repeated failures within a window (§5). Must
+   distinguish an intentional `stop_event`-triggered exit (from
+   `orchestrator.stop()`) from a genuine crash — only the latter restarts.
+   Once a worker is flagged degraded, stop hot-restarting it in-process —
+   repeated restarts without backoff just burn CPU on a constrained board —
+   and let layer 3 below (a full process restart) be the recovery path
+   instead. `orchestrator.py` builds the workers and hands them to
+   `supervisor.py` to watch — `supervisor` itself stays generic ("a thread
+   died, restart it") rather than knowing what a VAD worker is.
+   - **Also covers stalls, not just exits.** Exit-based detection alone
+     misses a worker that deadlocks or blocks forever without crashing —
+     that's invisible to both this layer (nothing exits) and layer 3 below
+     (the rest of the process, including the watchdog heartbeat thread,
+     keeps ticking fine). Each worker exposes a last-activity timestamp
+     (updated once per packet/segment handled); `supervisor` polls it
+     alongside `is_alive()` and treats "no activity for M seconds while
+     upstream is still feeding it work" the same as an exit.
+   - **Restarting `VADWorker` loses whatever segment was in progress** for
+     the channel that was active — full recovery isn't realistically
+     possible from a thread that just crashed unpredictably (its internal
+     state is already suspect). Instead of losing this silently, before
+     discarding the dead instance, inspect its `_channels` for any
+     non-empty `segment_chunks` and log the loss explicitly (channel,
+     seconds of audio) as its own distinct event — not folded into the
+     generic "worker restarted" log line — so a crash that ate a live
+     utterance is auditable after the fact, the same way the Milestone 3
+     fixture work made channel state corruption auditable via segment
+     counts.
 2. Fault isolation: malformed packet / inference exception → log + drop,
-   never kill the worker loop
-3. Bounded-queue backpressure: queue depth tracked per stage and exposed
-   (feeds Milestone 7)
+   never kill the worker loop. **Largely already true** —
+   `VADWorker.run()` and `STTWorker.run()` already wrap per-item handling
+   in `try/except Exception: logger.exception(...)` and continue; this
+   item is now an audit to confirm `MqttAudioIngest`/`ChannelRouter` have
+   the same guard, not new code.
+3. OS-level watchdog (systemd `WatchdogSec=`, or a hardware watchdog if the
+   board has one): the app calls `sd_notify("WATCHDOG=1")` periodically. If
+   the process hangs, deadlocks, or is OOM-killed — none of which item 1
+   can detect from inside the same wedged process — systemd restarts it.
+   This is the layer that actually delivers "restarts itself with nobody
+   watching." **Lives on `Supervisor`'s own tick, not the UI's poll cadence**
+   — `Supervisor` is itself a `threading.Thread` (same shape as
+   `VADWorker`/`STTWorker`), started/stopped by `orchestrator.start()`/
+   `stop()` like any other worker, so it has a consistent home whether
+   `cli.py` is running headless (`run_with_timer()`) or hosting the kiosk
+   UI (blocks in `uvicorn.run()` instead — neither path ticks the other).
+   The ping must not share a code path with the (slower) worker-rebuild
+   work in item 1 — a slow model reload delaying the ping could trigger a
+   spurious watchdog restart on top of an already-in-progress one.
 4. Flesh out the `get_status()` seam stubbed in Milestone 1 so it reports
    real per-worker state (running/restarting/degraded) sourced from
-   `supervisor`, not from grepping logs — the Milestone 5 status panel
-   picks this up automatically, no UI change needed.
-5. Wire up the "restart worker" control left out of scope in Milestone 5,
-   now that `supervisor.py` exists for it to call into.
+   `supervisor`, not from grepping logs.
+5. Kiosk pill gets a third **degraded** state, distinct from live/stopped,
+   sourced from item 4. **Correction to the Milestone 5 assumption** that
+   the status panel "picks this up automatically" — checked
+   `console.html`: `setRunning()` only branches on the boolean `.running`,
+   so a degraded-but-still-running pipeline today renders identically to a
+   fully healthy one. Deliberately scoped to just this one pill state, not
+   a general fallback-screen system — this app has no sensors or
+   peripherals to show fallback states for, only the pipeline itself.
+6. Atomic writes for the two local file writers that run continuously by
+   default on a power-loss-prone device — `SegmentAudioDumpWorker`
+   (enabled by default) and `AudioDumpWorker` (opt-in) both call
+   `sf.write()` straight to the destination path. Write to a temp path in
+   the same directory and `os.replace()` onto the final filename instead,
+   so a power cut mid-write leaves the previous file intact rather than a
+   torn WAV. Deliberately **not** a database/WAL layer — there's no
+   database anywhere in this app, and transcript persistence is already
+   out of scope (see bottom of this doc); these two debug dump workers are
+   the only continuous local writes that exist, and losing one in-flight
+   file is already contained to that one file, not a shared store.
+7. Wire up the "restart worker" control left out of scope in Milestone 5,
+   now that `supervisor.py` exists for it to call into. Lower priority
+   than 1–6 — the point of this milestone is *not* needing a human at the
+   console — keep only if a manual override is still wanted for debugging.
 
-**Done when:** deliberately raising inside `stt/worker.py` mid-run gets
-logged, the worker restarts via `supervisor`, the pipeline keeps
-transcribing, `orchestrator.get_status()` reflects the restart, and that
-restart is visible on the Milestone 5 UI without touching UI code.
+**Scope, sized against `test_orchestrator.py` (236 lines) as the closest
+existing precedent** — comparable to a full earlier milestone (VAD or STT),
+not a small patch:
+
+| Piece | Scope |
+|---|---|
+| `pipeline/supervisor.py` (new) | Largest, most novel piece — thread lifecycle, per-worker restart/backoff/degraded tracking, liveness polling, the VAD-loss logging special case |
+| `orchestrator.py` changes | Moderate — touches the shutdown-ordering logic that was already subtly buggy once (Milestone 4/PR #7), so needs care, not just volume |
+| Small additions to 4 worker files | Small each — a last-activity timestamp stamp per item handled |
+| systemd unit + `sd_notify` helper | Small code (stdlib socket write), but **can't be fully verified off-device** — the socket call is unit-testable here; "`kill -9` → systemd actually restarts it" only proves out on the real box, same as Milestone 8 already treats perf validation (manual, on-device) |
+| `console.html` | Small — one CSS class, one JS branch |
+| Atomic writes (2 dump workers) | Small — one shared helper, two call sites |
+| Tests | The other major chunk — a new `test_supervisor.py` in the same range as `test_orchestrator.py`, plus updates to the existing orchestrator/status tests |
+
+**Done when:**
+- Deliberately raising inside `stt/worker.py` mid-run gets logged, the
+  worker restarts via `supervisor`, the pipeline keeps transcribing,
+  `orchestrator.get_status()` reflects the restart, and that restart is
+  visible on the kiosk UI as a distinct "degraded" state (not
+  indistinguishable from "live").
+- `kill -9` on the whole process (simulating a hang layer 1 can't catch)
+  results in systemd restarting it within `WatchdogSec`, no manual
+  intervention.
+- Pulling power mid-write to a segment-dump WAV file leaves the previous
+  file valid and doesn't affect the pipeline on next boot.
 
 ---
 
