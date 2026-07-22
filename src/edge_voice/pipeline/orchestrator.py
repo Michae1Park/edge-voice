@@ -15,6 +15,7 @@ import logging
 import queue
 import threading
 import time
+from typing import Any, Callable
 
 from edge_voice.config.settings import Settings
 from edge_voice.pipeline.queues import (
@@ -28,6 +29,7 @@ from edge_voice.channel.router import ChannelRouter, RepacketizerConfig
 from edge_voice.pipeline.transcript_hub import TranscriptHub
 from edge_voice.vad.vad_worker import VADWorker, VADWorkerConfig
 from edge_voice.stt.stt_worker import STTWorker, STTWorkerConfig
+from edge_voice.pipeline.supervisor import Supervisor, SupervisedTarget
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +52,10 @@ class PipelineOrchestrator:
         self._stt: threading.Thread | None = None
         self._dump_worker: threading.Thread | None = None
         self._segment_dump_worker: threading.Thread | None = None
+        # In-process worker supervision (Milestone 6). None when
+        # reliability.enabled is False -- the pipeline then behaves exactly as
+        # it did before Milestone 6, with no supervisor thread at all.
+        self._supervisor: Supervisor | None = None
         self._stop_event = threading.Event()
         self._running = False
         # Doesn't depend on queues/workers, so it's safe to create once here
@@ -95,6 +101,10 @@ class PipelineOrchestrator:
         self._vad = self._build_vad()
         self._stt = self._build_stt()
 
+        # Supervision layer (Milestone 6). Built here so its targets can close
+        # over the worker attributes just assigned; started/stopped separately.
+        self._supervisor = self._build_supervisor() if self._settings.reliability.enabled else None
+
         logger.info(
             "Pipeline built with channels: %s", [c.channel_id for c in self._settings.mqtt.channels]
         )
@@ -106,6 +116,11 @@ class PipelineOrchestrator:
         self._running = True
         for w in self._get_workers():
             w.start()
+        # Supervisor starts LAST, once the workers it watches are already up --
+        # otherwise its first scan could see a not-yet-started worker as a
+        # crash. Stopped FIRST in stop(), symmetrically.
+        if self._supervisor is not None:
+            self._supervisor.start()
         logger.info("Pipeline started")
 
     def stop(self) -> None:
@@ -121,6 +136,13 @@ class PipelineOrchestrator:
         """
         self._running = False
         self._stop_event.set()
+        # Supervisor down FIRST -- before we start tearing workers down, or it
+        # would see them dying (because we are stopping them) and race to
+        # "restart" them mid-shutdown. Joining it also drains any in-flight
+        # restart thread, so no worker gets swapped out from under the teardown.
+        if self._supervisor is not None:
+            self._signal(self._supervisor)
+            self._join(self._supervisor)
         workers = self._get_workers()
         try:
             for w in workers:  # producers before their consumers
@@ -158,8 +180,18 @@ class PipelineOrchestrator:
 
     def get_status(self) -> dict:
         running = self._running
+        # Base state from the thread itself; the supervisor (if any) refines it
+        # with restarting/degraded, which a bare is_alive() can't distinguish
+        # from healthy. This is the seam the Milestone 5 UI reads.
         workers = {w.name: ("running" if w.is_alive() else "stopped") for w in self._get_workers()}
-        return {"running": running, "workers": workers}
+        degraded = False
+        if self._supervisor is not None:
+            sup = self._supervisor.status()
+            for name, info in sup.items():
+                if name in workers and workers[name] == "running":
+                    workers[name] = str(info["state"])
+            degraded = self._supervisor.is_degraded()
+        return {"running": running, "degraded": degraded, "workers": workers}
 
     def run(self, duration_s: float | None = None) -> None:
         """Build, start, and run until stopped, Ctrl-C, or duration_s elapses."""
@@ -199,6 +231,106 @@ class PipelineOrchestrator:
             self._segment_dump_worker,
         ]
         return [w for w in workers if w is not None]
+
+    # ── Supervision (Milestone 6) ──────────────────────────────
+
+    def _build_supervisor(self) -> Supervisor:
+        r = self._settings.reliability
+        return Supervisor(
+            self._build_supervisor_targets(),
+            tick_interval_s=r.tick_interval_s,
+            stall_timeout_s=r.stall_timeout_s,
+            max_restarts=r.max_restarts,
+            restart_window_s=r.restart_window_s,
+            watchdog_enabled=r.watchdog_enabled,
+        )
+
+    def _w(self, attr: str) -> Any:
+        """The current worker instance held at `attr`.
+
+        Typed Any on purpose: the workers expose a uniform stopping /
+        last_activity / pending_loss interface that mypy can't see through
+        their threading.Thread base. Reading via this accessor (rather than a
+        captured local) is also what lets a target observe the *replacement*
+        worker after a restart swaps the attribute -- see SupervisedTarget.
+        """
+        return getattr(self, attr)
+
+    @staticmethod
+    def _queue_pending(q: queue.Queue | None) -> bool:
+        return q is not None and q.qsize() > 0
+
+    def _build_supervisor_targets(self) -> list[SupervisedTarget]:
+        """Wire the supervisor's generic callables to our worker attributes.
+
+        Restart closures route through _restart(attr, build_fn), which rebuilds
+        the worker on the same queues and swaps it in.
+        """
+        return [
+            # MQTT ingest is a source with no input queue: stall_detection off,
+            # since "hasn't consumed a queue lately" isn't its liveness contract
+            # (run() just blocks on the stop event; paho owns reconnect).
+            SupervisedTarget(
+                name="MqttAudioIngest",
+                is_alive=lambda: self._w("_audio_source").is_alive(),
+                is_stopping=lambda: self._w("_audio_source").stopping,
+                last_activity=lambda: self._w("_audio_source").last_activity,
+                restart=lambda: self._restart("_audio_source", self._build_mqtt_subscriber),
+                stall_detection=False,
+            ),
+            SupervisedTarget(
+                name="ChannelRouter",
+                is_alive=lambda: self._w("_router").is_alive(),
+                is_stopping=lambda: self._w("_router").stopping,
+                last_activity=lambda: self._w("_router").last_activity,
+                restart=lambda: self._restart("_router", self._build_router),
+                input_pending=lambda: self._queue_pending(self._ingest_queue),
+            ),
+            SupervisedTarget(
+                name="VADWorker",
+                is_alive=lambda: self._w("_vad").is_alive(),
+                is_stopping=lambda: self._w("_vad").stopping,
+                last_activity=lambda: self._w("_vad").last_activity,
+                restart=lambda: self._restart("_vad", self._build_vad),
+                input_pending=lambda: self._queue_pending(self._routed_queue),
+                pending_loss=lambda: self._w("_vad").pending_loss(),
+            ),
+            SupervisedTarget(
+                name="STTWorker",
+                is_alive=lambda: self._w("_stt").is_alive(),
+                is_stopping=lambda: self._w("_stt").stopping,
+                last_activity=lambda: self._w("_stt").last_activity,
+                restart=lambda: self._restart("_stt", self._build_stt),
+                input_pending=lambda: self._queue_pending(self._segment_queue),
+            ),
+        ]
+
+    def _restart(self, attr: str, build_fn: Callable[[], threading.Thread]) -> None:
+        """Replace worker `attr` with a fresh instance on the same queues.
+
+        Runs on the supervisor's restart thread. A crashed worker's thread has
+        already exited, so the join returns at once and the swap is clean. A
+        *stalled* worker cannot be force-killed (Python has no thread kill): we
+        signal it and join briefly; if it stays wedged it lingers as a zombie
+        on the shared input queue, which is exactly the case the OS watchdog's
+        full-process restart is the real remedy for -- the in-process swap here
+        is best-effort so the pipeline resumes progress in the meantime.
+        """
+        old = getattr(self, attr)
+        self._signal(old)
+        self._join(old)
+        if old.is_alive():
+            logger.warning(
+                "Orchestrator: %s did not exit after signal -- a zombie thread may "
+                "linger on its input queue until a full process restart",
+                getattr(old, "name", attr),
+            )
+        new = build_fn()
+        setattr(self, attr, new)
+        # Don't resurrect a worker into a pipeline that's already tearing down;
+        # stop() sets both of these before joining the supervisor.
+        if self._running and not self._stop_event.is_set():
+            new.start()
 
     # ── Worker builders ────────────────────────────────────────
 

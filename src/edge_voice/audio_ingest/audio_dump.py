@@ -17,8 +17,8 @@ import threading
 from pathlib import Path
 
 import numpy as np
-import soundfile as sf
 
+from edge_voice.audio_ingest.atomic_write import atomic_sf_write
 from edge_voice.pipeline.models import AudioPacket
 
 logger = logging.getLogger(__name__)
@@ -78,7 +78,7 @@ class AudioDumpWorker(threading.Thread):
             path = self._output_dir / f"{ch}_{segment_id:03d}_end.wav"
             del self._buffers[ch]
         segment = np.frombuffer(bytes(remaining), dtype=np.int16)
-        sf.write(str(path), segment, self._sr, subtype="PCM_16")
+        atomic_sf_write(str(path), segment, self._sr, subtype="PCM_16")
         total_s = len(segment) / self._sr
         logger.info("AudioDumpWorker: wrote %s (%d samples, %.2fs)", path, len(segment), total_s)
 
@@ -115,7 +115,7 @@ class AudioDumpWorker(threading.Thread):
                     )
 
             for segment, out_path in written:
-                sf.write(str(out_path), segment, self._sr, subtype="PCM_16")
+                atomic_sf_write(str(out_path), segment, self._sr, subtype="PCM_16")
                 logger.info("AudioDumpWorker: wrote %s (%.2fs)", out_path, self._segment_secs)
 
         logger.info(

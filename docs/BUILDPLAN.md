@@ -18,7 +18,7 @@ map onto packages:
 | VAD                          | `vad/`                       |
 | STT                          | `stt/`                       |
 | Composition / lifecycle      | `pipeline/orchestrator.py`   |
-| Fault tolerance              | `pipeline/supervisor.py` *(planned — Milestone 6, not yet built)* |
+| Fault tolerance              | `pipeline/supervisor.py`, `pipeline/systemd_watchdog.py`, `deploy/edge-voice.service` |
 | Entry point                  | `cli.py`                     |
 | Config                       | `config/`                    |
 | Web UI                       | `webui/` (in-process with `cli.py`/`orchestrator`) |
@@ -73,12 +73,13 @@ Conflating the two will make restart-count metrics noisy and useless.
 ## STATUS (update this every session, even with one line)
 
 ```
-Last updated: 2026-07-21
+Last updated: 2026-07-22
 Current milestone: none
-Done: ms 0, 1, 2, 3, 4, 5
+Done: ms 0, 1, 2, 3, 4, 5, 6
 In progress: none
-Next action: Milestone 6 — Reliability (pipeline/supervisor.py)
-Blocked on: nothing
+Next action: Milestone 7 — Observability + Health (observability/, health/)
+Blocked on: on-device verification of the watchdog + power-loss cases (see
+            Milestone 6 "Done when" -- the two on-box checks can't run in CI)
 ```
 
 ---
@@ -345,7 +346,24 @@ itself; config editing not built.
 
 ---
 
-## Milestone 6 — Reliability
+## Milestone 6 — Reliability ✅ Done (watchdog + power-loss checks verify on-device)
+
+**Shipped:** `pipeline/supervisor.py` (generic thread-watchdog: crash + stall
+detection, windowed restart budget → degraded, VAD pending-loss logging),
+`pipeline/systemd_watchdog.py` (dependency-free sd_notify, no-op off systemd),
+`ReliabilitySettings` + `configs/default.yaml` block, orchestrator wiring
+(supervisor starts last / stops first; `get_status()` now carries per-worker
+state + a top-level `degraded`), the third **degraded** pill state in
+`console.html`, atomic writes for both dump workers (`audio_ingest/atomic_write.py`),
+and `deploy/edge-voice.service`. Tests: `test_supervisor.py`,
+`test_systemd_watchdog.py`, `test_atomic_write.py`, plus orchestrator restart-
+mechanics tests; the end-to-end `-m integration` run passes unchanged with
+supervision on.
+
+**Two acceptance checks remain on-device** (can't run in CI, same as Milestone
+8's perf validation): the watchdog actually restarting a *hung* process
+(`systemctl kill -s SIGSTOP`), and a real power-cut leaving the previous dump
+WAV intact. The `.service` file documents both procedures.
 
 **Runs unattended on a no-internet edge box — no one is coming to SSH in and
 restart it.** That constraint means two independent layers, because each

@@ -20,6 +20,7 @@
     --rx-dim: rgba(77, 216, 196, 0.15);
     --live: #4ade80;
     --stopped: #6b7280;
+    --degraded: #f5a623;
     --radius: 5px;
     --mono: "Berkeley Mono", "JetBrains Mono", "IBM Plex Mono", ui-monospace,
       "SF Mono", "Cascadia Code", Consolas, monospace;
@@ -146,6 +147,10 @@
     transition: color 0.2s ease;
   }
   .live-pill.stopped { color: var(--stopped); }
+  /* Pipeline running, but the supervisor has flagged a worker degraded
+     (crash-looping past its restart budget). Distinct from stopped: work may
+     still be flowing on the healthy workers, so it's a warning, not an off. */
+  .live-pill.degraded { color: var(--degraded); }
 
   .dot {
     width: 7px;
@@ -157,6 +162,7 @@
   .dot.tx { background: var(--tx); }
   .dot.live { background: var(--live); }
   .live-pill.stopped .dot.live { background: var(--stopped); }
+  .live-pill.degraded .dot.live { background: var(--degraded); }
 
   @media (prefers-reduced-motion: no-preference) {
     .live-pill:not(.stopped) .dot.live {
@@ -439,18 +445,29 @@
 
     // ── pipeline status poll ───────────────────────────────
 
-    function setRunning(running) {
-      livePill.classList.toggle("stopped", !running);
-      blink.classList.toggle("stopped", !running);
-      liveLabel.textContent = running ? "live" : "stopped";
-      cursorText.textContent = running ? "waiting for next line" : "pipeline stopped";
+    // Three states, not two: a degraded pipeline is still running (some
+    // workers healthy) but a worker has crash-looped past its restart budget,
+    // so it must read distinctly from both "live" and "stopped".
+    function setStatus(data) {
+      var running = !!data.running;
+      var degraded = running && !!data.degraded;
+      var stopped = !running;
+      livePill.classList.toggle("stopped", stopped);
+      livePill.classList.toggle("degraded", degraded);
+      blink.classList.toggle("stopped", stopped);
+      liveLabel.textContent = stopped ? "stopped" : degraded ? "degraded" : "live";
+      cursorText.textContent = stopped
+        ? "pipeline stopped"
+        : degraded
+        ? "running — worker degraded"
+        : "waiting for next line";
     }
 
     function pollStatus() {
       fetch("/api/status")
         .then(function (r) { return r.json(); })
-        .then(function (data) { setRunning(!!data.running); })
-        .catch(function () { setRunning(false); });
+        .then(function (data) { setStatus(data); })
+        .catch(function () { setStatus({ running: false }); });
     }
     pollStatus();
     setInterval(pollStatus, 3000);

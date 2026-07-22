@@ -46,6 +46,11 @@ class MqttAudioIngest(threading.Thread):
         self._topic_to_channel = {ch.topic: ch.channel_id for ch in self._channels}
         self._stop_event = threading.Event()
         self._connected_event = threading.Event()
+        # Monotonic timestamp of the last message received. Exposed for a
+        # uniform worker interface (docs/BUILDPLAN.md Milestone 6); the
+        # supervisor does NOT stall-check this worker -- run() only blocks on
+        # the stop event, and paho owns reconnect internally.
+        self._last_activity = time.monotonic()
         self._client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
         self._on_connected: list[Callable[[], None]] = []
         # paho-mqtt 2.x built-in reconnect with exponential backoff
@@ -88,6 +93,11 @@ class MqttAudioIngest(threading.Thread):
     def stopping(self) -> bool:
         return self._stop_event.is_set()
 
+    @property
+    def last_activity(self) -> float:
+        """Monotonic time of the last MQTT message received."""
+        return self._last_activity
+
     def _on_connect(
         self,
         client: mqtt.Client,
@@ -111,6 +121,8 @@ class MqttAudioIngest(threading.Thread):
         self._connected_event.clear()
 
     def _on_message(self, _client: mqtt.Client, _userdata: Any, msg: mqtt.MQTTMessage) -> None:  # type: ignore[override]
+        self._last_activity = time.monotonic()
+
         if not msg.payload:
             logger.warning("Empty MQTT audio payload on topic %s", msg.topic)
             return

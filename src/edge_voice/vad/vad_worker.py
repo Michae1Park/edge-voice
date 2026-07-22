@@ -137,9 +137,38 @@ class VADWorker(threading.Thread):
 
         self._channels: dict[str, _ChannelState] = {}
         self._stop_event = threading.Event()
+        # Monotonic timestamp of the last packet handled, read by the
+        # supervisor's stall check (docs/BUILDPLAN.md Milestone 6). A plain
+        # float write/read is atomic under the GIL, so no lock is needed.
+        self._last_activity = time.monotonic()
 
     def stop(self) -> None:
         self._stop_event.set()
+
+    @property
+    def stopping(self) -> bool:
+        return self._stop_event.is_set()
+
+    @property
+    def last_activity(self) -> float:
+        """Monotonic time of the last packet handled (for supervisor stall check)."""
+        return self._last_activity
+
+    def pending_loss(self) -> str | None:
+        """Report any in-progress segment audio that a restart would discard.
+
+        The supervisor calls this on a crashed VADWorker before replacing it,
+        so a crash that ate a live utterance is logged as its own distinct
+        event rather than vanishing silently -- the same drop-the-last-utterance
+        class of bug flush() was added to fix, just reached via crash+restart.
+        Returns a human-readable summary, or None if nothing was buffered.
+        """
+        parts = []
+        for channel_id, state in self._channels.items():
+            if state.segment_start_ts is not None and state.segment_chunks:
+                n_samples = sum(len(c) for c in state.segment_chunks) // 2  # int16
+                parts.append(f"{channel_id}={n_samples / self.config.sample_rate:.2f}s")
+        return ", ".join(parts) if parts else None
 
     def run(self) -> None:
         while not self._stop_event.is_set():
@@ -151,6 +180,8 @@ class VADWorker(threading.Thread):
 
             if packet is None:  # shutdown sentinel
                 break
+
+            self._last_activity = time.monotonic()
 
             try:
                 self._handle_packet(packet)

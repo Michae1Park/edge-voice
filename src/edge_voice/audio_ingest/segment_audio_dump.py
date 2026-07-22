@@ -14,8 +14,8 @@ import threading
 from pathlib import Path
 
 import numpy as np
-import soundfile as sf
 
+from edge_voice.audio_ingest.atomic_write import atomic_sf_write
 from edge_voice.pipeline.models import SpeechSegment
 
 logger = logging.getLogger(__name__)
@@ -67,7 +67,7 @@ class SegmentAudioDumpWorker(threading.Thread):
                 )
 
             for pcm, path, seg in written:
-                sf.write(str(path), pcm, self._sr, subtype="PCM_16")
+                atomic_sf_write(str(path), pcm, self._sr, subtype="PCM_16")
                 logger.info(
                     "SegmentAudioDumpWorker: wrote %s [%s] dur=%.2fs",
                     path,
@@ -80,7 +80,7 @@ class SegmentAudioDumpWorker(threading.Thread):
         # Flush trailing segments
         if written:
             for pcm, path, seg in written:
-                sf.write(str(path), pcm, self._sr, subtype="PCM")
+                atomic_sf_write(str(path), pcm, self._sr, subtype="PCM_16")
             logger.info("SegmentAudioDumpWorker: flushed %d trailing segment(s)", len(written))
 
     def stop(self) -> None:

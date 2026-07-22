@@ -1,0 +1,51 @@
+# systemd unit for edge-voice (Milestone 6, layer 3 -- OS-level watchdog).
+#
+# This is the piece that delivers "restarts itself with nobody watching":
+# the app pings sd_notify WATCHDOG=1 from the Supervisor thread (see
+# pipeline/systemd_watchdog.py); if those pings stop -- process hung,
+# deadlocked, or OOM-killed, none of which in-process supervision can catch --
+# systemd kills and restarts the unit.
+#
+# Install (on the device, not in CI):
+#   sudo cp deploy/edge-voice.service /etc/systemd/system/
+#   # edit User=, WorkingDirectory=, ExecStart= to match the install path
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now edge-voice
+#   systemctl status edge-voice     # watch it come up / auto-restart
+#
+# Verifying the watchdog actually fires (the on-device half of the Milestone 6
+# "Done when" that can't be proven in CI):
+#   sudo systemctl kill -s SIGSTOP edge-voice   # simulate a hang (freeze it)
+#   # within ~WatchdogSec, journalctl shows systemd killing + restarting it
+#   journalctl -u edge-voice -f
+
+[Unit]
+Description=edge-voice — real-time dual-channel call transcription
+After=network.target
+
+[Service]
+Type=notify
+
+# WatchdogSec must be comfortably larger than reliability.tick_interval_s in
+# configs/default.yaml (the ping cadence). At the default 2.0s tick, 10s gives
+# a 5x margin -- a couple of missed ticks (a slow GC pause, a brief load spike)
+# won't trip a restart, but a real hang will within 10s.
+WatchdogSec=10s
+
+# Restart on ANY exit, including the watchdog-triggered kill above. The short
+# delay avoids a tight crash-loop hammering a constrained board.
+Restart=always
+RestartSec=3s
+
+# --- adjust these to the actual install ---
+User=edge
+WorkingDirectory=/opt/edge-voice
+ExecStart=/opt/edge-voice/venv/bin/edge-voice
+
+# Harden a bit; the app needs only its own dir (for config + dump output).
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/edge-voice
+
+[Install]
+WantedBy=multi-user.target

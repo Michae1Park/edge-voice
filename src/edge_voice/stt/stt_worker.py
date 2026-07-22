@@ -46,6 +46,7 @@ from __future__ import annotations
 import logging
 import queue
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterator
 
@@ -188,6 +189,10 @@ class STTWorker(threading.Thread):
         # downloads assets and re-prints the license notice on every call.
         self._resolved_model: tuple[str, Any] | None = None
         self._stop_event = threading.Event()
+        # Monotonic timestamp of the last segment handled, read by the
+        # supervisor's stall check (docs/BUILDPLAN.md Milestone 6). A plain
+        # float write/read is atomic under the GIL, so no lock is needed.
+        self._last_activity = time.monotonic()
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -195,6 +200,11 @@ class STTWorker(threading.Thread):
     @property
     def stopping(self) -> bool:
         return self._stop_event.is_set()
+
+    @property
+    def last_activity(self) -> float:
+        """Monotonic time of the last segment handled (for supervisor stall check)."""
+        return self._last_activity
 
     def run(self) -> None:
         logger.info("STTWorker started")
@@ -206,6 +216,8 @@ class STTWorker(threading.Thread):
 
             if segment is None:  # shutdown sentinel
                 break
+
+            self._last_activity = time.monotonic()
 
             try:
                 self._handle_segment(segment)
