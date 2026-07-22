@@ -37,13 +37,13 @@ repacketizer:
   bytes_per_sample: 2   # 16-bit PCM mono
 
 vad:
-  threshold: 0.3
+  threshold: 0.5
   window_samples: 512        # 32ms @ 16kHz
   rms_gate_enabled: false
   silence_rms_floor: 0.01    # CALIBRATE: normalized float32 RMS, not raw int16
   preroll_chunks: 3
-  min_silence_duration_ms: 400  # silence required before Silero fires `end` (raise if tail-clipping)
-  speech_pad_ms: 30             # padding Silero appends around detected speech
+  min_silence_duration_ms: 300  # silence required before Silero fires `end` (raise if tail-clipping)
+  speech_pad_ms: 0             # padding Silero appends around detected speech
   # Emit an in-progress segment after this many seconds of NO packets on a
   # channel. Every other boundary rule needs packets to keep arriving, so
   # without this the final utterance of a stream waits until shutdown.
@@ -74,7 +74,7 @@ stt:
   # Output saturates at ~20 with no latency cost and no repetition up to 75;
   # 30 leaves headroom for fast speakers. Must be set -- omitting the option
   # entirely truncates worse than any explicit value.
-  max_tokens_per_second: "30.0"
+  max_tokens_per_second: "20.0"
   identify_speakers: false
   log_api_calls: false
   save_input_wav_path: ""
