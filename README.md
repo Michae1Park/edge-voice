@@ -18,7 +18,7 @@ cd edge-voice
 python3.12 -m venv venv
 source venv/bin/activate
 
-make install   # pip install -e ".[dev]"
+make install   # pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[dev]"
 make test      # pytest
 ```
 

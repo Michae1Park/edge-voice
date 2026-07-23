@@ -8,7 +8,7 @@ req:
 		pyproject.toml
 
 install:
-	pip install -e ".[dev]"
+	pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[dev]"
 
 test:
 	pytest
