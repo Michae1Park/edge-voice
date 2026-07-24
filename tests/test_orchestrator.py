@@ -180,6 +180,90 @@ def test_worker_states_after_stop():
     assert not orch.get_status()["running"]
 
 
+# -- reliability / supervisor (Milestone 6) --
+
+
+def test_status_reports_not_degraded_when_healthy():
+    s = _minimal_settings()
+    orch = PipelineOrchestrator(s)
+    orch.build()
+    orch.start()
+    try:
+        status = orch.get_status()
+        assert "degraded" in status
+        assert status["degraded"] is False
+    finally:
+        orch.stop()
+        orch.wait()
+
+
+def test_supervisor_built_when_reliability_enabled():
+    s = _minimal_settings()
+    s.reliability.enabled = True
+    orch = PipelineOrchestrator(s)
+    orch.build()
+    assert orch._supervisor is not None
+
+
+def test_no_supervisor_when_reliability_disabled():
+    s = _minimal_settings()
+    s.reliability.enabled = False
+    orch = PipelineOrchestrator(s)
+    orch.build()
+    assert orch._supervisor is None
+    # Pipeline still starts and stops cleanly with no supervisor at all.
+    orch.start()
+    orch.stop()
+    orch.wait()
+    assert not orch.get_status()["running"]
+
+
+def test_supervisor_thread_stops_with_pipeline():
+    s = _minimal_settings()
+    orch = PipelineOrchestrator(s)
+    orch.build()
+    orch.start()
+    sup = orch._supervisor
+    assert sup is not None and sup.is_alive()
+    orch.stop()
+    orch.wait()
+    assert not sup.is_alive()
+
+
+def test_restart_swaps_in_fresh_running_worker():
+    # Exercises the real restart mechanics the supervisor drives: rebuild the
+    # worker via its actual builder, on the same queues, and start it.
+    s = _minimal_settings()
+    orch = PipelineOrchestrator(s)
+    orch.build()
+    orch.start()
+    try:
+        old_stt = orch._stt
+        old_queue = orch._segment_queue
+        orch._restart("_stt", orch._build_stt)
+        assert orch._stt is not old_stt  # a genuinely new instance
+        assert orch._stt.is_alive()
+        assert orch._segment_queue is old_queue  # same queue, not rebuilt
+    finally:
+        orch.stop()
+        orch.wait()
+
+
+def test_restart_does_not_start_worker_after_shutdown():
+    # A late restart (e.g. one dispatched just as stop() runs) must not
+    # resurrect a worker into a pipeline that's already torn down.
+    s = _minimal_settings()
+    orch = PipelineOrchestrator(s)
+    orch.build()
+    orch.start()
+    orch.stop()
+    orch.wait()
+    old_stt = orch._stt
+    orch._restart("_stt", orch._build_stt)
+    assert orch._stt is not old_stt
+    assert not orch._stt.is_alive()  # rebuilt but not started
+
+
 # -- ingest_queue property ---------
 
 

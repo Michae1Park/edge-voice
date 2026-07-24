@@ -151,6 +151,39 @@ class HealthSettings(BaseModel):
     stale_segment_warning_s: float = 30.0
 
 
+class ReliabilitySettings(BaseModel):
+    """Milestone 6 supervision + OS watchdog. See docs/BUILDPLAN.md.
+
+    Two independent recovery layers, both configured here:
+      - In-process supervision: restart worker threads that crash or stall,
+        backing off to "degraded" after too many restarts in a window.
+      - OS watchdog: sd_notify WATCHDOG=1 pings so systemd restarts the whole
+        process if it hangs (a case in-process supervision cannot catch).
+        A no-op when not running under systemd (NOTIFY_SOCKET unset), so it's
+        safe in dev/CI/off-device -- see pipeline/systemd_watchdog.py.
+    """
+
+    enabled: bool = True
+    # How often the supervisor scans workers AND pings the watchdog. Keep it
+    # well under systemd's WatchdogSec (typically 2-3x margin) so a single
+    # missed tick doesn't trip a spurious process restart.
+    tick_interval_s: float = Field(default=2.0, gt=0)
+    # A worker that is alive, has work waiting on its input queue, but hasn't
+    # advanced its last-activity timestamp for this long is treated as stalled
+    # (deadlocked / wedged in a native call) and restarted like a crash. Idle
+    # workers with empty input queues are never flagged -- see Supervisor.
+    stall_timeout_s: float = Field(default=10.0, gt=0)
+    # More than max_restarts of one worker within restart_window_s flips it to
+    # "degraded": stop hot-restarting in-process (that just burns CPU on a
+    # constrained board) and let the OS watchdog's full-process restart be the
+    # recovery path instead.
+    max_restarts: int = Field(default=3, ge=0)
+    restart_window_s: float = Field(default=60.0, gt=0)
+    # Emit sd_notify pings. Independent of `enabled` only in that the whole
+    # supervisor must be running for pings to happen; a no-op without systemd.
+    watchdog_enabled: bool = True
+
+
 class DumpSettings(BaseModel):
     """AudioDumpWorker configuration for debugging/verification."""
 
@@ -197,6 +230,7 @@ class Settings(BaseSettings):
     logging_: LoggingSettings = Field(default=LoggingSettings(), alias="logging")
     webui: WebUISettings = WebUISettings()
     health: HealthSettings = HealthSettings()
+    reliability: ReliabilitySettings = ReliabilitySettings()
     dump: DumpSettings = DumpSettings()
     segment_dump: SegmentDumpSettings = SegmentDumpSettings()
     queues: QueuesSettings = QueuesSettings()

@@ -168,6 +168,10 @@ class ChannelRouter(threading.Thread):
         self._lock = threading.Lock()
         self._channel_last_seen: dict[str, float] = {}
         self._repacketizer = Repacketizer(repacketizer_config or RepacketizerConfig())
+        # Monotonic timestamp of the last packet handled, read by the
+        # supervisor's stall check (docs/BUILDPLAN.md Milestone 6). A plain
+        # float write/read is atomic under the GIL, so no lock is needed.
+        self._last_activity = time.monotonic()
 
     def run(self) -> None:
         logger.info("ChannelRouter started for channels: %s", sorted(self._channel_ids))
@@ -176,6 +180,8 @@ class ChannelRouter(threading.Thread):
                 packet = self._ingest_queue.get(timeout=QUEUE_GET_TIMEOUT_S)
             except queue.Empty:
                 continue
+
+            self._last_activity = time.monotonic()
 
             if packet.channel_id not in self._channel_ids:
                 logger.warning("Unknown channel_id %s -- dropping packet", packet.channel_id)
@@ -210,6 +216,11 @@ class ChannelRouter(threading.Thread):
     @property
     def stopping(self) -> bool:
         return self._stop_event.is_set()
+
+    @property
+    def last_activity(self) -> float:
+        """Monotonic time of the last packet handled (for supervisor stall check)."""
+        return self._last_activity
 
     def get_freshness(self, channel_id: str) -> float | None:
         """Return seconds since last seen packet for a channel, or None."""

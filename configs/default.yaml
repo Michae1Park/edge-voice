@@ -91,4 +91,16 @@ webui:
 
 health:
   stale_segment_warning_s: 30   # warn if no segment finalized in this long
+
+reliability:
+  # In-process worker supervision + OS-level watchdog. See docs/BUILDPLAN.md
+  # Milestone 6. The two layers catch different failures: supervision restarts
+  # a thread that crashes or wedges; the watchdog lets systemd restart the
+  # whole process when it hangs (which supervision, wedged alongside it, can't).
+  enabled: true
+  tick_interval_s: 2.0     # supervisor scan + watchdog ping cadence; keep << WatchdogSec
+  stall_timeout_s: 10.0    # alive + input backed up + no progress this long => wedged, restart
+  max_restarts: 3          # more than this many restarts of one worker...
+  restart_window_s: 60.0   # ...within this window flips it to "degraded" (stop hot-restarting)
+  watchdog_enabled: true   # sd_notify pings; a no-op unless launched by systemd (NOTIFY_SOCKET set)
   
