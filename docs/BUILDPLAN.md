@@ -73,13 +73,14 @@ Conflating the two will make restart-count metrics noisy and useless.
 ## STATUS (update this every session, even with one line)
 
 ```
-Last updated: 2026-07-22
+Last updated: 2026-07-24
 Current milestone: none
 Done: ms 0, 1, 2, 3, 4, 5, 6
 In progress: none
 Next action: Milestone 7 — Observability + Health (observability/, health/)
-Blocked on: on-device verification of the watchdog + power-loss cases (see
-            Milestone 6 "Done when" -- the two on-box checks can't run in CI)
+Blocked on: none — Milestone 6's two on-box checks (watchdog restart on a
+            hang, power-loss leaving the previous dump WAV intact) verified
+            on-device
 ```
 
 ---
