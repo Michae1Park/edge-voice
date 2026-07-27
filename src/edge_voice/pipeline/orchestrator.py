@@ -193,6 +193,22 @@ class PipelineOrchestrator:
             degraded = self._supervisor.is_degraded()
         return {"running": running, "degraded": degraded, "workers": workers}
 
+    def queue_depths(self) -> dict[str, int]:
+        """Current `.qsize()` for each queue that was actually built.
+
+        Queues disabled by config (dump/segment_dump) or not yet built are
+        omitted rather than reported as zero, so a caller can tell "not
+        running" from "empty."
+        """
+        queues = {
+            "ingest": self._ingest_queue,
+            "routed": self._routed_queue,
+            "segment": self._segment_queue,
+            "dump": self._dump_queue,
+            "segment_dump": self._segment_dump_queue,
+        }
+        return {name: q.qsize() for name, q in queues.items() if q is not None}
+
     def run(self, duration_s: float | None = None) -> None:
         """Build, start, and run until stopped, Ctrl-C, or duration_s elapses."""
         self.build()

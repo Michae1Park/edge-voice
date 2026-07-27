@@ -98,6 +98,16 @@ class MqttAudioIngest(threading.Thread):
         """Monotonic time of the last MQTT message received."""
         return self._last_activity
 
+    @property
+    def connected(self) -> bool:
+        """Whether the broker connection is currently up.
+
+        Set/cleared by the paho callbacks (_on_connect/_on_disconnect); paho
+        owns reconnect internally, so this only ever reflects the current
+        state, not whether a reconnect attempt is in progress.
+        """
+        return self._connected_event.is_set()
+
     def _on_connect(
         self,
         client: mqtt.Client,

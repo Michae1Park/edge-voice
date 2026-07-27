@@ -104,6 +104,11 @@ class _ChannelState:
     preroll: list = field(default_factory=list)  # list[(timestamp, bytes)]
     segment_chunks: list = field(default_factory=list)  # list[bytes], during active speech
     segment_start_ts: float | None = None
+    # Minted by _new_segment_id whenever segment_start_ts is (re)established
+    # (VAD trigger, or a soft/hard cut re-seeding the tail as a new segment),
+    # so pre-finalization events can already be attributed to the segment
+    # they belong to. None only when no segment is in progress.
+    segment_id: str | None = None
     seg_counter: int = 0
     # time.monotonic() of the last packet seen; drives idle_flush_s.
     last_packet_at: float = 0.0
@@ -277,6 +282,7 @@ class VADWorker(threading.Thread):
             state.segment_start_ts = state.preroll[0][0] if state.preroll else packet.timestamp
             state.preroll.clear()
             state.scores.clear()
+            self._new_segment_id(packet.channel_id, state)
 
         elif result and "end" in result:
             state.triggered = False
@@ -363,25 +369,40 @@ class VADWorker(threading.Thread):
         )
         self._finalize_segment(channel_id, state, end_ts=cut_ts)
 
-        # _finalize_segment cleared these; re-seed from the tail.
+        # _finalize_segment cleared these; re-seed from the tail. The tail is
+        # a new in-progress segment (its own future finalize/log events), so
+        # it gets a fresh id rather than inheriting the one just emitted.
         state.segment_chunks = tail
         state.segment_start_ts = cut_ts
         state.scores = [(i - cut_idx, s) for i, s in state.scores if i >= cut_idx]
+        self._new_segment_id(channel_id, state)
+
+    def _new_segment_id(self, channel_id: str, state: _ChannelState) -> str:
+        """Mint state.segment_id for the in-progress segment just (re)started.
+
+        Called wherever segment_start_ts is (re)established -- VAD trigger and
+        post-cut tail re-seed -- so every event about that segment, including
+        ones logged before it's finalized, can carry the same id.
+        """
+        state.seg_counter += 1
+        state.segment_id = f"{channel_id}-{state.segment_start_ts:.3f}-{state.seg_counter}"
+        return state.segment_id
 
     def _finalize_segment(self, channel_id: str, state: _ChannelState, end_ts: float) -> None:
         if state.segment_start_ts is None or not state.segment_chunks:
             return
-        state.seg_counter += 1
+        segment_id = state.segment_id or self._new_segment_id(channel_id, state)
         segment = SpeechSegment(
             channel_id=channel_id,
             start=state.segment_start_ts,
             end=end_ts,
             audio=b"".join(state.segment_chunks),
-            segment_id=f"{channel_id}-{state.segment_start_ts:.3f}-{state.seg_counter}",
+            segment_id=segment_id,
         )
         fanout_put(segment, self.segment_queue, self.dump_queue)
         state.segment_chunks = []
         state.segment_start_ts = None
+        state.segment_id = None
 
     # ── Helpers ──────────────────────────────────────────────────
 
@@ -451,4 +472,5 @@ class VADWorker(threading.Thread):
             state.preroll.clear()
             state.segment_chunks = []
             state.segment_start_ts = None
+            state.segment_id = None
             state.scores.clear()
