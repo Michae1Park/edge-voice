@@ -43,7 +43,6 @@ Assumptions:
 
 from __future__ import annotations
 
-import logging
 import queue
 import threading
 import time
@@ -52,9 +51,10 @@ from typing import Any, Callable, Iterator
 
 import numpy as np
 
+from edge_voice.observability.logging import get_stage_logger
 from edge_voice.pipeline.models import SpeechSegment, TranscriptEvent
 
-logger = logging.getLogger(__name__)
+logger = get_stage_logger(__name__, stage="stt")
 
 QUEUE_GET_TIMEOUT_S = 0.2
 
@@ -154,6 +154,7 @@ def _make_collector(repetitive_ratio: float, segment_id: str) -> Any:
                         "STTWorker: segment=%s final line was repetitive, "
                         "falling back to best partial",
                         self.seg_id,
+                        extra={"segment_id": self.seg_id},
                     )
                     text = self.best_partial
                 if text:
@@ -226,6 +227,7 @@ class STTWorker(threading.Thread):
                     "STTWorker failed on segment=%s channel=%s",
                     segment.segment_id,
                     segment.channel_id,
+                    extra={"segment_id": segment.segment_id, "channel_id": segment.channel_id},
                 )
         logger.info("STTWorker stopped")
 
@@ -239,6 +241,7 @@ class STTWorker(threading.Thread):
                 "STTWorker: segment=%s produced no text (%.2fs)",
                 segment.segment_id,
                 segment.end - segment.start,
+                extra={"segment_id": segment.segment_id, "channel_id": segment.channel_id},
             )
             return
 

@@ -24,7 +24,6 @@ Assumptions:
 
 from __future__ import annotations
 
-import logging
 import queue
 import threading
 import time
@@ -34,10 +33,11 @@ from typing import Any
 import numpy as np
 import torch
 
+from edge_voice.observability.logging import get_stage_logger
 from edge_voice.pipeline.fanout import fanout_put
 from edge_voice.pipeline.models import AudioPacket, SpeechSegment
 
-logger = logging.getLogger(__name__)
+logger = get_stage_logger(__name__, stage="vad")
 
 
 @dataclass
@@ -191,7 +191,11 @@ class VADWorker(threading.Thread):
             try:
                 self._handle_packet(packet)
             except Exception:
-                logger.exception("VADWorker failed on packet from channel=%s", packet.channel_id)
+                logger.exception(
+                    "VADWorker failed on packet from channel=%s",
+                    packet.channel_id,
+                    extra={"channel_id": packet.channel_id},
+                )
 
             # Also check after a packet, not just on an empty queue: on a
             # duplex call the other channel can keep the queue busy while
@@ -241,6 +245,7 @@ class VADWorker(threading.Thread):
             channel_id,
             reason,
             duration_s,
+            extra={"channel_id": channel_id, "segment_id": state.segment_id},
         )
         self._finalize_segment(channel_id, state, end_ts=state.segment_start_ts + duration_s)
         state.triggered = False
@@ -366,6 +371,7 @@ class VADWorker(threading.Thread):
             cut_ts,
             cut_idx,
             len(tail),
+            extra={"channel_id": channel_id, "segment_id": state.segment_id},
         )
         self._finalize_segment(channel_id, state, end_ts=cut_ts)
 

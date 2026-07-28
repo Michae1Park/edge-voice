@@ -10,16 +10,16 @@ Optionally copies packets to a dump queue for debugging.
 
 from __future__ import annotations
 
-import logging
 import queue
 import threading
 import time
 from dataclasses import dataclass
 
+from edge_voice.observability.logging import get_stage_logger
 from edge_voice.pipeline.fanout import fanout_put
 from edge_voice.pipeline.models import AudioPacket
 
-logger = logging.getLogger(__name__)
+logger = get_stage_logger(__name__, stage="channel")
 
 QUEUE_GET_TIMEOUT_S = 0.2
 QUEUE_PUT_TIMEOUT_S = 0.2
@@ -129,12 +129,14 @@ class Repacketizer:
                 len(outgoing),
                 out_bytes,
                 len(buf),
+                extra={"channel_id": packet.channel_id},
             )
         else:
             logger.debug(
                 "repacketizer out channel=%s emitted=0 carry=%dB",
                 packet.channel_id,
                 len(buf),
+                extra={"channel_id": packet.channel_id},
             )
 
         return outgoing
@@ -184,7 +186,11 @@ class ChannelRouter(threading.Thread):
             self._last_activity = time.monotonic()
 
             if packet.channel_id not in self._channel_ids:
-                logger.warning("Unknown channel_id %s -- dropping packet", packet.channel_id)
+                logger.warning(
+                    "Unknown channel_id %s -- dropping packet",
+                    packet.channel_id,
+                    extra={"channel_id": packet.channel_id},
+                )
                 continue
 
             with self._lock:
@@ -196,6 +202,7 @@ class ChannelRouter(threading.Thread):
                 logger.exception(
                     "Repacketizer rejected packet on channel %s -- dropping",
                     packet.channel_id,
+                    extra={"channel_id": packet.channel_id},
                 )
                 continue
 

@@ -402,6 +402,10 @@ class PipelineOrchestrator:
             raise RuntimeError("Segment queue not initialized")
 
         def _on_transcript(event) -> None:
+            # Closes the segment-lifecycle trace (audio_ingest -> channel ->
+            # vad -> stt -> transcript): the only orchestrator-level log line
+            # carrying stage/channel_id/segment_id, since it's the segment's
+            # final event even though this callback lives here, not in stt/.
             logger.info(
                 "TRANSCRIPT channel=%s segment=%s [%.2f-%.2f] %r",
                 event.channel_id,
@@ -409,6 +413,11 @@ class PipelineOrchestrator:
                 event.start,
                 event.end,
                 event.text,
+                extra={
+                    "stage": "stt",
+                    "channel_id": event.channel_id,
+                    "segment_id": event.segment_id,
+                },
             )
             self._transcript_hub.publish(event)
 

@@ -73,14 +73,15 @@ Conflating the two will make restart-count metrics noisy and useless.
 ## STATUS (update this every session, even with one line)
 
 ```
-Last updated: 2026-07-27
+Last updated: 2026-07-28
 Current milestone: 7 — Observability + Health
 Done: ms 0, 1, 2, 3, 4, 5, 6
-In progress: Milestone 7 spec fleshed out (see plan below); implementation
-             not started
-Next action: plumbing additions first (orchestrator.queue_depths(),
-             MqttAudioIngest.connected, Supervisor restart-budget accessor,
-             VAD segment_id-at-start), then observability/logging.py
+In progress: Milestone 7 item 1 (observability/logging.py) done, plus its
+             plumbing prerequisites (queue_depths, MqttAudioIngest.connected,
+             Supervisor restart-budget accessor, VAD segment_id-at-start).
+             Items 2-4 (metrics.py, health/reporting.py, webui wiring) not
+             started.
+Next action: observability/metrics.py
 Blocked on: none
 ```
 
@@ -494,14 +495,16 @@ consumer. This milestone wires those up rather than adding new config
 sections for logging format / staleness threshold.
 
 **Decisions recorded (2026-07-27):**
-- **Dual-sink logging, not a replacement.** The existing plain-text stderr
-  handler (`%(asctime)s %(levelname)-7s %(name)s: %(message)s`) stays —
-  it's what a human reads via `journalctl`/console on the device. A second
-  handler, gated by `LoggingSettings.is_json`, emits JSON lines to a file
-  (new field `LoggingSettings.json_path`, default e.g. `./logs/edge-voice.jsonl`).
-  Rejected replacing the console handler outright: on a headless-ish edge
-  box, a human occasionally tailing logs directly shouldn't have to pipe
-  through `jq` just to read a status line.
+- **One console handler, not dual-sink — corrected 2026-07-28.** The
+  original plan here was pretty-text-always-on-console plus a second JSON
+  file sink gated by `is_json`. Building it surfaced that
+  `configs/default.yaml` already documents different intent for the field
+  that predates this milestone: `logging: json: true  # false -> pretty
+  console renderer (dev)`. That's a single handler whose *formatter*
+  `is_json` picks — JSON by default, pretty text only when a dev sets
+  `logging.json: false` in `configs/local.yaml`. No `json_path`, no file
+  handler — `observability/logging.py`'s `configure_logging()` just swaps
+  the one `StreamHandler`'s formatter.
 - **`segment_id` is minted at `start`, not at finalize.** Today
   `VADWorker._finalize_segment` is the only place a `segment_id` is
   generated (vad_worker.py:349), so every event before finalization —
@@ -553,16 +556,24 @@ sections for logging format / staleness threshold.
    not just a logging change — anything reading VAD state externally in
    the future benefits too).
 
-1. `observability/logging.py` — the JSON `Formatter` subclass (stdlib
-   `logging`, no new dependency) and the dual-sink wiring in `cli.py`'s
-   `setup_logging()`, reading `Settings.logging`. Structured fields
-   (`channel_id`, `segment_id`, pipeline stage) apply to the
-   **segment-lifecycle path** — `audio_ingest`, `channel`, `vad`, `stt`
-   (~30 of the ~71 existing `logger.*` call sites) — passed via `extra={}`.
-   `pipeline/supervisor.py`, `webui`, `config`, `utils` logs stay plain:
-   they're worker-level or infra-level events, not per-segment ones, and
-   forcing a `channel_id`/`segment_id` on them would mean inventing one
-   that doesn't mean anything.
+1. ✅ `observability/logging.py` — `JsonFormatter` (stdlib `logging`, no
+   new dependency), picked by `configure_logging()` based on
+   `LoggingSettings.is_json` (see decision above); `cli.py` now loads
+   `Settings` before configuring logging (was the other way around) so it
+   can read `settings.logging_`. `get_stage_logger(name, stage)` gives
+   each pipeline-stage module a `LoggerAdapter` that tags every record
+   with `stage`, merging in any `channel_id`/`segment_id` a call site adds
+   via `extra={}` (a custom `_MergingAdapter` — the stdlib default
+   overwrites instead of merging). Wired into `audio_ingest` (all three
+   modules), `channel/router.py`, `vad/vad_worker.py`, `stt/stt_worker.py`
+   — the segment-lifecycle path, ~30 of the ~71 existing `logger.*` call
+   sites, each given `channel_id`/`segment_id` where one was actually in
+   scope at that call site. Plus one call site outside that path:
+   `orchestrator.py`'s `_on_transcript` log line, since it's the segment
+   lifecycle's terminal "→ transcript" event even though it's physically
+   defined in `pipeline/`. `pipeline/supervisor.py`, `webui`, `config`,
+   `utils` logs stay plain otherwise: worker/infra-level events, not
+   per-segment ones.
 2. `observability/metrics.py` — in-memory aggregation of STT latency (see
    above), queue depth (via `orchestrator.queue_depths()`), restart counts
    + budget (via the new `Supervisor` accessor), MQTT status (via the new

@@ -11,7 +11,6 @@ Usage:
 
 from __future__ import annotations
 
-import logging
 import queue
 import threading
 from pathlib import Path
@@ -19,9 +18,10 @@ from pathlib import Path
 import numpy as np
 
 from edge_voice.audio_ingest.atomic_write import atomic_sf_write
+from edge_voice.observability.logging import get_stage_logger
 from edge_voice.pipeline.models import AudioPacket
 
-logger = logging.getLogger(__name__)
+logger = get_stage_logger(__name__, stage="audio_ingest")
 
 BYTES_PER_SAMPLE = 2  # int16 PCM
 
@@ -80,7 +80,13 @@ class AudioDumpWorker(threading.Thread):
         segment = np.frombuffer(bytes(remaining), dtype=np.int16)
         atomic_sf_write(str(path), segment, self._sr, subtype="PCM_16")
         total_s = len(segment) / self._sr
-        logger.info("AudioDumpWorker: wrote %s (%d samples, %.2fs)", path, len(segment), total_s)
+        logger.info(
+            "AudioDumpWorker: wrote %s (%d samples, %.2fs)",
+            path,
+            len(segment),
+            total_s,
+            extra={"channel_id": ch},
+        )
 
     def run(self) -> None:
         self._output_dir.mkdir(parents=True, exist_ok=True)
@@ -112,6 +118,7 @@ class AudioDumpWorker(threading.Thread):
                         packet.channel_id,
                         current_sec,
                         self._segment_secs,
+                        extra={"channel_id": packet.channel_id},
                     )
 
             for segment, out_path in written:
