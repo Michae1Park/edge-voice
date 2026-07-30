@@ -103,4 +103,10 @@ reliability:
   max_restarts: 3          # more than this many restarts of one worker...
   restart_window_s: 60.0   # ...within this window flips it to "degraded" (stop hot-restarting)
   watchdog_enabled: true   # sd_notify pings; a no-op unless launched by systemd (NOTIFY_SOCKET set)
-  
+
+metrics:
+  # Milestone 7: periodic aggregation of queue depths, STT latency, restart
+  # budget, and MQTT connectivity into one structured log line + in-memory
+  # snapshot for health/reporting.py to read later.
+  enabled: true
+  emit_interval_s: 10.0

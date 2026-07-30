@@ -151,6 +151,16 @@ class HealthSettings(BaseModel):
     stale_segment_warning_s: float = 30.0
 
 
+class MetricsSettings(BaseModel):
+    """Milestone 7 aggregation of queue depths, STT latency, restart budget,
+    and MQTT connectivity into one periodic structured log line + in-memory
+    snapshot. See docs/BUILDPLAN.md."""
+
+    enabled: bool = True
+    # How often MetricsCollector aggregates and logs a snapshot.
+    emit_interval_s: float = Field(default=10.0, gt=0)
+
+
 class ReliabilitySettings(BaseModel):
     """Milestone 6 supervision + OS watchdog. See docs/BUILDPLAN.md.
 
@@ -231,6 +241,7 @@ class Settings(BaseSettings):
     webui: WebUISettings = WebUISettings()
     health: HealthSettings = HealthSettings()
     reliability: ReliabilitySettings = ReliabilitySettings()
+    metrics: MetricsSettings = MetricsSettings()
     dump: DumpSettings = DumpSettings()
     segment_dump: SegmentDumpSettings = SegmentDumpSettings()
     queues: QueuesSettings = QueuesSettings()

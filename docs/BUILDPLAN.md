@@ -73,15 +73,21 @@ Conflating the two will make restart-count metrics noisy and useless.
 ## STATUS (update this every session, even with one line)
 
 ```
-Last updated: 2026-07-28
+Last updated: 2026-07-30
 Current milestone: 7 — Observability + Health
 Done: ms 0, 1, 2, 3, 4, 5, 6
-In progress: Milestone 7 item 1 (observability/logging.py) done, plus its
-             plumbing prerequisites (queue_depths, MqttAudioIngest.connected,
-             Supervisor restart-budget accessor, VAD segment_id-at-start).
-             Items 2-4 (metrics.py, health/reporting.py, webui wiring) not
-             started.
-Next action: observability/metrics.py
+In progress: Milestone 7 items 1-2 done. Item 1 (observability/logging.py)
+             plus its plumbing prerequisites (queue_depths,
+             MqttAudioIngest.connected, Supervisor restart-budget accessor,
+             VAD segment_id-at-start). Item 2 (observability/metrics.py):
+             MetricsCollector thread aggregates queue depths, STT latency
+             (new STTWorker.last_latency_s), restart budget, and MQTT
+             connectivity into one structured log line + in-memory
+             snapshot() per MetricsSettings.emit_interval_s; wired into
+             orchestrator.py (built/started/stopped alongside supervisor).
+             See scratch/demo_metrics.py. Items 3-4 (health/reporting.py,
+             webui wiring) not started.
+Next action: health/reporting.py
 Blocked on: none
 ```
 
@@ -574,7 +580,7 @@ sections for logging format / staleness threshold.
    defined in `pipeline/`. `pipeline/supervisor.py`, `webui`, `config`,
    `utils` logs stay plain otherwise: worker/infra-level events, not
    per-segment ones.
-2. `observability/metrics.py` — in-memory aggregation of STT latency (see
+2. ✅ `observability/metrics.py` — in-memory aggregation of STT latency (see
    above), queue depth (via `orchestrator.queue_depths()`), restart counts
    + budget (via the new `Supervisor` accessor), MQTT status (via the new
    `connected` property, when present). Runs as its own worker thread

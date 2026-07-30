@@ -30,6 +30,7 @@ from edge_voice.pipeline.transcript_hub import TranscriptHub
 from edge_voice.vad.vad_worker import VADWorker, VADWorkerConfig
 from edge_voice.stt.stt_worker import STTWorker, STTWorkerConfig
 from edge_voice.pipeline.supervisor import Supervisor, SupervisedTarget
+from edge_voice.observability.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,10 @@ class PipelineOrchestrator:
         # reliability.enabled is False -- the pipeline then behaves exactly as
         # it did before Milestone 6, with no supervisor thread at all.
         self._supervisor: Supervisor | None = None
+        # Milestone 7 metrics aggregation. None when metrics.enabled is False
+        # -- independent of `reliability.enabled` above (Supervisor is optional
+        # input to this, not a hard dependency; see _build_metrics).
+        self._metrics: MetricsCollector | None = None
         self._stop_event = threading.Event()
         self._running = False
         # Doesn't depend on queues/workers, so it's safe to create once here
@@ -105,6 +110,11 @@ class PipelineOrchestrator:
         # over the worker attributes just assigned; started/stopped separately.
         self._supervisor = self._build_supervisor() if self._settings.reliability.enabled else None
 
+        # Metrics aggregation (Milestone 7). Built after supervisor so its
+        # `supervisor` callable can close over the attribute above; started
+        # last / stopped first, same reasoning as supervisor -- see start()/stop().
+        self._metrics = self._build_metrics() if self._settings.metrics.enabled else None
+
         logger.info(
             "Pipeline built with channels: %s", [c.channel_id for c in self._settings.mqtt.channels]
         )
@@ -121,6 +131,10 @@ class PipelineOrchestrator:
         # crash. Stopped FIRST in stop(), symmetrically.
         if self._supervisor is not None:
             self._supervisor.start()
+        # Metrics starts even later -- it reads the supervisor too. Stopped
+        # before it in stop(), symmetrically.
+        if self._metrics is not None:
+            self._metrics.start()
         logger.info("Pipeline started")
 
     def stop(self) -> None:
@@ -136,7 +150,12 @@ class PipelineOrchestrator:
         """
         self._running = False
         self._stop_event.set()
-        # Supervisor down FIRST -- before we start tearing workers down, or it
+        # Metrics down FIRST -- it reads workers and the supervisor, so it
+        # should stop observing before either starts tearing down.
+        if self._metrics is not None:
+            self._signal(self._metrics)
+            self._join(self._metrics)
+        # Supervisor down next -- before we start tearing workers down, or it
         # would see them dying (because we are stopping them) and race to
         # "restart" them mid-shutdown. Joining it also drains any in-flight
         # restart thread, so no worker gets swapped out from under the teardown.
@@ -260,6 +279,26 @@ class PipelineOrchestrator:
             restart_window_s=r.restart_window_s,
             watchdog_enabled=r.watchdog_enabled,
         )
+
+    # ── Metrics (Milestone 7) ──────────────────────────────────
+
+    def _build_metrics(self) -> MetricsCollector:
+        m = self._settings.metrics
+        return MetricsCollector(
+            queue_depths=self.queue_depths,
+            stt_latency_s=lambda: self._w("_stt").last_latency_s,
+            # self._supervisor is built once in build() and never swapped
+            # (unlike the workers), so a direct closure over it is enough --
+            # no need to route through _w().
+            supervisor=lambda: self._supervisor,
+            mqtt_connected=self._mqtt_connected,
+            emit_interval_s=m.emit_interval_s,
+        )
+
+    def _mqtt_connected(self) -> bool | None:
+        """None when the configured audio source isn't MQTT-based (e.g. a
+        WavSource/MicSource in dev/test) -- see MetricsCollector's docstring."""
+        return getattr(self._w("_audio_source"), "connected", None)
 
     def _w(self, attr: str) -> Any:
         """The current worker instance held at `attr`.
