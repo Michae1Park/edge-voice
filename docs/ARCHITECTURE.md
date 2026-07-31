@@ -159,6 +159,8 @@ The pipeline consists of four long-lived worker threads connected by bounded que
 
 This producer/consumer architecture prevents transcription latency from blocking audio ingestion.
 
+For how these threads actually start, stop, and get joined (the `stop_event` pattern, shutdown ordering, and why a wedged worker can't be force-killed), see `THREADS.md`.
+
 ## 5. Reliability
 
 Reliability is a primary design goal, split into two independent layers because
