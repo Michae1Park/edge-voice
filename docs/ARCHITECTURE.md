@@ -241,6 +241,8 @@ Queues are bounded today.
 scoped to the metrics work in §7, specifically so it isn't duplicated across
 both the reliability and observability milestones.
 
+For the exact call chains behind both layers above — `SupervisedTarget`'s field wiring, the tick loop, the restart budget, the kill/rebuild mechanics, and the sd_notify protocol — see `RELIABILITY.md`.
+
 ## 6. Configuration
 
 Configuration is managed through a single typed settings model.
