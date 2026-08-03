@@ -305,6 +305,9 @@ A health endpoint exposes:
 - MQTT connectivity
 - Per-channel activity freshness
 
+For the full `GET /api/status` payload, when each field is null, and how to
+read the kiosk's three status rows, see `HEALTH.md`.
+
 
 
 ## 8. Web UI
