@@ -65,7 +65,11 @@ class JsonFormatter(logging.Formatter):
                 payload[field] = value
         if record.exc_info:
             payload["exc_info"] = self.formatException(record.exc_info)
-        return json.dumps(payload, default=str)
+        # ensure_ascii=False: this app's default language is Korean, and every
+        # transcript line goes through here -- the default (True) would escape
+        # every non-ASCII character into \uXXXX, making logs unreadable for
+        # the app's primary use case. Still valid JSON/UTF-8 either way.
+        return json.dumps(payload, default=str, ensure_ascii=False)
 
 
 class _MergingAdapter(logging.LoggerAdapter[logging.Logger]):
