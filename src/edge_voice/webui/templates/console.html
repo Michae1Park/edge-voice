@@ -229,6 +229,10 @@
      absent while the state is still known). */
   .strip.modules {
     border-bottom: 1px solid var(--line);
+  }
+  #modules {
+    display: flex;
+    align-items: center;
     gap: 18px;
   }
   .mod-name { color: inherit; }
@@ -385,6 +389,15 @@
     outline-offset: 2px;
   }
   .jump[hidden] { display: none; }
+
+  /* ── color legend ───────────────────────────────────── */
+  /* Static key for the dot colors used on the module chips, living in the
+     same status strip they describe -- kiosk has no mouse, so this stays
+     visible rather than living behind a hover/tap affordance. */
+
+  .strip.modules .legend-group {
+    margin-left: auto;
+  }
 </style>
 </head>
 <body>
@@ -412,7 +425,14 @@
     <span class="chip dim" id="chipMetrics">metrics <span class="val" id="metricsVal">&mdash;</span></span>
   </div>
 
-  <div class="strip modules" id="modules"></div>
+  <div class="strip modules">
+    <span class="chip-group" id="modules"></span>
+    <span class="legend-group">
+      <span class="legend"><span class="dot" style="background:var(--live)"></span>running</span>
+      <span class="legend"><span class="dot" style="background:var(--degraded)"></span>degraded / restarting</span>
+      <span class="legend"><span class="dot" style="background:var(--stopped)"></span>stopped / unavailable</span>
+    </span>
+  </div>
 
   <main class="feed" id="feed">
     <div class="feed-inner" id="feedInner">
@@ -452,6 +472,10 @@
       { worker: "ChannelRouter", label: "router", latency: "router" },
       { worker: "VADWorker", label: "vad", latency: "vad_silero" },
       { worker: "STTWorker", label: "stt", latency: "stt" },
+      // Not a pipeline stage -- the thread that restarts the ones above.
+      // Nothing restarts it in turn, so its state is only ever
+      // running/stopped, never restarting/degraded.
+      { worker: "Supervisor", label: "supervisor", latency: null },
     ];
 
     var cursorRow = document.createElement("div");

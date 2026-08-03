@@ -211,6 +211,11 @@ class PipelineOrchestrator:
                 if name in workers and workers[name] == "running":
                     workers[name] = str(info["state"])
             degraded = self._supervisor.is_degraded()
+            # The supervisor watches every worker above but nothing watches
+            # it -- if its own thread dies, `degraded`/restart state here
+            # just freezes at its last tick rather than reporting the loss.
+            # Surface its own liveness the same way as any other worker.
+            workers[self._supervisor.name] = "running" if self._supervisor.is_alive() else "stopped"
         return {"running": running, "degraded": degraded, "workers": workers}
 
     def queue_depths(self) -> dict[str, int]:

@@ -161,7 +161,9 @@ def test_status_surfaces_snapshot_fields_after_a_tick(make_client):
     assert isinstance(body["mqtt_connected"], bool)  # not None: metrics has ticked
     assert body["restarts"]["max"] == 3
     assert body["restarts"]["window_s"] == 60.0
-    assert set(body["restarts"]["counts"]) == set(body["workers"])
+    # "Supervisor" is in `workers` (its own thread liveness) but not in
+    # `restarts.counts` (which tracks the targets it supervises, not itself).
+    assert set(body["restarts"]["counts"]) == set(body["workers"]) - {"Supervisor"}
     assert set(body["latencies"]) == {"router", "vad_silero", "vad_rms_gate", "stt"}
     assert body["status"] == ("warn" if body["mqtt_connected"] is False else "ok")
 
@@ -177,6 +179,7 @@ def test_status_reports_worker_state_even_while_metrics_pending(client):
         "ChannelRouter",
         "VADWorker",
         "STTWorker",
+        "Supervisor",
     }
 
 
