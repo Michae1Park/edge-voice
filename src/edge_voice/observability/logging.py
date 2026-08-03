@@ -45,7 +45,9 @@ _CONSOLE_FORMAT = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
 
 # Set via extra={} at call sites / _MergingAdapter -- not stdlib LogRecord
 # attributes, so each is only present on records that actually set it.
-_STRUCTURED_FIELDS = ("stage", "channel_id", "segment_id")
+# stt_latency_s is orchestrator._on_transcript's addition to the TRANSCRIPT
+# line -- the segment's own STTWorker.last_latency_s, not an aggregate.
+_STRUCTURED_FIELDS = ("stage", "channel_id", "segment_id", "stt_latency_s")
 
 
 class JsonFormatter(logging.Formatter):

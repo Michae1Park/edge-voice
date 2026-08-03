@@ -498,17 +498,23 @@ class PipelineOrchestrator:
             # vad -> stt -> transcript): the only orchestrator-level log line
             # carrying stage/channel_id/segment_id, since it's the segment's
             # final event even though this callback lives here, not in stt/.
+            # last_latency_s is read through _w() rather than captured, but
+            # is always this exact segment's value: _handle_segment sets it
+            # immediately before calling _on_transcript, on the same thread.
+            latency_s = self._w("_stt").last_latency_s
             logger.info(
-                "TRANSCRIPT channel=%s segment=%s [%.2f-%.2f] %r",
+                "TRANSCRIPT channel=%s segment=%s [%.2f-%.2f] latency=%.3fs %r",
                 event.channel_id,
                 event.segment_id,
                 event.start,
                 event.end,
+                latency_s,
                 event.text,
                 extra={
                     "stage": "stt",
                     "channel_id": event.channel_id,
                     "segment_id": event.segment_id,
+                    "stt_latency_s": latency_s,
                 },
             )
             self._transcript_hub.publish(event)
