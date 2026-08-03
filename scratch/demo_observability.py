@@ -113,7 +113,9 @@ def reconstruct_one_segment(json_lines: list[str]) -> None:
         return
 
     # The segment with the most distinct stages is the fullest trace to show off.
-    segment_id, records = max(by_segment.items(), key=lambda kv: len({r.get("stage") for r in kv[1]}))
+    segment_id, records = max(
+        by_segment.items(), key=lambda kv: len({r.get("stage") for r in kv[1]})
+    )
     stages_seen = [r.get("stage") for r in records]
     print(f"Reconstructed trace for segment_id={segment_id!r} (stages seen: {stages_seen})\n")
     for r in records:
@@ -161,7 +163,9 @@ def main() -> None:
     print(f"MQTT connected: {orch._audio_source.connected}")  # type: ignore[union-attr]
     sup = orch._supervisor
     if sup is not None:
-        print(f"restart budget: max_restarts={sup.max_restarts} restart_window_s={sup.restart_window_s}")
+        print(
+            f"restart budget: max_restarts={sup.max_restarts} restart_window_s={sup.restart_window_s}"
+        )
         print(f"supervisor status(): {sup.status()}")
 
     section("4. Reconstructing one segment's trace from the JSON log sink alone")
