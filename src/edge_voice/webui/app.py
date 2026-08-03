@@ -9,8 +9,11 @@ Two different data-access patterns on purpose:
   - Transcripts are a stream of discrete events -> SSE, fed by
     TranscriptHub's per-connection subscriber queue (pipeline/transcript_hub.py).
   - Pipeline/worker status is current state, not a stream -> plain GET,
-    reading orchestrator.get_status() directly. No queue: a queue would just
-    accumulate stale status snapshots a client never drained.
+    reading orchestrator.health() directly. No queue: a queue would just
+    accumulate stale status snapshots a client never drained. Milestone 7
+    moved the *assembly* of that status into health/reporting.py, but the
+    access pattern is unchanged and deliberately so -- it is still current
+    state, built synchronously per request.
 
 No MQTT anywhere in this module -- MQTT stays scoped to the audio_generation
 <-> audio_ingest process boundary it was built for.
@@ -50,8 +53,16 @@ def create_app(orchestrator: PipelineOrchestrator) -> FastAPI:
 
     @app.get("/api/status")
     def status() -> dict:
-        return orchestrator.get_status()
+        # A superset of get_status() -- see health/reporting.py. Left as a
+        # plain def with no run_in_threadpool: FastAPI already runs sync
+        # handlers in its own threadpool, and every input here is
+        # non-blocking (qsize() plus two short lock-guarded dict copies).
+        return orchestrator.health()
 
+    # /api/start and /api/stop keep returning the bare get_status(): they
+    # answer "did this lifecycle call take effect", not "how healthy is the
+    # pipeline", and the full health object needs a metrics tick to be
+    # interesting anyway. The asymmetry with /api/status is deliberate.
     @app.post("/api/start")
     async def start() -> dict:
         # start() itself is near-instant (just spawns threads), but run it

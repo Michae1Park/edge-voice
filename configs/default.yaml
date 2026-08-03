@@ -120,5 +120,11 @@ metrics:
   latency_log_decimals: 3
 
 health:
-  stale_segment_warning_s: 30   # warn if no segment finalized in this long
+  # Flag a channel stale in /api/status if no audio packet has arrived on it
+  # for this long. Measured by ChannelRouter's wall clock (inbound packets),
+  # NOT segment finalization -- the field name predates that decision (see
+  # docs/BUILDPLAN.md Milestone 7). Per-channel only: a stale channel never
+  # turns the kiosk's overall status amber, since between calls every channel
+  # is legitimately stale.
+  stale_segment_warning_s: 30
 

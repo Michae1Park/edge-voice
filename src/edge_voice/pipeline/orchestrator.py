@@ -30,7 +30,8 @@ from edge_voice.pipeline.transcript_hub import TranscriptHub
 from edge_voice.vad.vad_worker import VADWorker, VADWorkerConfig
 from edge_voice.stt.stt_worker import STTWorker, STTWorkerConfig
 from edge_voice.pipeline.supervisor import Supervisor, SupervisedTarget
-from edge_voice.observability.metrics import MetricsCollector
+from edge_voice.observability.metrics import MetricsCollector, MetricsSnapshot
+from edge_voice.health.reporting import build_health_report
 
 logger = logging.getLogger(__name__)
 
@@ -227,6 +228,48 @@ class PipelineOrchestrator:
             "segment_dump": self._segment_dump_queue,
         }
         return {name: q.qsize() for name, q in queues.items() if q is not None}
+
+    def metrics_snapshot(self) -> MetricsSnapshot | None:
+        """Latest MetricsCollector snapshot, or None if there isn't one.
+
+        None means either metrics.enabled is False (no collector exists at
+        all) or no tick has landed yet; health/reporting.py distinguishes the
+        two, since it also knows the enabled flag.
+        """
+        return self._metrics.snapshot() if self._metrics is not None else None
+
+    def channel_freshness(self) -> dict[str, float | None]:
+        """Seconds since the last packet on each channel; None = never seen.
+
+        Router-sourced on purpose (wall clock, "is this channel still sending
+        audio") rather than VADWorker's monotonic idle_flush_s clock -- see
+        the Milestone 7 freshness decision in docs/BUILDPLAN.md.
+
+        Read through _w() rather than a captured reference so a supervisor
+        restart's attribute swap is observed. Note the replacement router
+        starts with an empty last-seen table, so every channel reads None
+        again until its next packet -- that reads as "never seen", not as a
+        dead channel.
+        """
+        router = self._w("_router")
+        if router is None:  # build() hasn't run yet
+            return {c.channel_id: None for c in self._settings.mqtt.channels}
+        return {cid: router.get_freshness(cid) for cid in router.get_channel_ids()}
+
+    def health(self) -> dict:
+        """Assembled health object for webui's GET /api/status.
+
+        A strict superset of get_status(); see health/reporting.py for the
+        shape and for why the assembly lives there rather than here.
+        """
+        return build_health_report(
+            status=self.get_status(),
+            queue_depths=self.queue_depths(),
+            snapshot=self.metrics_snapshot(),
+            metrics_enabled=self._settings.metrics.enabled,
+            freshness=self.channel_freshness(),
+            stale_after_s=self._settings.health.stale_segment_warning_s,
+        )
 
     def run(self, duration_s: float | None = None) -> None:
         """Build, start, and run until stopped, Ctrl-C, or duration_s elapses."""
