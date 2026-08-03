@@ -121,6 +121,15 @@ class Supervisor(threading.Thread):
     def stopping(self) -> bool:
         return self._stop_event.is_set()
 
+    @property
+    def max_restarts(self) -> int:
+        """Restart budget per target, per restart_window_s -- see status()."""
+        return self._max_restarts
+
+    @property
+    def restart_window_s(self) -> float:
+        return self._restart_window_s
+
     def run(self) -> None:
         logger.info(
             "Supervisor started (watching %d worker(s); watchdog=%s)",

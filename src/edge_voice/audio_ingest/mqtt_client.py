@@ -8,7 +8,6 @@ internally -- invisible to pipeline supervision.
 
 from __future__ import annotations
 
-import logging
 import queue
 import threading
 import time
@@ -18,9 +17,10 @@ from typing import Any
 import paho.mqtt.client as mqtt  # type: ignore[import-untyped]
 
 from edge_voice.config.settings import MQTTSettings
+from edge_voice.observability.logging import get_stage_logger
 from edge_voice.pipeline.models import AudioPacket
 
-logger = logging.getLogger(__name__)
+logger = get_stage_logger(__name__, stage="audio_ingest")
 
 QUEUE_PUT_TIMEOUT_S = 0.2
 CONNECT_TIMEOUT_S = 5.0
@@ -98,6 +98,16 @@ class MqttAudioIngest(threading.Thread):
         """Monotonic time of the last MQTT message received."""
         return self._last_activity
 
+    @property
+    def connected(self) -> bool:
+        """Whether the broker connection is currently up.
+
+        Set/cleared by the paho callbacks (_on_connect/_on_disconnect); paho
+        owns reconnect internally, so this only ever reflects the current
+        state, not whether a reconnect attempt is in progress.
+        """
+        return self._connected_event.is_set()
+
     def _on_connect(
         self,
         client: mqtt.Client,
@@ -108,7 +118,12 @@ class MqttAudioIngest(threading.Thread):
     ) -> None:
         for ch in self._channels:
             client.subscribe(ch.topic)
-            logger.info("Subscribed to %s for channel %s", ch.topic, ch.channel_id)
+            logger.info(
+                "Subscribed to %s for channel %s",
+                ch.topic,
+                ch.channel_id,
+                extra={"channel_id": ch.channel_id},
+            )
         for cb in self._on_connected:
             cb()
         self._connected_event.set()
@@ -122,15 +137,21 @@ class MqttAudioIngest(threading.Thread):
 
     def _on_message(self, _client: mqtt.Client, _userdata: Any, msg: mqtt.MQTTMessage) -> None:  # type: ignore[override]
         self._last_activity = time.monotonic()
+        channel_id = self._topic_to_channel.get(msg.topic, msg.topic.split("/")[-1])
 
         if not msg.payload:
-            logger.warning("Empty MQTT audio payload on topic %s", msg.topic)
+            logger.warning(
+                "Empty MQTT audio payload on topic %s", msg.topic, extra={"channel_id": channel_id}
+            )
             return
 
-        channel_id = self._topic_to_channel.get(msg.topic, msg.topic.split("/")[-1])
         packet = AudioPacket(channel_id=channel_id, timestamp=time.time(), samples=msg.payload)
 
         try:
             self._ingest_queue.put(packet, timeout=QUEUE_PUT_TIMEOUT_S)
         except queue.Full:
-            logger.warning("Ingest queue full -- dropping packet from channel %s", channel_id)
+            logger.warning(
+                "Ingest queue full -- dropping packet from channel %s",
+                channel_id,
+                extra={"channel_id": channel_id},
+            )

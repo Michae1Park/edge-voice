@@ -9,6 +9,7 @@ import logging
 import uvicorn
 
 from edge_voice.config.settings import Settings
+from edge_voice.observability.logging import configure_logging
 from edge_voice.pipeline.orchestrator import PipelineOrchestrator
 from edge_voice.webui.app import create_app
 
@@ -27,22 +28,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def setup_logging(debug: bool = False) -> None:
-    """
-    This is the top level logger config shared across all modules
-    """
-    level = logging.DEBUG if debug else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
-    )
-
-
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    setup_logging(debug=args.debug)
 
     settings = Settings.load()
+    # Field is `logging_` (alias "logging") -- Settings avoids a plain
+    # `logging` attribute name on the model.
+    configure_logging(settings.logging_, debug=args.debug)
+
     orchestrator = PipelineOrchestrator(settings)
 
     try:

@@ -8,7 +8,6 @@ soft-cut quality, etc).
 
 from __future__ import annotations
 
-import logging
 import queue
 import threading
 from pathlib import Path
@@ -16,9 +15,10 @@ from pathlib import Path
 import numpy as np
 
 from edge_voice.audio_ingest.atomic_write import atomic_sf_write
+from edge_voice.observability.logging import get_stage_logger
 from edge_voice.pipeline.models import SpeechSegment
 
-logger = logging.getLogger(__name__)
+logger = get_stage_logger(__name__, stage="audio_ingest")
 
 
 class SegmentAudioDumpWorker(threading.Thread):
@@ -73,6 +73,7 @@ class SegmentAudioDumpWorker(threading.Thread):
                     path,
                     seg.segment_id,
                     seg.end - seg.start,
+                    extra={"channel_id": seg.channel_id, "segment_id": seg.segment_id},
                 )
 
             written.clear()

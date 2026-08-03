@@ -318,3 +318,52 @@ def test_multiple_builds_no_error():
     orch.stop()
     orch.build()
     orch.stop()
+
+
+# -- health accessors (Milestone 7) ----
+
+
+def test_channel_freshness_before_build_uses_configured_channels():
+    # build() hasn't run, so there's no router to ask -- fall back to config
+    # so the UI's channel rows don't appear/disappear across lifecycle phases.
+    orch = PipelineOrchestrator(_minimal_settings())
+    assert orch.channel_freshness() == {"rx": None, "tx": None}
+
+
+def test_channel_freshness_after_build_reads_router_channel_ids():
+    orch = PipelineOrchestrator(_minimal_settings())
+    orch.build()
+    freshness = orch.channel_freshness()
+    assert set(freshness) == {"rx", "tx"}
+    assert all(v is None for v in freshness.values())  # no packets seen yet
+
+
+def test_metrics_snapshot_is_none_when_metrics_disabled():
+    s = _minimal_settings()
+    s.metrics.enabled = False
+    orch = PipelineOrchestrator(s)
+    orch.build()
+    assert orch._metrics is None
+    assert orch.metrics_snapshot() is None
+
+
+def test_metrics_snapshot_is_none_before_first_tick():
+    s = _minimal_settings()
+    s.metrics.enabled = True
+    orch = PipelineOrchestrator(s)
+    orch.build()
+    assert orch._metrics is not None
+    assert orch.metrics_snapshot() is None
+
+
+def test_health_is_a_superset_of_get_status():
+    # Detailed assembly is covered in test_health_reporting.py; this only
+    # confirms the orchestrator wires the same values through.
+    orch = PipelineOrchestrator(_minimal_settings())
+    orch.build()
+    status = orch.get_status()
+    health = orch.health()
+    for key, value in status.items():
+        assert health[key] == value
+    assert health["status"] == "down"  # built but not started
+    assert set(health["channels"]) == {"rx", "tx"}

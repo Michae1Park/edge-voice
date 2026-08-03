@@ -73,14 +73,22 @@ Conflating the two will make restart-count metrics noisy and useless.
 ## STATUS (update this every session, even with one line)
 
 ```
-Last updated: 2026-07-24
-Current milestone: none
+Last updated: 2026-07-30
+Current milestone: 7 — Observability + Health
 Done: ms 0, 1, 2, 3, 4, 5, 6
-In progress: none
-Next action: Milestone 7 — Observability + Health (observability/, health/)
-Blocked on: none — Milestone 6's two on-box checks (watchdog restart on a
-            hang, power-loss leaving the previous dump WAV intact) verified
-            on-device
+In progress: Milestone 7 items 1-2 done. Item 1 (observability/logging.py)
+             plus its plumbing prerequisites (queue_depths,
+             MqttAudioIngest.connected, Supervisor restart-budget accessor,
+             VAD segment_id-at-start). Item 2 (observability/metrics.py):
+             MetricsCollector thread aggregates queue depths, STT latency
+             (new STTWorker.last_latency_s), restart budget, and MQTT
+             connectivity into one structured log line + in-memory
+             snapshot() per MetricsSettings.emit_interval_s; wired into
+             orchestrator.py (built/started/stopped alongside supervisor).
+             See scratch/demo_metrics.py. Items 3-4 (health/reporting.py,
+             webui wiring) not started.
+Next action: health/reporting.py
+Blocked on: none
 ```
 
 ---
@@ -484,22 +492,152 @@ not a small patch:
 
 ## Milestone 7 — Observability + Health
 
-1. `observability/logging.py` — structured JSON logs with `channel_id`,
-   pipeline stage, `segment_id` on every relevant event
-2. `observability/metrics.py` — in-memory aggregation of STT latency, queue
-   depth, restart counts, MQTT status, emitted as log events (no Prometheus)
-3. `health/reporting.py` — health object: overall status, per-worker
-   status, queue depths, MQTT connectivity, per-channel activity freshness.
-   Sources worker/restart status from `orchestrator.get_status()` rather
-   than re-deriving it.
-4. Point the Milestone 5 status panel at `health/reporting.py` and
-   `observability/metrics.py` instead of the bare `get_status()` shape it
-   started with.
+**Starting point, not a blank slate:** `config/settings.py` already has two
+stubs anticipating this milestone that nothing reads today —
+`LoggingSettings.is_json` (default `True`) and
+`HealthSettings.stale_segment_warning_s`. `cli.py`'s `setup_logging()`
+ignores `Settings.logging` entirely; nothing constructs a `HealthSettings`
+consumer. This milestone wires those up rather than adding new config
+sections for logging format / staleness threshold.
 
-**Done when:** you can trace one segment's full lifecycle (`audio_ingest` →
-`channel` → `vad` → `stt` → transcript) through logs alone, by `segment_id`
-— and the Milestone 5 UI's status panel reflects the same health/metrics
-data.
+**Decisions recorded (2026-07-27):**
+- **One console handler, not dual-sink — corrected 2026-07-28.** The
+  original plan here was pretty-text-always-on-console plus a second JSON
+  file sink gated by `is_json`. Building it surfaced that
+  `configs/default.yaml` already documents different intent for the field
+  that predates this milestone: `logging: json: true  # false -> pretty
+  console renderer (dev)`. That's a single handler whose *formatter*
+  `is_json` picks — JSON by default, pretty text only when a dev sets
+  `logging.json: false` in `configs/local.yaml`. No `json_path`, no file
+  handler — `observability/logging.py`'s `configure_logging()` just swaps
+  the one `StreamHandler`'s formatter.
+- **`segment_id` is minted at `start`, not at finalize.** Today
+  `VADWorker._finalize_segment` is the only place a `segment_id` is
+  generated (vad_worker.py:349), so every event before finalization —
+  packet ingestion, routing, VAD triggering — has no id to log, only
+  `channel_id`. To satisfy "trace one segment's full lifecycle... by
+  `segment_id`," `_ChannelState` gains a `segment_id: str | None` field,
+  assigned by a small `_new_segment_id(channel_id, state)` helper called
+  both where `triggered` flips true (the `start` branch in
+  `_handle_packet`) and where `_cut_segment` re-seeds the tail into a new
+  in-progress segment (a soft/hard cut is genuinely a new segment starting,
+  not a continuation, so it gets a fresh id there too — the emitted
+  `SpeechSegment.segment_id` for the cut piece keeps its original id;
+  the carried tail gets a new one). `_finalize_segment` reads
+  `state.segment_id` instead of generating one.
+- **Per-channel freshness uses `ChannelRouter.get_freshness()` only**, not
+  `VADWorker`'s internal `last_packet_at`. Both exist, but they're
+  different clocks for different jobs: the router's is wall-clock and
+  answers "is this channel still sending audio" (exactly what health
+  reporting needs, and it's already public — built in Milestone 2). VAD's
+  is monotonic and purely drives `idle_flush_s`. Surfacing both would give
+  the health object two similar-looking numbers that can legitimately
+  disagree, with no clean way to explain why.
+- **STT latency means pure inference time**, not queue-to-transcript.
+  Queue depth (tracked separately, see below) already answers "is there a
+  backlog"; measuring latency end-to-end would just fold that same signal
+  into a second metric. `STTWorker` times its own transcribe call
+  (`time.monotonic()` around the existing call site) and reports that
+  duration — isolates model/inference performance, which is what you'd
+  actually act on differently (model size vs. queue size) if it regressed.
+
+**New plumbing this milestone requires** (none of this exists yet):
+1. `orchestrator.py` — a `queue_depths() -> dict[str, int]` method calling
+   `.qsize()` on `_ingest_queue`/`_routed_queue`/`_segment_queue`/
+   `_dump_queue`/`_segment_dump_queue`. Only `ingest_queue` has a public
+   property today (orchestrator.py:66); the other four are private.
+2. `audio_ingest/mqtt_client.py` — a public `connected` property reading
+   the existing `_connected_event` (already set/cleared in
+   `_on_connect`/`_on_disconnect`; just never exposed), same shape as the
+   existing `stopping`/`last_activity` properties. **Health reporting must
+   treat this as optional**: `orchestrator._audio_source` can be a
+   `WavSource`/`MicSource` with no MQTT involved at all (dev/test runs) —
+   report MQTT connectivity only when the configured source actually has
+   a `connected` attribute, not as a hard requirement.
+3. `pipeline/supervisor.py` — expose `max_restarts`/`restart_window_s` (or
+   a combined ratio) so health/metrics can report "3/3 restarts used,"
+   not just the bare count `status()` already returns.
+4. `vad/vad_worker.py` — `_ChannelState.segment_id` field + the
+   `_new_segment_id` helper described above (this is also new plumbing,
+   not just a logging change — anything reading VAD state externally in
+   the future benefits too).
+
+1. ✅ `observability/logging.py` — `JsonFormatter` (stdlib `logging`, no
+   new dependency), picked by `configure_logging()` based on
+   `LoggingSettings.is_json` (see decision above); `cli.py` now loads
+   `Settings` before configuring logging (was the other way around) so it
+   can read `settings.logging_`. `get_stage_logger(name, stage)` gives
+   each pipeline-stage module a `LoggerAdapter` that tags every record
+   with `stage`, merging in any `channel_id`/`segment_id` a call site adds
+   via `extra={}` (a custom `_MergingAdapter` — the stdlib default
+   overwrites instead of merging). Wired into `audio_ingest` (all three
+   modules), `channel/router.py`, `vad/vad_worker.py`, `stt/stt_worker.py`
+   — the segment-lifecycle path, ~30 of the ~71 existing `logger.*` call
+   sites, each given `channel_id`/`segment_id` where one was actually in
+   scope at that call site. Plus one call site outside that path:
+   `orchestrator.py`'s `_on_transcript` log line, since it's the segment
+   lifecycle's terminal "→ transcript" event even though it's physically
+   defined in `pipeline/`. `pipeline/supervisor.py`, `webui`, `config`,
+   `utils` logs stay plain otherwise: worker/infra-level events, not
+   per-segment ones.
+2. ✅ `observability/metrics.py` — in-memory aggregation of STT latency (see
+   above), queue depth (via `orchestrator.queue_depths()`), restart counts
+   + budget (via the new `Supervisor` accessor), MQTT status (via the new
+   `connected` property, when present). Runs as its own worker thread
+   (`threading.Thread`, same shape as `VADWorker`/`Supervisor`), **not**
+   folded into `Supervisor`'s tick — `Supervisor` is deliberately generic
+   ("a thread died, restart it," per the package-map note above) and has
+   no business knowing about STT latency or MQTT. New `MetricsSettings`
+   (`enabled: bool`, `emit_interval_s: float`, mirroring
+   `ReliabilitySettings.tick_interval_s`) controls its cadence; on each
+   tick it logs one aggregated snapshot as a structured event (no
+   Prometheus, per the existing out-of-scope note) and keeps the latest
+   snapshot in memory for `health/reporting.py` to read directly (no need
+   to round-trip through logs for that).
+3. `health/reporting.py` — health object: overall status + per-worker
+   state (from `orchestrator.get_status()`, unchanged — don't re-derive),
+   queue depths + MQTT connectivity + restart budget (from
+   `metrics.py`'s latest snapshot), per-channel freshness (from
+   `ChannelRouter.get_freshness()` for each `get_channel_ids()`, flagged
+   stale past `HealthSettings.stale_segment_warning_s` — the other
+   currently-dead settings stub this milestone wires up).
+4. `webui/app.py`'s `/api/status` returns this richer object instead of
+   the bare `orchestrator.get_status()` passthrough it is today — as a
+   superset of the current `{running, degraded, workers}` shape so nothing
+   already reading those three fields breaks. **This is its own scope
+   item, not a free repoint**: `console.html`'s `setStatus()` currently
+   only branches on `.running`/`.degraded` for the one status pill: it
+   needs new DOM/JS to actually render queue depths, MQTT state, and
+   per-channel freshness, not just a richer payload nobody looks at.
+
+**Scope, sized against Milestone 6** (comparable: a new package from
+scratch, `pipeline/supervisor.py`, was the largest piece there; here it's
+two new packages, `observability/` and `health/`, both currently empty —
+`health/` has no `__init__.py` yet, `observability/` doesn't exist at all):
+
+| Piece | Scope |
+|---|---|
+| Plumbing additions (queue_depths, mqtt.connected, supervisor budget accessor, VAD segment_id-at-start) | Small each, but four separate call sites across four files — same shape as Milestone 6's "last-activity timestamp per worker" item |
+| `observability/logging.py` + `cli.py` wiring | Moderate — new JSON formatter is small, but touching ~30 call sites to pass `extra={channel_id, segment_id, stage}` is the bulk of the diff |
+| `observability/metrics.py` (new) | Moderate — new worker thread + `MetricsSettings`, but each metric it aggregates already has a source once the plumbing above lands |
+| `health/reporting.py` (new) | Small — mostly assembly of `get_status()` + `metrics.py`'s snapshot + `get_freshness()`, no new computation of its own |
+| `webui/app.py` + `console.html` | Moderate — endpoint change is small, but rendering queue/MQTT/freshness state in the UI is new JS, not a repoint |
+| Tests | New `test_observability_logging.py`, `test_metrics.py`, `test_health_reporting.py`, plus updates to `test_orchestrator.py`/`test_webui_app.py` for the richer status shape |
+
+**Done when:**
+- Deliberately tracing one segment through a live run — `audio_ingest`
+  receives its first packet, `channel` routes it, `vad` triggers/finalizes
+  it, `stt` transcribes it — can be reconstructed from the JSON log sink
+  alone by filtering on one `segment_id`, from VAD trigger onward (the
+  provisional id assigned at `start` covers this; pre-VAD-trigger packet
+  logs are necessarily `channel_id`-only, since no segment exists yet).
+- `GET /api/status` reports queue depths, MQTT connectivity (when the
+  audio source is MQTT-based), restart budget, and per-channel freshness
+  — and the kiosk UI visibly renders at least one of each (not just
+  carries it in the JSON unused).
+- Killing the MQTT broker mid-run and letting a worker restart both show
+  up in the health object within one `MetricsSettings.emit_interval_s`
+  tick, without needing to grep logs to notice.
 
 ---
 

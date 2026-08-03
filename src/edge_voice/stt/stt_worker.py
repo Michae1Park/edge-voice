@@ -43,7 +43,6 @@ Assumptions:
 
 from __future__ import annotations
 
-import logging
 import queue
 import threading
 import time
@@ -52,9 +51,10 @@ from typing import Any, Callable, Iterator
 
 import numpy as np
 
+from edge_voice.observability.logging import get_stage_logger
 from edge_voice.pipeline.models import SpeechSegment, TranscriptEvent
 
-logger = logging.getLogger(__name__)
+logger = get_stage_logger(__name__, stage="stt")
 
 QUEUE_GET_TIMEOUT_S = 0.2
 
@@ -154,6 +154,7 @@ def _make_collector(repetitive_ratio: float, segment_id: str) -> Any:
                         "STTWorker: segment=%s final line was repetitive, "
                         "falling back to best partial",
                         self.seg_id,
+                        extra={"segment_id": self.seg_id},
                     )
                     text = self.best_partial
                 if text:
@@ -193,6 +194,17 @@ class STTWorker(threading.Thread):
         # supervisor's stall check (docs/BUILDPLAN.md Milestone 6). A plain
         # float write/read is atomic under the GIL, so no lock is needed.
         self._last_activity = time.monotonic()
+        # Wall-clock duration of the most recent _transcribe() call -- pure
+        # inference time, not queue-to-transcript (queue_depths() already
+        # answers "is there a backlog"; see Milestone 7 decision in
+        # docs/BUILDPLAN.md). None until the first segment is transcribed.
+        self._last_latency_s: float | None = None
+        # Per-channel view of the same latency, for observability/metrics.py.
+        # Needs its own lock (unlike the plain float above): a dict insert
+        # (first segment on a channel) can resize the table, and
+        # MetricsCollector's cross-thread dict(...) copy would race with that.
+        self._channel_latency_lock = threading.Lock()
+        self._channel_latency_s: dict[str, float] = {}
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -205,6 +217,18 @@ class STTWorker(threading.Thread):
     def last_activity(self) -> float:
         """Monotonic time of the last segment handled (for supervisor stall check)."""
         return self._last_activity
+
+    @property
+    def last_latency_s(self) -> float | None:
+        """Inference time of the most recent _transcribe() call, or None if
+        no segment has been transcribed yet (for observability/metrics.py)."""
+        return self._last_latency_s
+
+    def channel_latencies_s(self) -> dict[str, float]:
+        """Per-channel view of the same latency last_latency_s reports in
+        aggregate (for observability/metrics.py)."""
+        with self._channel_latency_lock:
+            return dict(self._channel_latency_s)
 
     def run(self) -> None:
         logger.info("STTWorker started")
@@ -226,19 +250,28 @@ class STTWorker(threading.Thread):
                     "STTWorker failed on segment=%s channel=%s",
                     segment.segment_id,
                     segment.channel_id,
+                    extra={"segment_id": segment.segment_id, "channel_id": segment.channel_id},
                 )
         logger.info("STTWorker stopped")
 
     # ── Per-segment handling ────────────────────────────────────
 
     def _handle_segment(self, segment: SpeechSegment) -> None:
-        text = self._transcribe(self._get_transcriber(), segment)
+        # Lazy model load excluded from the timing below: a one-time cost,
+        # not inference.
+        transcriber = self._get_transcriber()
+        start = time.monotonic()
+        text = self._transcribe(transcriber, segment)
+        self._last_latency_s = time.monotonic() - start
+        with self._channel_latency_lock:
+            self._channel_latency_s[segment.channel_id] = self._last_latency_s
 
         if not text:
             logger.debug(
                 "STTWorker: segment=%s produced no text (%.2fs)",
                 segment.segment_id,
                 segment.end - segment.start,
+                extra={"segment_id": segment.segment_id, "channel_id": segment.channel_id},
             )
             return
 

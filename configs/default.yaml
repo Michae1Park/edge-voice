@@ -22,7 +22,7 @@ dump:
   segment_secs: 10
 
 segment_dump:
-  enabled: true
+  enabled: false
   output_dir: "./dumped_vad_segments"
 
 queues:
@@ -80,17 +80,10 @@ stt:
   save_input_wav_path: ""
   return_audio_data: false
 
-logging:
-  level: "INFO"
-  json: true     # false -> pretty console renderer (dev)
-
 webui:
   host: "127.0.0.1"  # no network on target device; kiosk browser is local-only
   port: 8080
   transcript_backlog: 50
-
-health:
-  stale_segment_warning_s: 30   # warn if no segment finalized in this long
 
 reliability:
   # In-process worker supervision + OS-level watchdog. See docs/BUILDPLAN.md
@@ -103,4 +96,35 @@ reliability:
   max_restarts: 3          # more than this many restarts of one worker...
   restart_window_s: 60.0   # ...within this window flips it to "degraded" (stop hot-restarting)
   watchdog_enabled: true   # sd_notify pings; a no-op unless launched by systemd (NOTIFY_SOCKET set)
-  
+
+logging:
+  enabled: true           # master switch -- false disables ALL logging process-wide (perf)
+  console_enabled: true   # write to console/stderr (captured by journald under systemd)
+  file_enabled: true      # also write to a rotating file in output_dir, independent of console
+  level: "INFO"           # minimum level emitted; --debug on the CLI overrides this to DEBUG
+  json: true              # console format: structured JSON, or false for pretty text (dev only)
+  output_dir: "./logs"    # rotating log file lives here; auto-created; only used if file_enabled
+  max_bytes: 10000000     # ~10MB per log file before rotating to a new one
+  backup_count: 5         # how many rotated (old) log files to keep before deleting the oldest
+
+metrics:
+  # Milestone 7: periodic aggregation of queue depths, STT latency, restart
+  # budget, and MQTT connectivity into one structured log line + in-memory
+  # snapshot for health/reporting.py to read later.
+  enabled: true
+  emit_interval_s: 10.0
+  # Decimal places the per-channel latency dicts (vad_silero, vad_rms_gate,
+  # router_repacketize, stt_channel) are rounded to in the log line -- full
+  # precision is always kept in the in-memory snapshot regardless. Router/VAD
+  # readings are often sub-millisecond, so they'll show as 0.0 at the default.
+  latency_log_decimals: 3
+
+health:
+  # Flag a channel stale in /api/status if no audio packet has arrived on it
+  # for this long. Measured by ChannelRouter's wall clock (inbound packets),
+  # NOT segment finalization -- the field name predates that decision (see
+  # docs/BUILDPLAN.md Milestone 7). Per-channel only: a stale channel never
+  # turns the kiosk's overall status amber, since between calls every channel
+  # is legitimately stale.
+  stale_segment_warning_s: 30
+

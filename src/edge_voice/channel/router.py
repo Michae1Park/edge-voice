@@ -10,16 +10,16 @@ Optionally copies packets to a dump queue for debugging.
 
 from __future__ import annotations
 
-import logging
 import queue
 import threading
 import time
 from dataclasses import dataclass
 
+from edge_voice.observability.logging import get_stage_logger
 from edge_voice.pipeline.fanout import fanout_put
 from edge_voice.pipeline.models import AudioPacket
 
-logger = logging.getLogger(__name__)
+logger = get_stage_logger(__name__, stage="channel")
 
 QUEUE_GET_TIMEOUT_S = 0.2
 QUEUE_PUT_TIMEOUT_S = 0.2
@@ -129,12 +129,14 @@ class Repacketizer:
                 len(outgoing),
                 out_bytes,
                 len(buf),
+                extra={"channel_id": packet.channel_id},
             )
         else:
             logger.debug(
                 "repacketizer out channel=%s emitted=0 carry=%dB",
                 packet.channel_id,
                 len(buf),
+                extra={"channel_id": packet.channel_id},
             )
 
         return outgoing
@@ -167,6 +169,12 @@ class ChannelRouter(threading.Thread):
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
         self._channel_last_seen: dict[str, float] = {}
+        # Most recent repacketize() duration per channel, for
+        # observability/metrics.py -- guarded by the same self._lock as
+        # _channel_last_seen above (same class of hazard: MetricsCollector
+        # reads a full dict(...) copy cross-thread, which needs protection
+        # against a concurrent new-key insert resizing the table).
+        self._repacketize_latency_s: dict[str, float] = {}
         self._repacketizer = Repacketizer(repacketizer_config or RepacketizerConfig())
         # Monotonic timestamp of the last packet handled, read by the
         # supervisor's stall check (docs/BUILDPLAN.md Milestone 6). A plain
@@ -184,20 +192,28 @@ class ChannelRouter(threading.Thread):
             self._last_activity = time.monotonic()
 
             if packet.channel_id not in self._channel_ids:
-                logger.warning("Unknown channel_id %s -- dropping packet", packet.channel_id)
+                logger.warning(
+                    "Unknown channel_id %s -- dropping packet",
+                    packet.channel_id,
+                    extra={"channel_id": packet.channel_id},
+                )
                 continue
 
             with self._lock:
                 self._channel_last_seen[packet.channel_id] = time.time()
 
+            t0 = time.monotonic()
             try:
                 out_packets = self._repacketizer.process(packet)
             except ValueError:
                 logger.exception(
                     "Repacketizer rejected packet on channel %s -- dropping",
                     packet.channel_id,
+                    extra={"channel_id": packet.channel_id},
                 )
                 continue
+            with self._lock:
+                self._repacketize_latency_s[packet.channel_id] = time.monotonic() - t0
 
             for out_packet in out_packets:
                 fanout_put(
@@ -229,6 +245,13 @@ class ChannelRouter(threading.Thread):
         if last is None:
             return None
         return time.time() - last
+
+    def repacketize_latencies_s(self) -> dict[str, float]:
+        """Most recent repacketize() duration per channel (for
+        observability/metrics.py). Only recorded on success -- a rejected
+        packet has no meaningful repacketize latency."""
+        with self._lock:
+            return dict(self._repacketize_latency_s)
 
     def get_channel_ids(self) -> list[str]:
         """Return the list of known valid channel IDs."""

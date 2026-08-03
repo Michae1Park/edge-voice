@@ -147,9 +147,12 @@
     transition: color 0.2s ease;
   }
   .live-pill.stopped { color: var(--stopped); }
-  /* Pipeline running, but the supervisor has flagged a worker degraded
-     (crash-looping past its restart budget). Distinct from stopped: work may
-     still be flowing on the healthy workers, so it's a warning, not an off. */
+  /* Pipeline running, but something is wrong -- either the supervisor has
+     flagged a worker degraded (crash-looping past its restart budget) or the
+     MQTT broker is unreachable. Distinct from stopped: work may still be
+     flowing, so it's a warning, not an off. Driven by /api/status's
+     top-level `status` field ("warn"), not by `degraded` alone.
+     Channel staleness deliberately does NOT land here -- see health/reporting.py. */
   .live-pill.degraded { color: var(--degraded); }
 
   .dot {
@@ -173,6 +176,77 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.35; }
   }
+
+  /* ── status strip ───────────────────────────────────── */
+  /* Health detail from /api/status (Milestone 7). The pill above is the
+     one-glance verdict; this row is the "why". */
+
+  .strip {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    height: 26px;
+    padding: 0 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow-x: auto;
+    z-index: 2;
+  }
+
+  .chip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex: 0 0 auto;
+  }
+  .chip-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 0 0 auto;
+  }
+  /* Something is wrong with this specific signal (MQTT down, channel gone
+     stale). Per-signal only -- a stale channel never colours the pill. */
+  .chip.warn { color: var(--degraded); }
+  /* Signal unavailable rather than bad: metrics off, or no tick yet. */
+  .chip.dim { color: var(--ink-faint); }
+  /* Fallback so an unrecognised channel id isn't an invisible dot; .dot.rx
+     and .dot.tx override this. */
+  .chip .dot { background: var(--ink-faint); }
+  .chip.warn .dot { background: var(--degraded); }
+  .chip .val { color: var(--ink); }
+  .chip.dim .val, .chip.warn .val { color: inherit; }
+
+  /* Second strip: one chip per pipeline module. State comes from `workers`
+     (always live); latency from `latencies` (last metrics tick, so it can be
+     absent while the state is still known). */
+  .strip.modules {
+    border-bottom: 1px solid var(--line);
+  }
+  #modules {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+  .mod-name { color: inherit; }
+  .mod-lat {
+    color: var(--ink-faint);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .chip.running { color: var(--ink-dim); }
+  .chip.running .dot { background: var(--live); }
+  .chip.restarting, .chip.mod-degraded { color: var(--degraded); }
+  .chip.restarting .dot, .chip.mod-degraded .dot { background: var(--degraded); }
+  .chip.stopped { color: var(--stopped); }
+  .chip.stopped .dot { background: var(--stopped); }
 
   /* ── feed ───────────────────────────────────────────── */
 
@@ -315,6 +389,15 @@
     outline-offset: 2px;
   }
   .jump[hidden] { display: none; }
+
+  /* ── color legend ───────────────────────────────────── */
+  /* Static key for the dot colors used on the module chips, living in the
+     same status strip they describe -- kiosk has no mouse, so this stays
+     visible rather than living behind a hover/tap affordance. */
+
+  .strip.modules .legend-group {
+    margin-left: auto;
+  }
 </style>
 </head>
 <body>
@@ -335,6 +418,22 @@
     </div>
   </header>
 
+  <div class="strip" id="strip">
+    <span class="chip dim" id="chipMqtt"><span class="dot" id="mqttDot"></span>mqtt <span class="val" id="mqttVal">&mdash;</span></span>
+    <span class="chip dim" id="chipQueues">q <span class="val" id="queueVal">&mdash;</span></span>
+    <span class="chip-group" id="channelChips"></span>
+    <span class="chip dim" id="chipMetrics">metrics <span class="val" id="metricsVal">&mdash;</span></span>
+  </div>
+
+  <div class="strip modules">
+    <span class="chip-group" id="modules"></span>
+    <span class="legend-group">
+      <span class="legend"><span class="dot" style="background:var(--live)"></span>running</span>
+      <span class="legend"><span class="dot" style="background:var(--degraded)"></span>degraded / restarting</span>
+      <span class="legend"><span class="dot" style="background:var(--stopped)"></span>stopped / unavailable</span>
+    </span>
+  </div>
+
   <main class="feed" id="feed">
     <div class="feed-inner" id="feedInner">
       <div class="empty" id="empty">no transcripts yet — waiting for speech</div>
@@ -353,6 +452,31 @@
     var clockEl = document.getElementById("clock");
     var livePill = document.getElementById("livePill");
     var liveLabel = document.getElementById("liveLabel");
+    var chipMqtt = document.getElementById("chipMqtt");
+    var mqttVal = document.getElementById("mqttVal");
+    var chipQueues = document.getElementById("chipQueues");
+    var queueVal = document.getElementById("queueVal");
+    var chipMetrics = document.getElementById("chipMetrics");
+    var metricsVal = document.getElementById("metricsVal");
+    var channelChips = document.getElementById("channelChips");
+    var modulesEl = document.getElementById("modules");
+    var chanCache = {};
+    var modCache = {};
+    var DASH = "—";
+
+    // Pipeline order, with the short label shown on the kiosk and which
+    // `latencies` key (if any) belongs to that module. MqttAudioIngest is a
+    // source with nothing to time -- it has no latency entry by design.
+    var MODULES = [
+      { worker: "MqttAudioIngest", label: "ingest", latency: null },
+      { worker: "ChannelRouter", label: "router", latency: "router" },
+      { worker: "VADWorker", label: "vad", latency: "vad_silero" },
+      { worker: "STTWorker", label: "stt", latency: "stt" },
+      // Not a pipeline stage -- the thread that restarts the ones above.
+      // Nothing restarts it in turn, so its state is only ever
+      // running/stopped, never restarting/degraded.
+      { worker: "Supervisor", label: "supervisor", latency: null },
+    ];
 
     var cursorRow = document.createElement("div");
     cursorRow.className = "cursor-row";
@@ -445,28 +569,157 @@
 
     // ── pipeline status poll ───────────────────────────────
 
-    // Three states, not two: a degraded pipeline is still running (some
+    // Chip helper: set text + which of warn/dim (if either) applies.
+    function setChip(chip, valEl, text, state) {
+      valEl.textContent = text;
+      chip.classList.toggle("warn", state === "warn");
+      chip.classList.toggle("dim", state === "dim");
+    }
+
+    // Freshness reads as seconds since the last packet on that channel.
+    // Clamped at 0 because the router's clock is wall-clock (time.time()),
+    // so a clock step could otherwise render a negative age.
+    function formatAge(seconds) {
+      if (seconds === null || seconds === undefined) return DASH;
+      var s = Math.max(0, seconds);
+      return s < 10 ? s.toFixed(1) + "s" : Math.round(s) + "s";
+    }
+
+    function renderChannels(channels) {
+      if (!channels) {
+        for (var cached in chanCache) {
+          setChip(chanCache[cached].chip, chanCache[cached].val, DASH, "dim");
+        }
+        return;
+      }
+      // Built from the payload rather than hardcoded rx/tx: the channel set
+      // is config-driven, so hardcoding would contradict the server.
+      for (var id in channels) {
+        var entry = chanCache[id];
+        if (!entry) {
+          var chip = document.createElement("span");
+          chip.className = "chip";
+          chip.innerHTML = '<span class="dot ' + id + '"></span>' + id + ' <span class="val"></span>';
+          channelChips.appendChild(chip);
+          entry = chanCache[id] = { chip: chip, val: chip.querySelector(".val") };
+        }
+        var info = channels[id] || {};
+        var seen = info.freshness_s !== null && info.freshness_s !== undefined;
+        setChip(entry.chip, entry.val, formatAge(info.freshness_s), info.stale ? "warn" : seen ? null : "dim");
+      }
+    }
+
+    // Latency spans microseconds (router repacketize) to hundreds of
+    // milliseconds (STT inference), so fixed units would render most stages
+    // as 0. Scale per value instead.
+    function formatLatency(seconds) {
+      if (seconds === null || seconds === undefined) return DASH;
+      if (seconds < 0.001) return Math.round(seconds * 1e6) + "µs";
+      if (seconds < 1) return (seconds * 1000).toFixed(seconds < 0.01 ? 2 : 0) + "ms";
+      return seconds.toFixed(2) + "s";
+    }
+
+    // One number per module on a kiosk this size, so show the slowest
+    // channel: it's the one that would breach a latency budget first.
+    function worstLatency(byChannel) {
+      if (!byChannel) return null;
+      var worst = null;
+      for (var id in byChannel) {
+        if (worst === null || byChannel[id] > worst) worst = byChannel[id];
+      }
+      return worst;
+    }
+
+    function renderModules(data) {
+      var workers = data.workers || {};
+      var latencies = data.latencies;
+      for (var i = 0; i < MODULES.length; i++) {
+        var mod = MODULES[i];
+        var entry = modCache[mod.worker];
+        if (!entry) {
+          var chip = document.createElement("span");
+          chip.className = "chip";
+          chip.innerHTML =
+            '<span class="dot"></span><span class="mod-name">' + mod.label +
+            '</span><span class="mod-lat"></span>';
+          modulesEl.appendChild(chip);
+          entry = modCache[mod.worker] = { chip: chip, lat: chip.querySelector(".mod-lat") };
+        }
+        // State is always live, even when the metrics tick hasn't landed.
+        var state = workers[mod.worker] || null;
+        entry.chip.classList.toggle("running", state === "running");
+        entry.chip.classList.toggle("restarting", state === "restarting");
+        entry.chip.classList.toggle("mod-degraded", state === "degraded");
+        entry.chip.classList.toggle("stopped", state === "stopped");
+        entry.chip.classList.toggle("dim", !state);
+        // Latency is snapshot-derived, so it can be absent while state isn't.
+        entry.lat.textContent = mod.latency && latencies
+          ? " " + formatLatency(worstLatency(latencies[mod.latency]))
+          : "";
+      }
+    }
+
+    function renderStrip(data) {
+      var mqtt = data.mqtt_connected;
+      setChip(chipMqtt, mqttVal,
+        mqtt === true ? "ok" : mqtt === false ? "down" : DASH,
+        mqtt === false ? "warn" : mqtt === true ? null : "dim");
+
+      var depths = data.queue_depths;
+      var parts = [];
+      for (var name in depths || {}) parts.push(name + ":" + depths[name]);
+      setChip(chipQueues, queueVal, parts.length ? parts.join(" ") : DASH, parts.length ? null : "dim");
+
+      var metrics = data.metrics || {};
+      var ok = metrics.state === "ok";
+      setChip(chipMetrics, metricsVal,
+        metrics.state === "disabled" ? "off"
+          : metrics.state === "pending" ? "waiting"
+          : ok ? formatAge(metrics.age_s) + " ago" : DASH,
+        ok ? null : "dim");
+
+      renderChannels(data.channels);
+      renderModules(data);
+    }
+
+    // Three states, not two: a warning pipeline is still running (some
     // workers healthy) but a worker has crash-looped past its restart budget,
-    // so it must read distinctly from both "live" and "stopped".
+    // or MQTT is unreachable -- so it must read distinctly from both "live"
+    // and "stopped". Keyed off the server's `status` verdict, with a
+    // `running` fallback for the fetch-failure payload below.
     function setStatus(data) {
-      var running = !!data.running;
-      var degraded = running && !!data.degraded;
-      var stopped = !running;
+      var verdict = data.status || (data.running ? "ok" : "down");
+      var stopped = verdict === "down";
+      var warn = verdict === "warn";
       livePill.classList.toggle("stopped", stopped);
-      livePill.classList.toggle("degraded", degraded);
+      livePill.classList.toggle("degraded", warn);
       blink.classList.toggle("stopped", stopped);
-      liveLabel.textContent = stopped ? "stopped" : degraded ? "degraded" : "live";
+
+      var mqttDown = data.mqtt_connected === false;
+      liveLabel.textContent = stopped
+        ? "stopped"
+        : data.degraded
+        ? "degraded"
+        : mqttDown
+        ? "mqtt down"
+        : "live";
       cursorText.textContent = stopped
         ? "pipeline stopped"
-        : degraded
+        : data.degraded
         ? "running — worker degraded"
+        : mqttDown
+        ? "running — mqtt disconnected"
         : "waiting for next line";
+
+      renderStrip(data);
     }
 
     function pollStatus() {
       fetch("/api/status")
         .then(function (r) { return r.json(); })
         .then(function (data) { setStatus(data); })
+        // No payload to render on a failed poll: blank the strip rather than
+        // leaving stale values that look current.
         .catch(function () { setStatus({ running: false }); });
     }
     pollStatus();
