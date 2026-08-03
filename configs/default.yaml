@@ -54,11 +54,11 @@ vad:
   # buffers unbounded and the pipeline emits nothing until the speaker
   # stops, so this bounds emission latency as much as segment length.
   # Ordinary turn-taking never reaches soft_cut_s and pays nothing.
-  segment_limits_enabled: false
-  soft_cut_s: 5.0            # past this, look for a natural pause to cut at
+  segment_limits_enabled: true
+  soft_cut_s: 2.0            # past this, look for a natural pause to cut at
   soft_cut_lookahead_s: 1.0  # how far back to scan for that pause
   soft_cut_min_dip: 0.10     # dip must be this far below the current score
-  max_segment_s: 7.0         # hard cap if no suitable pause is found
+  max_segment_s: 3.0         # hard cap if no suitable pause is found
 
 stt:
   # language + model_arch select the model together.
