@@ -22,7 +22,7 @@ dump:
   segment_secs: 10
 
 segment_dump:
-  enabled: true
+  enabled: false
   output_dir: "./dumped_vad_segments"
 
 queues:
@@ -80,17 +80,10 @@ stt:
   save_input_wav_path: ""
   return_audio_data: false
 
-logging:
-  level: "INFO"
-  json: true     # false -> pretty console renderer (dev)
-
 webui:
   host: "127.0.0.1"  # no network on target device; kiosk browser is local-only
   port: 8080
   transcript_backlog: 50
-
-health:
-  stale_segment_warning_s: 30   # warn if no segment finalized in this long
 
 reliability:
   # In-process worker supervision + OS-level watchdog. See docs/BUILDPLAN.md
@@ -103,6 +96,19 @@ reliability:
   max_restarts: 3          # more than this many restarts of one worker...
   restart_window_s: 60.0   # ...within this window flips it to "degraded" (stop hot-restarting)
   watchdog_enabled: true   # sd_notify pings; a no-op unless launched by systemd (NOTIFY_SOCKET set)
+
+logging:
+  enabled: true           # master switch -- false disables ALL logging process-wide (perf)
+  console_enabled: true   # write to console/stderr (captured by journald under systemd)
+  file_enabled: true      # also write to a rotating file in output_dir, independent of console
+  level: "INFO"           # minimum level emitted; --debug on the CLI overrides this to DEBUG
+  json: true              # console format: structured JSON, or false for pretty text (dev only)
+  output_dir: "./logs"    # rotating log file lives here; auto-created; only used if file_enabled
+  max_bytes: 10000000     # ~10MB per log file before rotating to a new one
+  backup_count: 5         # how many rotated (old) log files to keep before deleting the oldest
+
+health:
+  stale_segment_warning_s: 30   # warn if no segment finalized in this long
 
 metrics:
   # Milestone 7: periodic aggregation of queue depths, STT latency, restart

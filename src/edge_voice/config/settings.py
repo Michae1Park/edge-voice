@@ -131,8 +131,28 @@ class STTSettings(BaseModel):
 
 
 class LoggingSettings(BaseModel):
+    # Master switch. False disables logging process-wide via logging.disable()
+    # -- every logger.log() call becomes a cheap no-op check, skipped before
+    # any formatting/handler work happens, regardless of the two sinks below.
+    # For performance-sensitive runs where logging overhead itself matters.
+    enabled: bool = True
+    # Independent per-sink toggles, only consulted when enabled above is
+    # true -- same master + narrower sub-toggle shape as
+    # ReliabilitySettings.enabled / watchdog_enabled. File-only avoids
+    # duplicating into journald while keeping a searchable local log;
+    # console-only skips disk writes entirely (today's original behavior).
+    console_enabled: bool = True
+    file_enabled: bool = True
     level: str = "INFO"
+    # Console formatter only -- JSON, or pretty text for local dev. The file
+    # sink is always JSON regardless, since it exists for later grep/tooling,
+    # not for a human reading the terminal.
     is_json: bool = Field(default=True, alias="json")
+    # Directory the rotating log file is written to -- created on demand if
+    # it doesn't exist. Only relevant when file_enabled is true.
+    output_dir: str = "./logs"
+    max_bytes: int = Field(default=10_000_000, gt=0)  # ~10MB per file before rotating
+    backup_count: int = Field(default=5, ge=0)  # rotated files kept beyond the active one
 
 
 class WebUISettings(BaseModel):

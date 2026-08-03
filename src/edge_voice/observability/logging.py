@@ -1,15 +1,28 @@
 """
 Structured logging for the pipeline.
 
-`configs/default.yaml` already records the intent this wires up:
+`logging.enabled` is a master switch: when false, `logging.disable()` makes
+every `logger.log()` call process-wide a cheap no-op, skipped before any
+formatting or handler work happens. For performance-sensitive runs where
+logging overhead itself matters, not just log volume.
 
-    logging:
-      level: "INFO"
-      json: true     # false -> pretty console renderer (dev)
+When enabled, two independently-toggleable handlers are available --
+`logging.console_enabled` for stderr (JSON or pretty-text per `logging.json`)
+and `logging.file_enabled` for a rotating file under `logging.output_dir`
+(created on demand, always JSON regardless of the console format, since a
+file sink exists for later grep/tooling, not for a human reading the
+terminal). The file is named with the timestamp of when this function ran
+(`edge-voice-<started-at>.log`), so each run gets its own file instead of
+every run appending to (or rotating through) the same one. Rotation
+(`max_bytes`/`backup_count`) still bounds any single run's file if it grows
+large, the same way the audio dump workers bound their own local writes,
+rather than growing without limit on storage-constrained hardware.
 
-One console handler; `LoggingSettings.is_json` picks its formatter -- JSON
-by default, the original plain-text formatter when a dev sets
-`logging.json: false` in `configs/local.yaml`. No separate file sink.
+The file sink is deliberately not run through `atomic_write`: that module
+protects a *whole-file overwrite* from a torn/truncated result, but this is
+an append-only stream -- everything already flushed to disk before a power
+cut stays intact; the worst case is losing the one line that was mid-write,
+not corrupting anything already written.
 
 `get_stage_logger` gives each pipeline-stage module a logger that tags every
 record with `stage`, so call sites only need to add `channel_id`/`segment_id`
@@ -21,6 +34,9 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Any, MutableMapping
 
 from edge_voice.config.settings import LoggingSettings
@@ -81,15 +97,32 @@ def configure_logging(settings: LoggingSettings, debug: bool = False) -> None:
     `debug` always forces DEBUG level regardless of settings.level -- it's
     the CLI's --debug flag, a deliberate override of whatever's configured.
     """
-    level = logging.DEBUG if debug else getattr(logging, settings.level.upper(), logging.INFO)
+    if not settings.enabled:
+        logging.disable(logging.CRITICAL)
+        return
+    logging.disable(logging.NOTSET)  # undo a prior disable, e.g. across test runs
 
-    handler = logging.StreamHandler()
-    formatter: logging.Formatter = (
-        JsonFormatter() if settings.is_json else logging.Formatter(_CONSOLE_FORMAT)
-    )
-    handler.setFormatter(formatter)
+    level = logging.DEBUG if debug else getattr(logging, settings.level.upper(), logging.INFO)
 
     root = logging.getLogger()
     root.setLevel(level)
     root.handlers.clear()
-    root.addHandler(handler)
+
+    if settings.console_enabled:
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(
+            JsonFormatter() if settings.is_json else logging.Formatter(_CONSOLE_FORMAT)
+        )
+        root.addHandler(console_handler)
+
+    if settings.file_enabled:
+        log_dir = Path(settings.output_dir)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        started_at = datetime.now().strftime("%Y%m%d-%H%M%S")
+        file_handler = RotatingFileHandler(
+            log_dir / f"edge-voice-{started_at}.log",
+            maxBytes=settings.max_bytes,
+            backupCount=settings.backup_count,
+        )
+        file_handler.setFormatter(JsonFormatter())
+        root.addHandler(file_handler)
