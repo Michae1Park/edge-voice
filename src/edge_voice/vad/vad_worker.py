@@ -147,6 +147,22 @@ class VADWorker(threading.Thread):
         # float write/read is atomic under the GIL, so no lock is needed.
         self._last_activity = time.monotonic()
 
+        # Per-channel latency, for observability/metrics.py -- split by which
+        # path a packet took so a fast RMS-gate-skip reading is never mistaken
+        # for genuine Silero speed. Unlike _last_activity above, a dict needs
+        # a real lock: inserting a *new* key (first packet on a channel) can
+        # resize the hash table, and MetricsCollector's cross-thread read
+        # takes a full copy (dict(...)), which would race with that resize.
+        # Each entry is the most recent measurement of *that* path only -- a
+        # channel that's been mid-speech for a while won't touch the RMS gate
+        # and will show a stale (but honestly-labeled) reading there. This
+        # lock covers only these two dicts, not self._channels -- that's a
+        # separate, pre-existing gap (pending_loss() already iterates it
+        # unlocked) that's out of scope here.
+        self._latency_lock = threading.Lock()
+        self._silero_latency_s: dict[str, float] = {}
+        self._rms_gate_latency_s: dict[str, float] = {}
+
     def stop(self) -> None:
         self._stop_event.set()
 
@@ -174,6 +190,22 @@ class VADWorker(threading.Thread):
                 n_samples = sum(len(c) for c in state.segment_chunks) // 2  # int16
                 parts.append(f"{channel_id}={n_samples / self.config.sample_rate:.2f}s")
         return ", ".join(parts) if parts else None
+
+    def silero_latencies_s(self) -> dict[str, float]:
+        """Most recent Silero forward-pass duration per channel (for
+        observability/metrics.py). Only updated when a packet actually
+        reaches the model -- see rms_gate_latencies_s() for the other path."""
+        with self._latency_lock:
+            return dict(self._silero_latency_s)
+
+    def rms_gate_latencies_s(self) -> dict[str, float]:
+        """Most recent RMS-gate-skip duration per channel (for
+        observability/metrics.py). Only updated when a packet is confidently
+        silent and skips Silero entirely -- see silero_latencies_s() for the
+        other path. A much smaller number than Silero latency by design;
+        don't compare the two as if they measured the same operation."""
+        with self._latency_lock:
+            return dict(self._rms_gate_latency_s)
 
     def run(self) -> None:
         while not self._stop_event.is_set():
@@ -268,15 +300,21 @@ class VADWorker(threading.Thread):
         float_chunk = self._bytes_to_float_tensor(packet.samples)
 
         if self.config.rms_gate_enabled and not state.triggered:
+            t0 = time.monotonic()
             rms = self._rms(float_chunk)
             if rms < self.config.silence_rms_floor:
+                with self._latency_lock:
+                    self._rms_gate_latency_s[packet.channel_id] = time.monotonic() - t0
                 # Confidently silent: skip the Silero forward pass entirely.
                 # Purely a compute optimization -- the chunk still lands in
                 # preroll below, same as any other non-triggering chunk.
                 self._push_preroll(state, packet)
                 return
 
+        t0 = time.monotonic()
         result = state.vad_iter(float_chunk, return_seconds=True)
+        with self._latency_lock:
+            self._silero_latency_s[packet.channel_id] = time.monotonic() - t0
 
         if state.triggered:
             state.segment_chunks.append(packet.samples)

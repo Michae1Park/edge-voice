@@ -199,6 +199,12 @@ class STTWorker(threading.Thread):
         # answers "is there a backlog"; see Milestone 7 decision in
         # docs/BUILDPLAN.md). None until the first segment is transcribed.
         self._last_latency_s: float | None = None
+        # Per-channel view of the same latency, for observability/metrics.py.
+        # Needs its own lock (unlike the plain float above): a dict insert
+        # (first segment on a channel) can resize the table, and
+        # MetricsCollector's cross-thread dict(...) copy would race with that.
+        self._channel_latency_lock = threading.Lock()
+        self._channel_latency_s: dict[str, float] = {}
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -217,6 +223,12 @@ class STTWorker(threading.Thread):
         """Inference time of the most recent _transcribe() call, or None if
         no segment has been transcribed yet (for observability/metrics.py)."""
         return self._last_latency_s
+
+    def channel_latencies_s(self) -> dict[str, float]:
+        """Per-channel view of the same latency last_latency_s reports in
+        aggregate (for observability/metrics.py)."""
+        with self._channel_latency_lock:
+            return dict(self._channel_latency_s)
 
     def run(self) -> None:
         logger.info("STTWorker started")
@@ -251,6 +263,8 @@ class STTWorker(threading.Thread):
         start = time.monotonic()
         text = self._transcribe(transcriber, segment)
         self._last_latency_s = time.monotonic() - start
+        with self._channel_latency_lock:
+            self._channel_latency_s[segment.channel_id] = self._last_latency_s
 
         if not text:
             logger.debug(

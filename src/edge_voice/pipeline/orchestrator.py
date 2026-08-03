@@ -287,12 +287,17 @@ class PipelineOrchestrator:
         return MetricsCollector(
             queue_depths=self.queue_depths,
             stt_latency_s=lambda: self._w("_stt").last_latency_s,
+            vad_silero_latencies_s=lambda: self._w("_vad").silero_latencies_s(),
+            vad_rms_gate_latencies_s=lambda: self._w("_vad").rms_gate_latencies_s(),
+            router_repacketize_latencies_s=lambda: self._w("_router").repacketize_latencies_s(),
+            stt_channel_latencies_s=lambda: self._w("_stt").channel_latencies_s(),
             # self._supervisor is built once in build() and never swapped
             # (unlike the workers), so a direct closure over it is enough --
             # no need to route through _w().
             supervisor=lambda: self._supervisor,
             mqtt_connected=self._mqtt_connected,
             emit_interval_s=m.emit_interval_s,
+            latency_log_decimals=m.latency_log_decimals,
         )
 
     def _mqtt_connected(self) -> bool | None:

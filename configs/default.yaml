@@ -107,12 +107,18 @@ logging:
   max_bytes: 10000000     # ~10MB per log file before rotating to a new one
   backup_count: 5         # how many rotated (old) log files to keep before deleting the oldest
 
-health:
-  stale_segment_warning_s: 30   # warn if no segment finalized in this long
-
 metrics:
   # Milestone 7: periodic aggregation of queue depths, STT latency, restart
   # budget, and MQTT connectivity into one structured log line + in-memory
   # snapshot for health/reporting.py to read later.
   enabled: true
   emit_interval_s: 10.0
+  # Decimal places the per-channel latency dicts (vad_silero, vad_rms_gate,
+  # router_repacketize, stt_channel) are rounded to in the log line -- full
+  # precision is always kept in the in-memory snapshot regardless. Router/VAD
+  # readings are often sub-millisecond, so they'll show as 0.0 at the default.
+  latency_log_decimals: 3
+
+health:
+  stale_segment_warning_s: 30   # warn if no segment finalized in this long
+

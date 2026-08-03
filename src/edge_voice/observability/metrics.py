@@ -46,7 +46,22 @@ class MetricsSnapshot:
     restart_status: dict[str, dict[str, object]] | None
     max_restarts: int | None
     restart_window_s: float | None
+    # Per-channel latency breakdown -- VAD/router/STT always exist (unlike
+    # the Supervisor/MQTT fields above), so these are required, not optional.
+    vad_silero_latencies_s: dict[str, float]
+    vad_rms_gate_latencies_s: dict[str, float]
+    router_repacketize_latencies_s: dict[str, float]
+    stt_channel_latencies_s: dict[str, float]
     taken_at: float = field(default_factory=time.monotonic)
+
+
+def _rounded(latencies: dict[str, float], decimals: int) -> dict[str, float]:
+    """Round per-channel latencies to `decimals` places, for log readability
+    only -- see the call site in _tick(). Sub-millisecond values (router
+    repacketize, typically microseconds) will show as 0.0 at the default
+    precision (MetricsSettings.latency_log_decimals); that's expected, not a
+    bug -- read snapshot() for full precision."""
+    return {channel: round(value, decimals) for channel, value in latencies.items()}
 
 
 class MetricsCollector(threading.Thread):
@@ -61,17 +76,27 @@ class MetricsCollector(threading.Thread):
         self,
         queue_depths: Callable[[], dict[str, int]],
         stt_latency_s: Callable[[], float | None],
+        vad_silero_latencies_s: Callable[[], dict[str, float]],
+        vad_rms_gate_latencies_s: Callable[[], dict[str, float]],
+        router_repacketize_latencies_s: Callable[[], dict[str, float]],
+        stt_channel_latencies_s: Callable[[], dict[str, float]],
         supervisor: Callable[[], Any | None] = lambda: None,
         mqtt_connected: Callable[[], bool | None] = lambda: None,
         emit_interval_s: float = 10.0,
+        latency_log_decimals: int = 3,
         name: str = "MetricsCollector",
     ) -> None:
         super().__init__(name=name, daemon=True)
         self._queue_depths = queue_depths
         self._stt_latency_s = stt_latency_s
+        self._vad_silero_latencies_s = vad_silero_latencies_s
+        self._vad_rms_gate_latencies_s = vad_rms_gate_latencies_s
+        self._router_repacketize_latencies_s = router_repacketize_latencies_s
+        self._stt_channel_latencies_s = stt_channel_latencies_s
         self._supervisor = supervisor
         self._mqtt_connected = mqtt_connected
         self._emit_interval_s = emit_interval_s
+        self._latency_log_decimals = latency_log_decimals
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
         self._snapshot: MetricsSnapshot | None = None
@@ -98,17 +123,31 @@ class MetricsCollector(threading.Thread):
             restart_status=sup.status() if sup is not None else None,
             max_restarts=sup.max_restarts if sup is not None else None,
             restart_window_s=sup.restart_window_s if sup is not None else None,
+            vad_silero_latencies_s=self._vad_silero_latencies_s(),
+            vad_rms_gate_latencies_s=self._vad_rms_gate_latencies_s(),
+            router_repacketize_latencies_s=self._router_repacketize_latencies_s(),
+            stt_channel_latencies_s=self._stt_channel_latencies_s(),
         )
         with self._lock:
             self._snapshot = snapshot
         logger.info(
-            "metrics snapshot: queues=%s stt_latency_s=%s mqtt_connected=%s restarts=%s",
+            "metrics snapshot: queues=%s stt_latency_s=%s mqtt_connected=%s restarts=%s "
+            "vad_silero=%s vad_rms_gate=%s router_repacketize=%s stt_channel=%s",
             snapshot.queue_depths,
-            f"{snapshot.stt_last_latency_s:.3f}"
+            f"{snapshot.stt_last_latency_s:.{self._latency_log_decimals}f}"
             if snapshot.stt_last_latency_s is not None
             else None,
             snapshot.mqtt_connected,
             snapshot.restart_status,
+            # Rounded (MetricsSettings.latency_log_decimals) for the log line
+            # only -- sub-ms readings (router/VAD are typically microseconds)
+            # show as 0.0 rather than the full float repr at the default 3.
+            # snapshot()'s own fields keep full precision for any
+            # programmatic reader.
+            _rounded(snapshot.vad_silero_latencies_s, self._latency_log_decimals),
+            _rounded(snapshot.vad_rms_gate_latencies_s, self._latency_log_decimals),
+            _rounded(snapshot.router_repacketize_latencies_s, self._latency_log_decimals),
+            _rounded(snapshot.stt_channel_latencies_s, self._latency_log_decimals),
         )
 
     def snapshot(self) -> MetricsSnapshot | None:

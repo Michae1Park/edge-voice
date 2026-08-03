@@ -179,6 +179,11 @@ class MetricsSettings(BaseModel):
     enabled: bool = True
     # How often MetricsCollector aggregates and logs a snapshot.
     emit_interval_s: float = Field(default=10.0, gt=0)
+    # Decimal places the per-channel latency dicts are rounded to in the log
+    # line only -- snapshot() itself always keeps full precision. Sub-ms
+    # readings (router repacketize, typically microseconds) show as 0.0 at
+    # the default 3; raise this if you need to actually see those values.
+    latency_log_decimals: int = Field(default=3, ge=0)
 
 
 class ReliabilitySettings(BaseModel):
