@@ -39,7 +39,7 @@ repacketizer:
 vad:
   threshold: 0.5
   window_samples: 512        # 32ms @ 16kHz
-  rms_gate_enabled: false
+  rms_gate_enabled: true
   silence_rms_floor: 0.01    # CALIBRATE: normalized float32 RMS, not raw int16
   preroll_chunks: 3
   min_silence_duration_ms: 300  # silence required before Silero fires `end` (raise if tail-clipping)
