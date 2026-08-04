@@ -103,12 +103,6 @@
     text-overflow: ellipsis;
   }
 
-  .legend-group {
-    display: flex;
-    gap: 16px;
-    margin-left: auto;
-  }
-
   .legend {
     display: flex;
     align-items: center;
@@ -123,6 +117,9 @@
     display: flex;
     align-items: center;
     gap: 18px;
+    /* legend-group used to hold this margin and push .right to the edge;
+       now that the legends live in their own bar, .right carries it. */
+    margin-left: auto;
   }
 
   .clock {
@@ -223,6 +220,14 @@
   .chip.warn .dot { background: var(--degraded); }
   .chip .val { color: var(--ink); }
   .chip.dim .val, .chip.warn .val { color: inherit; }
+  /* Static qualifier word (e.g. "silent") in front of a chip's value, so a
+     bare number like rx/tx's freshness reading isn't left to speak for
+     itself -- same lower-case/no-tracking treatment as .mod-lat. */
+  .chip-note {
+    color: var(--ink-faint);
+    text-transform: none;
+    letter-spacing: 0;
+  }
 
   /* Second strip: one chip per pipeline module. State comes from `workers`
      (always live); latency from `latencies` (last metrics tick, so it can be
@@ -390,13 +395,47 @@
   }
   .jump[hidden] { display: none; }
 
-  /* ── color legend ───────────────────────────────────── */
-  /* Static key for the dot colors used on the module chips, living in the
-     same status strip they describe -- kiosk has no mouse, so this stays
-     visible rather than living behind a hover/tap affordance. */
+  /* ── legend ─────────────────────────────────────────── */
+  /* Static key for the rx/tx and module-state dot colors, deliberately
+     pulled out of the .strip rows above and given its own bar so it never
+     reads as another line of live data. Dashed borders (vs. the strips'
+     solid ones), italics, and an explicit "LEGEND" tag are all doing that
+     same one job. Kiosk has no mouse, so this stays visible rather than
+     living behind a hover/tap affordance. */
 
-  .strip.modules .legend-group {
-    margin-left: auto;
+  .legend-bar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    row-gap: 4px;
+    padding: 7px 20px;
+    background: var(--bg);
+    border-top: 1px dashed var(--line);
+    border-bottom: 1px dashed var(--line);
+    font-style: italic;
+    z-index: 2;
+  }
+
+  .legend-tag {
+    flex: 0 0 auto;
+    font-style: normal;
+    font-weight: 700;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 2px 6px;
+  }
+
+  .legend-sep {
+    flex: 0 0 auto;
+    width: 1px;
+    height: 11px;
+    background: var(--line);
   }
 </style>
 </head>
@@ -407,10 +446,6 @@
     <div class="ident">
       <span class="ident-name">EDGE-VOICE</span>
       <span class="ident-sub">rpi5 · local session · no network</span>
-    </div>
-    <div class="legend-group">
-      <span class="legend"><span class="dot rx"></span>rx</span>
-      <span class="legend"><span class="dot tx"></span>tx</span>
     </div>
     <div class="right">
       <span class="clock" id="clock">--:--:--</span>
@@ -427,11 +462,16 @@
 
   <div class="strip modules">
     <span class="chip-group" id="modules"></span>
-    <span class="legend-group">
-      <span class="legend"><span class="dot" style="background:var(--live)"></span>running</span>
-      <span class="legend"><span class="dot" style="background:var(--degraded)"></span>degraded / restarting</span>
-      <span class="legend"><span class="dot" style="background:var(--stopped)"></span>stopped / unavailable</span>
-    </span>
+  </div>
+
+  <div class="legend-bar" role="note" aria-label="Legend -- static reference, not live data">
+    <span class="legend-tag">Legend</span>
+    <span class="legend"><span class="dot rx"></span>rx = receive channel</span>
+    <span class="legend"><span class="dot tx"></span>tx = transmit channel</span>
+    <span class="legend-sep"></span>
+    <span class="legend"><span class="dot" style="background:var(--live)"></span>running</span>
+    <span class="legend"><span class="dot" style="background:var(--degraded)"></span>degraded / restarting</span>
+    <span class="legend"><span class="dot" style="background:var(--stopped)"></span>stopped / unavailable</span>
   </div>
 
   <main class="feed" id="feed">
@@ -599,7 +639,8 @@
         if (!entry) {
           var chip = document.createElement("span");
           chip.className = "chip";
-          chip.innerHTML = '<span class="dot ' + id + '"></span>' + id + ' <span class="val"></span>';
+          chip.innerHTML = '<span class="dot ' + id + '"></span>' + id +
+            ' <span class="chip-note">silent</span> <span class="val"></span>';
           channelChips.appendChild(chip);
           entry = chanCache[id] = { chip: chip, val: chip.querySelector(".val") };
         }
