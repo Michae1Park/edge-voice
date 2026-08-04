@@ -39,7 +39,13 @@ class TranscriptHub:
 
     def publish(self, event: TranscriptEvent) -> None:
         with self._lock:
-            self._backlog.append(event)
+            # Live subscribers get partials (that's the point -- they revise a
+            # bubble in place), but the backlog keeps finals only. It's a
+            # fixed-size deque replayed to every new subscriber, so admitting
+            # superseded prefixes would push real transcripts out of a
+            # reconnecting tab's history to redraw text that's already settled.
+            if event.is_final:
+                self._backlog.append(event)
             subscribers = list(self._subscribers)
         for sub in subscribers:
             try:

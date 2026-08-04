@@ -109,4 +109,7 @@ def _serialize(event: TranscriptEvent) -> dict:
         "start": event.start,
         "end": event.end,
         "created_at": event.created_at,
+        # False while the speaker is still talking. Clients key on segment_id
+        # and replace in place; the one is_final=True event closes it.
+        "is_final": event.is_final,
     }

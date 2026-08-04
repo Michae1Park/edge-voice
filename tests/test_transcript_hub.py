@@ -6,8 +6,17 @@ from edge_voice.pipeline.models import TranscriptEvent
 from edge_voice.pipeline.transcript_hub import TranscriptHub
 
 
-def _event(text: str = "hello", channel_id: str = "rx") -> TranscriptEvent:
-    return TranscriptEvent(channel_id=channel_id, segment_id="seg-1", text=text, start=0.0, end=1.0)
+def _event(
+    text: str = "hello", channel_id: str = "rx", is_final: bool = True
+) -> TranscriptEvent:
+    return TranscriptEvent(
+        channel_id=channel_id,
+        segment_id="seg-1",
+        text=text,
+        start=0.0,
+        end=1.0,
+        is_final=is_final,
+    )
 
 
 def test_subscribe_returns_empty_queue_with_no_backlog():
@@ -81,3 +90,31 @@ def test_full_subscriber_queue_drops_without_raising():
     except queue.Full:
         pass
     hub.publish(_event("overflow"))  # should not raise
+
+
+# -- partials -----------------------------
+
+
+def test_partials_reach_live_subscribers():
+    hub = TranscriptHub()
+    sub = hub.subscribe()
+    event = _event(text="in progress", is_final=False)
+
+    hub.publish(event)
+
+    assert sub.get_nowait() is event
+
+
+def test_partials_are_kept_out_of_the_replay_backlog():
+    """The backlog is fixed-size and replayed to every new subscriber, so a
+    superseded prefix there costs a real transcript its slot."""
+    hub = TranscriptHub()
+    hub.publish(_event(text="in progress", is_final=False))
+    hub.publish(_event(text="settled"))
+
+    replayed = hub.subscribe()
+    texts = []
+    while not replayed.empty():
+        texts.append(replayed.get_nowait().text)
+
+    assert texts == ["settled"]

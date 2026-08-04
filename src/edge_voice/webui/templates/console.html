@@ -342,6 +342,28 @@
   .msg.rx .bubble { border-left: 2px solid var(--rx); }
   .msg.tx .bubble { border-right: 2px solid var(--tx); }
 
+  /* In-progress transcript: same bubble, rewritten in place until the final
+     lands. Dimmed and italic so a revisable line is never mistaken for a
+     settled one, with a pulsing caret to show it's still being spoken. */
+  .msg.partial .bubble {
+    color: var(--ink-dim);
+    font-style: italic;
+    border-style: dashed;
+  }
+  .msg.partial .bubble::after {
+    content: "▌";
+    margin-left: 2px;
+    font-style: normal;
+    animation: partial-caret 1.1s steps(1, end) infinite;
+  }
+  @keyframes partial-caret {
+    0%, 50% { opacity: 1; }
+    50.01%, 100% { opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .msg.partial .bubble::after { animation: none; }
+  }
+
   .cursor-row {
     display: flex;
     align-items: center;
@@ -541,7 +563,7 @@
 
     function renderMessage(m) {
       var wrap = document.createElement("div");
-      wrap.className = "msg " + m.channel_id;
+      wrap.className = "msg " + m.channel_id + (m.is_final ? "" : " partial");
 
       var meta = document.createElement("div");
       meta.className = "msg-meta";
@@ -565,18 +587,46 @@
 
       wrap.appendChild(meta);
       wrap.appendChild(bubble);
-      return wrap;
+      return { wrap: wrap, bubble: bubble, time: time };
     }
 
-    function appendMessage(m) {
+    function appendMessage(wrap) {
       empty.hidden = true;
       var wasNearBottom = isNearBottom();
-      inner.insertBefore(renderMessage(m), cursorRow);
+      inner.insertBefore(wrap, cursorRow);
       if (wasNearBottom) {
         scrollToBottom(true);
       } else {
         jumpBtn.hidden = false;
       }
+    }
+
+    // Partials arrive under the same segment_id as the final that replaces
+    // them, so the feed keys on it: the first event for an id creates the
+    // bubble, later ones rewrite that same bubble instead of appending.
+    //
+    // The entry is dropped once the final lands, which both bounds this map
+    // over a long session and is safe: VAD queues a segment's partials
+    // strictly before its final on one ordered queue, and the hub replays
+    // its backlog in order too, so nothing arrives for an id after its
+    // final. A finalized bubble is therefore never rewritten.
+    var liveBubbles = Object.create(null);
+
+    function applyMessage(m) {
+      var existing = liveBubbles[m.segment_id];
+      if (existing) {
+        existing.bubble.textContent = m.text;
+        existing.time.textContent = formatTime(m.created_at);
+        existing.wrap.classList.toggle("partial", !m.is_final);
+        if (m.is_final) delete liveBubbles[m.segment_id];
+        if (isNearBottom()) scrollToBottom(true);
+        return;
+      }
+
+      var rendered = renderMessage(m);
+      // Only in-progress bubbles are tracked; a final is never revised.
+      if (!m.is_final) liveBubbles[m.segment_id] = rendered;
+      appendMessage(rendered.wrap);
     }
 
     jumpBtn.addEventListener("click", function () {
@@ -604,7 +654,7 @@
 
     var source = new EventSource("/api/transcripts/stream");
     source.onmessage = function (e) {
-      appendMessage(JSON.parse(e.data));
+      applyMessage(JSON.parse(e.data));
     };
 
     // ── pipeline status poll ───────────────────────────────

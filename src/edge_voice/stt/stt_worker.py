@@ -101,6 +101,10 @@ class STTWorkerConfig:
     # Below this unique/total token ratio a line is treated as the model
     # looping on itself; see _is_repetitive.
     repetitive_ratio: float = 0.45
+    # Segment-queue depth at or above which an in-progress partial is
+    # skipped rather than transcribed (see _handle_partial). Only consulted
+    # when vad.partial_interval_s has partials switched on at all.
+    partial_max_queue_depth: int = 0
 
 
 def _is_repetitive(text: str, threshold: float) -> bool:
@@ -223,6 +227,11 @@ class STTWorker(threading.Thread):
         # MetricsCollector's cross-thread dict(...) copy would race with that.
         self._channel_latency_lock = threading.Lock()
         self._channel_latency_s: dict[str, float] = {}
+        # Partial-path counters, kept separate from every latency field above
+        # so the two never mix (see _handle_partial). Written only by this
+        # worker's own thread; readers tolerate a stale count.
+        self._partials_transcribed = 0
+        self._partials_dropped = 0
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -244,9 +253,19 @@ class STTWorker(threading.Thread):
 
     def channel_latencies_s(self) -> dict[str, float]:
         """Per-channel view of the same latency last_latency_s reports in
-        aggregate (for observability/metrics.py)."""
+        aggregate (for observability/metrics.py). Finals only -- partials
+        never write here, so this stays a like-for-like series."""
         with self._channel_latency_lock:
             return dict(self._channel_latency_s)
+
+    def partial_stats(self) -> dict[str, int]:
+        """How many in-progress partials were transcribed vs skipped under
+        backpressure. A high dropped:transcribed ratio means
+        vad.partial_interval_s is asking for more than this device can do."""
+        return {
+            "transcribed": self._partials_transcribed,
+            "dropped": self._partials_dropped,
+        }
 
     def run(self) -> None:
         logger.info("STTWorker started")
@@ -275,6 +294,10 @@ class STTWorker(threading.Thread):
     # ── Per-segment handling ────────────────────────────────────
 
     def _handle_segment(self, segment: SpeechSegment) -> None:
+        if segment.is_partial:
+            self._handle_partial(segment)
+            return
+
         # No lazy load here: __init__ already resolved the one shared
         # Transcriber, off the real-time path.
         transcriber = self._transcriber
@@ -302,6 +325,64 @@ class STTWorker(threading.Thread):
                 end=segment.end,
             )
         )
+
+    # ── Partial (in-progress prefix) handling ───────────────────
+
+    def _handle_partial(self, segment: SpeechSegment) -> None:
+        """Transcribe an in-progress prefix for display, then discard it.
+
+        Deliberately does NOT touch _last_latency_s or _channel_latency_s.
+        Those feed metrics.py and the TRANSCRIPT log line, and a partial
+        times a *prefix* against a different model entry point -- blending
+        the two would make "STT latency" mean nothing. Partials get their
+        own counters instead; see partial_stats().
+        """
+        if self._segment_queue.qsize() > self.config.partial_max_queue_depth:
+            # Throwaway work, and something real is already waiting. Skipping
+            # is the whole backpressure story: finals never take this branch.
+            self._partials_dropped += 1
+            logger.debug(
+                "STTWorker: dropping partial segment=%s (queue depth %d)",
+                segment.segment_id,
+                self._segment_queue.qsize(),
+                extra={"segment_id": segment.segment_id, "channel_id": segment.channel_id},
+            )
+            return
+
+        text = self._transcribe_partial(self._transcriber, segment)
+        self._partials_transcribed += 1
+        if not text:
+            return
+
+        self._on_transcript(
+            TranscriptEvent(
+                channel_id=segment.channel_id,
+                segment_id=segment.segment_id,
+                text=text,
+                start=segment.start,
+                end=segment.end,
+                is_final=False,
+            )
+        )
+
+    def _transcribe_partial(self, transcriber: Any, segment: SpeechSegment) -> str:
+        """One stateless pass over the prefix.
+
+        transcribe_without_streaming() works off the transcriber handle
+        rather than the default stream, so it cannot perturb the state the
+        final pass depends on -- the reason partials are safe to run on the
+        same shared Transcriber instead of a second ~175MB copy. Safe
+        because this worker is single-threaded and _transcribe brackets
+        start()/stop() around one segment, so no stream is ever open here.
+        """
+        samples = self._pcm_to_float32(segment.audio).tolist()
+        transcript = transcriber.transcribe_without_streaming(samples, self.config.sample_rate)
+        lines = [line.text for line in getattr(transcript, "lines", [])]
+        text = " ".join(t for t in lines if t).strip()
+        # A looping partial is noise the user would watch get worse; the
+        # final applies the same guard with a best_partial fallback, which
+        # doesn't apply here because there's nothing to fall back to.
+        return "" if _is_repetitive(text, self.config.repetitive_ratio) else text
 
     def _transcribe(self, transcriber: Any, segment: SpeechSegment) -> str:
         collector = _make_collector(self.config.repetitive_ratio, segment.segment_id)

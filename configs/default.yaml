@@ -58,6 +58,34 @@ vad:
   soft_cut_s: 2.0            # past this, look for a natural pause to cut at
   soft_cut_lookahead_s: 1.0  # how far back to scan for that pause
   soft_cut_min_dip: 0.10     # dip must be this far below the current score
+  # Revisable transcripts of the in-progress segment, so the UI shows text
+  # before the speaker stops. 0 disables (as with idle_flush_s). ko has no
+  # streaming model, so every partial re-transcribes the whole prefix from
+  # scratch -- this costs real inference and the multiplier grows with
+  # prefix length. Partials are dropped under backlog
+  # (stt.partial_max_queue_depth), never dumped, and never counted in STT
+  # latency metrics.
+  #
+  # Tuned for call turns, which are typically under 3s. At that length
+  # partial_min_segment_s is the knob that matters: first text lands at
+  # roughly min + its own inference cost, and there's little room left for
+  # refreshes, so the first appearance is nearly the whole benefit.
+  # Measured on a Ryzen 7 with ko-tiny (gain = how much earlier the first
+  # partial beats the final; cost = total inference vs no partials):
+  #
+  #   seg   min/iv    partials   gain    cost
+  #   2.0s  1.5/1.5      1       0.60s   2.0x
+  #   2.0s  1.0/1.0      1       1.12s   1.8x
+  #   3.0s  1.5/1.5      2       1.61s   3.0x
+  #   3.0s  1.0/1.0      2       2.15s   2.5x
+  #
+  # 1.0/1.0 beats 1.5/1.5 on gain at every length and is cheaper at most,
+  # since a 1.0s prefix costs less to transcribe than a 1.5s one. Going
+  # finer buys almost nothing: 1.0/0.75 moves first text by 0.01s for 3.8x.
+  # Re-measure on the Pi before changing these -- watch the dropped:
+  # transcribed ratio from STTWorker.partial_stats().
+  partial_interval_s: 0.0
+  partial_min_segment_s: 1.5  # skip partials on turns shorter than this
   max_segment_s: 3.0         # hard cap if no suitable pause is found
 
 stt:
@@ -78,6 +106,10 @@ stt:
   log_api_calls: false
   save_input_wav_path: ""
   return_audio_data: false
+  # Backpressure guard for vad.partial_interval_s: skip a partial when the
+  # segment queue is this deep or deeper. 0 = drop whenever any real work is
+  # already waiting. Finals are never dropped.
+  partial_max_queue_depth: 0
 
 webui:
   host: "127.0.0.1"  # no network on target device; kiosk browser is local-only

@@ -488,6 +488,8 @@ class PipelineOrchestrator:
                 soft_cut_s=self._settings.vad.soft_cut_s,
                 soft_cut_lookahead_s=self._settings.vad.soft_cut_lookahead_s,
                 soft_cut_min_dip=self._settings.vad.soft_cut_min_dip,
+                partial_interval_s=self._settings.vad.partial_interval_s,
+                partial_min_segment_s=self._settings.vad.partial_min_segment_s,
             ),
         )
 
@@ -496,6 +498,29 @@ class PipelineOrchestrator:
             raise RuntimeError("Segment queue not initialized")
 
         def _on_transcript(event) -> None:
+            if not event.is_final:
+                # A revisable prefix, not the segment's closing event. It must
+                # not take the branch below: that line is the one-per-segment
+                # lifecycle close, and last_latency_s belongs to whichever
+                # *final* ran last -- _handle_partial deliberately leaves it
+                # alone, so reading it here would report a stale number
+                # against the wrong segment.
+                logger.debug(
+                    "PARTIAL channel=%s segment=%s [%.2f-%.2f] %r",
+                    event.channel_id,
+                    event.segment_id,
+                    event.start,
+                    event.end,
+                    event.text,
+                    extra={
+                        "stage": "stt",
+                        "channel_id": event.channel_id,
+                        "segment_id": event.segment_id,
+                    },
+                )
+                self._transcript_hub.publish(event)
+                return
+
             # Closes the segment-lifecycle trace (audio_ingest -> channel ->
             # vad -> stt -> transcript): the only orchestrator-level log line
             # carrying stage/channel_id/segment_id, since it's the segment's
@@ -536,6 +561,7 @@ class PipelineOrchestrator:
                     "save_input_wav_path": stt.save_input_wav_path,
                     "return_audio_data": str(stt.return_audio_data).lower(),
                 },
+                partial_max_queue_depth=stt.partial_max_queue_depth,
             ),
         )
 
