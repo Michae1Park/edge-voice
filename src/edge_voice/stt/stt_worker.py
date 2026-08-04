@@ -29,10 +29,13 @@ context genuinely shouldn't bleed into the next line regardless of which
 channel it's on, and halves the memory footprint (~175MB saved per
 extra channel we're not holding open).
 
-Lazy construction is also what keeps `import edge_voice.stt.stt_worker` and
-PipelineOrchestrator.build() working on machines without moonshine_voice
-installed; the ImportError surfaces on the first real segment instead.
-Inject `transcriber_factory` to bypass it entirely (tests, benchmarks).
+The shared Transcriber is resolved eagerly, in __init__, off the real-time
+path -- not lazily on the first segment. `import edge_voice.stt.stt_worker`
+stays safe either way (nothing above module level touches moonshine_voice),
+but *constructing* an STTWorker now requires it to be importable, unless
+`transcriber_factory` bypasses that entirely (tests, benchmarks). In
+production this is never a real constraint: orchestrator.build() -- the only
+caller that doesn't inject a factory -- always has moonshine_voice available.
 
 Assumptions:
   - SpeechSegment.audio is raw PCM bytes, int16 mono, at config.sample_rate
@@ -63,7 +66,7 @@ def _default_options() -> dict[str, str]:
     return {
         # 13.0 (the scratch script's value) truncates Korean mid-sentence;
         # see configs/default.yaml for the measurements behind 30.0.
-        "max_tokens_per_second": "30.0",
+        "max_tokens_per_second": "20.0",
         "identify_speakers": "false",
         "log_api_calls": "false",
         "save_input_wav_path": "",
@@ -185,10 +188,18 @@ class STTWorker(threading.Thread):
         self._on_transcript = on_transcript
         self.config = config or STTWorkerConfig()
         self._transcriber_factory = transcriber_factory
-        self._transcriber: Any = None
-        # Resolved once, on first use -- get_model_for_language re-checks/
-        # downloads assets and re-prints the license notice on every call.
+        # Resolved once -- get_model_for_language re-checks/downloads assets
+        # and re-prints the license notice on every call, so this exists to
+        # avoid doing that twice. Must be set before _new_transcriber() runs,
+        # since that method reads it.
         self._resolved_model: tuple[str, Any] | None = None
+        # Eager: the one shared Transcriber (see module docstring) is loaded
+        # right here, at construction, off the real-time path -- not on
+        # whichever thread's first segment happens to arrive. Requires
+        # moonshine_voice to be importable unless transcriber_factory bypasses
+        # it (tests/benchmarks); orchestrator.build() always has it in
+        # production, so this only ever blocks startup, never a live segment.
+        self._transcriber: Any = self._new_transcriber()
         self._stop_event = threading.Event()
         # Monotonic timestamp of the last segment handled, read by the
         # supervisor's stall check (docs/BUILDPLAN.md Milestone 6). A plain
@@ -257,9 +268,9 @@ class STTWorker(threading.Thread):
     # ── Per-segment handling ────────────────────────────────────
 
     def _handle_segment(self, segment: SpeechSegment) -> None:
-        # Lazy model load excluded from the timing below: a one-time cost,
-        # not inference.
-        transcriber = self._get_transcriber()
+        # No lazy load here: __init__ already resolved the one shared
+        # Transcriber, off the real-time path.
+        transcriber = self._transcriber
         start = time.monotonic()
         text = self._transcribe(transcriber, segment)
         self._last_latency_s = time.monotonic() - start
@@ -314,12 +325,6 @@ class STTWorker(threading.Thread):
             yield samples[i : i + step].tolist()
 
     # ── Helpers ──────────────────────────────────────────────────
-
-    def _get_transcriber(self) -> Any:
-        if self._transcriber is None:
-            self._transcriber = self._new_transcriber()
-            logger.info("STTWorker: created shared Transcriber")
-        return self._transcriber
 
     def _new_transcriber(self) -> Any:
         if self._transcriber_factory is not None:

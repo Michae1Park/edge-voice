@@ -467,10 +467,12 @@ class PipelineOrchestrator:
     def _build_vad(self) -> threading.Thread:
         if self._routed_queue is None or self._segment_queue is None:
             raise RuntimeError("Queues not initialized")
+        channels = [c.channel_id for c in self._settings.mqtt.channels]
 
         return VADWorker(
             self._routed_queue,
             self._segment_queue,
+            channels,
             dump_queue=self._segment_dump_queue,
             config=VADWorkerConfig(
                 threshold=self._settings.vad.threshold,

@@ -124,6 +124,7 @@ class VADWorker(threading.Thread):
         self,
         routed_queue: "queue.Queue[AudioPacket]",
         segment_queue: "queue.Queue[SpeechSegment]",
+        channel_ids: list[str],
         config: VADWorkerConfig | None = None,
         model=None,
         name: str = "VADWorker",
@@ -140,7 +141,18 @@ class VADWorker(threading.Thread):
         # _new_channel_state for why. Left as None, each channel loads its own.
         self.model = model
 
-        self._channels: dict[str, _ChannelState] = {}
+        # Fixed set, same shape as ChannelRouter's own channel_ids param --
+        # every channel's state (incl. its own Silero model) is built right
+        # here, during construction, not discovered from traffic. Two
+        # consequences: (issue #10) a model load can never land on the
+        # real-time packet-handling path, since there's nothing left for
+        # _handle_packet to lazily create; and _handle_packet can trust
+        # packet.channel_id is always a valid key -- ChannelRouter has
+        # already dropped anything outside this same configured set before
+        # it reaches this worker's queue.
+        self._channels: dict[str, _ChannelState] = {
+            channel_id: self._new_channel_state() for channel_id in channel_ids
+        }
         self._stop_event = threading.Event()
         # Monotonic timestamp of the last packet handled, read by the
         # supervisor's stall check (docs/BUILDPLAN.md Milestone 6). A plain
@@ -291,10 +303,11 @@ class VADWorker(threading.Thread):
     # ── Per-packet handling ─────────────────────────────────────
 
     def _handle_packet(self, packet: AudioPacket) -> None:
-        state = self._channels.get(packet.channel_id)
-        if state is None:
-            state = self._new_channel_state()
-            self._channels[packet.channel_id] = state
+        # No .get()/None-check: __init__ builds state for every channel_id in
+        # channel_ids up front, and ChannelRouter has already dropped
+        # anything outside that same configured set -- so a KeyError here
+        # would mean that invariant broke upstream, not a case to paper over.
+        state = self._channels[packet.channel_id]
         state.last_packet_at = time.monotonic()
 
         float_chunk = self._bytes_to_float_tensor(packet.samples)
@@ -316,28 +329,21 @@ class VADWorker(threading.Thread):
         with self._latency_lock:
             self._silero_latency_s[packet.channel_id] = time.monotonic() - t0
 
+        # Applies regardless of which of the four events below this packet
+        # turns out to be -- a segment already in progress keeps every chunk,
+        # including the one that later turns out to end it.
         if state.triggered:
             state.segment_chunks.append(packet.samples)
 
-        if result and "start" in result:
-            state.triggered = True
-            state.segment_chunks = [b for _, b in state.preroll] + [packet.samples]
-            state.segment_start_ts = state.preroll[0][0] if state.preroll else packet.timestamp
-            state.preroll.clear()
-            state.scores.clear()
-            self._new_segment_id(packet.channel_id, state)
+        started = bool(result and "start" in result)
+        ended = bool(result and "end" in result)
 
-        elif result and "end" in result:
-            state.triggered = False
-            self._finalize_segment(packet.channel_id, state, end_ts=packet.timestamp)
-            state.scores.clear()
-
+        if started:
+            self._start_segment(packet, state)
+        elif ended:
+            self._end_segment(packet, state)
         elif state.triggered:
-            if self.config.segment_limits_enabled:
-                # No boundary event and still mid-speech: the only path where
-                # a segment can grow without bound, so limits apply here.
-                self._maybe_cut(packet.channel_id, state, packet)
-
+            self._continue_segment(packet, state)
         else:
             # Reached the model but didn't trigger -- still pre-speech, so it
             # belongs in preroll just like a gated-out chunk. Buffering here
@@ -346,6 +352,26 @@ class VADWorker(threading.Thread):
             # before it reports `start`, so without preroll the true onset of
             # speech is discarded regardless of the gate.
             self._push_preroll(state, packet)
+
+    def _start_segment(self, packet: AudioPacket, state: _ChannelState) -> None:
+        state.triggered = True
+        state.segment_chunks = [b for _, b in state.preroll] + [packet.samples]
+        state.segment_start_ts = state.preroll[0][0] if state.preroll else packet.timestamp
+        state.preroll.clear()
+        state.scores.clear()
+        self._new_segment_id(packet.channel_id, state)
+
+    def _end_segment(self, packet: AudioPacket, state: _ChannelState) -> None:
+        state.triggered = False
+        self._finalize_segment(packet.channel_id, state, end_ts=packet.timestamp)
+        state.scores.clear()
+
+    def _continue_segment(self, packet: AudioPacket, state: _ChannelState) -> None:
+        """No boundary event, still mid-speech: the only path where a
+        segment can grow without bound, so length limits apply here (if
+        enabled at all -- otherwise there's nothing to do)."""
+        if self.config.segment_limits_enabled:
+            self._maybe_cut(packet.channel_id, state, packet)
 
     # ── Segment-length limits ───────────────────────────────────
 

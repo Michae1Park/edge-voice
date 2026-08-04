@@ -84,3 +84,21 @@ def test_accessor_returns_copy_not_live_reference():
     snapshot = worker.channel_latencies_s()
     snapshot["rx"] = -1.0
     assert worker.channel_latencies_s()["rx"] != -1.0
+
+
+# ── eager construction: resolved in __init__, off the real-time path ──
+
+
+def test_init_resolves_the_transcriber_eagerly():
+    worker = _make_worker()
+
+    assert isinstance(worker._transcriber, _FakeTranscriber)
+
+
+def test_handle_segment_does_not_build_a_new_transcriber():
+    worker = _make_worker()
+    resolved = worker._transcriber
+
+    worker._handle_segment(_segment("rx", "rx-1"))
+
+    assert worker._transcriber is resolved  # reused, not rebuilt
