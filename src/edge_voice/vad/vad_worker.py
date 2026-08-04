@@ -329,28 +329,21 @@ class VADWorker(threading.Thread):
         with self._latency_lock:
             self._silero_latency_s[packet.channel_id] = time.monotonic() - t0
 
+        # Applies regardless of which of the four events below this packet
+        # turns out to be -- a segment already in progress keeps every chunk,
+        # including the one that later turns out to end it.
         if state.triggered:
             state.segment_chunks.append(packet.samples)
 
-        if result and "start" in result:
-            state.triggered = True
-            state.segment_chunks = [b for _, b in state.preroll] + [packet.samples]
-            state.segment_start_ts = state.preroll[0][0] if state.preroll else packet.timestamp
-            state.preroll.clear()
-            state.scores.clear()
-            self._new_segment_id(packet.channel_id, state)
+        started = bool(result and "start" in result)
+        ended = bool(result and "end" in result)
 
-        elif result and "end" in result:
-            state.triggered = False
-            self._finalize_segment(packet.channel_id, state, end_ts=packet.timestamp)
-            state.scores.clear()
-
+        if started:
+            self._start_segment(packet, state)
+        elif ended:
+            self._end_segment(packet, state)
         elif state.triggered:
-            if self.config.segment_limits_enabled:
-                # No boundary event and still mid-speech: the only path where
-                # a segment can grow without bound, so limits apply here.
-                self._maybe_cut(packet.channel_id, state, packet)
-
+            self._continue_segment(packet, state)
         else:
             # Reached the model but didn't trigger -- still pre-speech, so it
             # belongs in preroll just like a gated-out chunk. Buffering here
@@ -359,6 +352,26 @@ class VADWorker(threading.Thread):
             # before it reports `start`, so without preroll the true onset of
             # speech is discarded regardless of the gate.
             self._push_preroll(state, packet)
+
+    def _start_segment(self, packet: AudioPacket, state: _ChannelState) -> None:
+        state.triggered = True
+        state.segment_chunks = [b for _, b in state.preroll] + [packet.samples]
+        state.segment_start_ts = state.preroll[0][0] if state.preroll else packet.timestamp
+        state.preroll.clear()
+        state.scores.clear()
+        self._new_segment_id(packet.channel_id, state)
+
+    def _end_segment(self, packet: AudioPacket, state: _ChannelState) -> None:
+        state.triggered = False
+        self._finalize_segment(packet.channel_id, state, end_ts=packet.timestamp)
+        state.scores.clear()
+
+    def _continue_segment(self, packet: AudioPacket, state: _ChannelState) -> None:
+        """No boundary event, still mid-speech: the only path where a
+        segment can grow without bound, so length limits apply here (if
+        enabled at all -- otherwise there's nothing to do)."""
+        if self.config.segment_limits_enabled:
+            self._maybe_cut(packet.channel_id, state, packet)
 
     # ── Segment-length limits ───────────────────────────────────
 
