@@ -48,6 +48,16 @@ Useful `edge-voice` flags:
 | `--run-secs N` | `0` | Exit automatically after `N` seconds (`0` = run until Ctrl-C) |
 | `--debug` | off | Verbose (`DEBUG`-level) logging |
 
+### Running as a persistent service
+
+For a deployment that should survive reboots and auto-restart on crash/hang (see [`deploy/edge-voice.service`](deploy/edge-voice.service) and `pipeline/supervisor.py`), install it as a systemd unit instead of running `edge-voice` directly:
+
+```bash
+make install-service   # sudo cp deploy/edge-voice.service /etc/systemd/system/, daemon-reload, enable --now
+```
+
+Edit `User=`, `WorkingDirectory=`, and `ExecStart=` in `deploy/edge-voice.service` to match your install (venv path, user) before running this — the checked-in values are placeholders. Re-run `make install-service` any time you change that file.
+
 ## Configuration
 
 Settings are layered, lowest to highest precedence:

@@ -23,6 +23,18 @@
 Description=edge-voice — real-time dual-channel call transcription
 After=network.target
 
+# Loop-breaker for a hang that recurs on every restart (e.g. a deterministic
+# deadlock, or a poison MQTT message). One crash-detect-restart cycle here
+# takes at least WatchdogSec + RestartSec (~13s), which already exceeds
+# systemd's own default StartLimitIntervalSec (10s) -- so without this, the
+# 5-in-10s default burst limit never trips and the unit restarts forever.
+# 300s comfortably spans several ~13s cycles, so 5 crashes within 5 minutes
+# instead flips the unit to `failed` (systemctl status shows
+# start-limit-hit) rather than crash-looping silently. Needs a manual
+# `systemctl reset-failed edge-voice` (or reboot) to clear.
+StartLimitIntervalSec=300s
+StartLimitBurst=5
+
 [Service]
 Type=notify
 
@@ -38,14 +50,14 @@ Restart=always
 RestartSec=3s
 
 # --- adjust these to the actual install ---
-User=edge
-WorkingDirectory=/opt/edge-voice
-ExecStart=/opt/edge-voice/venv/bin/edge-voice
+User=ai
+WorkingDirectory=/home/ai/workspace/edge-voice
+ExecStart=/home/ai/workspace/edge-voice/venv/bin/edge-voice
 
 # Harden a bit; the app needs only its own dir (for config + dump output).
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/opt/edge-voice
+ReadWritePaths=/home/ai/workspace/edge-voice
 
 [Install]
 WantedBy=multi-user.target
