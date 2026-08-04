@@ -108,6 +108,16 @@ def test_build_gives_vad_a_channel_per_configured_channel():
     assert set(orch._vad._channels) == {"rx", "tx"}
 
 
+def test_build_warms_up_stt_transcriber():
+    """_build_stt() -> STTWorker.__init__() resolves the shared Transcriber
+    eagerly -- see the module docstring. No packet, no segment, no start()
+    needed; build() alone is enough."""
+    s = _minimal_settings()
+    orch = PipelineOrchestrator(s)
+    orch.build()
+    assert orch._stt._transcriber is not None
+
+
 def test_build_with_dump_enabled():
     s = _minimal_settings()
     s.dump.enabled = True
