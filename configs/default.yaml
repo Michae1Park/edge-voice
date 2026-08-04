@@ -54,7 +54,7 @@ vad:
   # buffers unbounded and the pipeline emits nothing until the speaker
   # stops, so this bounds emission latency as much as segment length.
   # Ordinary turn-taking never reaches soft_cut_s and pays nothing.
-  segment_limits_enabled: true
+  segment_limits_enabled: false
   soft_cut_s: 2.0            # past this, look for a natural pause to cut at
   soft_cut_lookahead_s: 1.0  # how far back to scan for that pause
   soft_cut_min_dip: 0.10     # dip must be this far below the current score
@@ -68,13 +68,12 @@ stt:
   # combination fails at startup listing what that language does have.
   language: "ko"
   model_arch: "tiny"
-  feed_windows: 64
   # Decoder token budget. Too low truncates mid-sentence: Korean at 13.0
   # cut ~20% of every segment's tail ("무엇을 도?" for "무엇을 도와드릴까요?").
   # Output saturates at ~20 with no latency cost and no repetition up to 75;
   # 30 leaves headroom for fast speakers. Must be set -- omitting the option
   # entirely truncates worse than any explicit value.
-  max_tokens_per_second: "20.0"
+  max_tokens_per_second: "18.0"
   identify_speakers: false
   log_api_calls: false
   save_input_wav_path: ""
@@ -99,7 +98,7 @@ reliability:
 
 logging:
   enabled: true           # master switch -- false disables ALL logging process-wide (perf)
-  console_enabled: true   # write to console/stderr (captured by journald under systemd)
+  console_enabled: false   # write to console/stderr (captured by journald under systemd)
   file_enabled: true      # also write to a rotating file in output_dir, independent of console
   level: "INFO"           # minimum level emitted; --debug on the CLI overrides this to DEBUG
   json: true              # console format: structured JSON, or false for pretty text (dev only)

@@ -529,8 +529,6 @@ class PipelineOrchestrator:
                 language=stt.language,
                 model_arch=stt.model_arch,
                 sample_rate=self._settings.audio.sample_rate,
-                feed_windows=stt.feed_windows,
-                feed_window_samples=self._settings.vad.window_samples,
                 options={
                     "max_tokens_per_second": stt.max_tokens_per_second,
                     "identify_speakers": str(stt.identify_speakers).lower(),

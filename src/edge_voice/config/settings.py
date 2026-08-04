@@ -121,7 +121,6 @@ class STTSettings(BaseModel):
         "small-streaming",
         "medium-streaming",
     ] = "tiny"
-    feed_windows: int = Field(default=64, gt=0)
     # See configs/default.yaml -- 13.0 truncates Korean mid-sentence.
     max_tokens_per_second: str = "30.0"
     identify_speakers: bool = False

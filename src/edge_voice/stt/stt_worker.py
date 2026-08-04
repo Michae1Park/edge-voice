@@ -10,7 +10,22 @@ into a Transcriber as Silero detects them, and manages session boundaries
 VADWorker owns segmentation and hands us finalized SpeechSegments -- so all
 the VAD state machine, score tracking, and soft/hard-cut logic is absent by
 design. What carries over is the session lifecycle (start -> add_audio ->
-stop), the feed-window batching, and the repetitive-output guard.
+stop) and the repetitive-output guard.
+
+One add_audio() call per segment, not windowed
+────────────────────────────────────────────────
+The scratch script fed Moonshine in small windows because it had no choice --
+audio arrived live, as Silero produced it, packet by packet. STTWorker
+already has the entire finalized segment before _transcribe runs, so that
+constraint doesn't apply, and measuring it (scratch/demo_segment_cut_latency.py
+et al.) showed windowed feeding was strictly worse on real audio: ~2.7x
+slower (Moonshine's decoder redoes real work per add_audio() call, not just
+call overhead) and prone to word/phrase duplication right at window
+boundaries -- a duplication _is_repetitive can't catch, since it judges a
+whole completed line's unique/total token ratio, not a short repeated phrase
+inside an otherwise-fine line. moonshine_voice's own mic_transcriber.py
+agrees: it coalesces queued audio into as few add_audio() calls as possible
+specifically because that "lowers latency and avoids redundant work."
 
 One shared Transcriber, not one per channel
 ────────────────────────────────────────────
@@ -50,7 +65,7 @@ import queue
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterator
+from typing import Any, Callable
 
 import numpy as np
 
@@ -82,18 +97,10 @@ class STTWorkerConfig:
     # which archs each language publishes.
     model_arch: str = "tiny"
     sample_rate: int = 16000
-    # add_audio() is called every feed_windows * feed_window_samples samples,
-    # matching the scratch script's batching (64 * 512 = 32768 = ~2.05s @ 16kHz).
-    feed_windows: int = 64
-    feed_window_samples: int = 512
     options: dict[str, str] = field(default_factory=_default_options)
     # Below this unique/total token ratio a line is treated as the model
     # looping on itself; see _is_repetitive.
     repetitive_ratio: float = 0.45
-
-    @property
-    def feed_chunk_samples(self) -> int:
-        return self.feed_windows * self.feed_window_samples
 
 
 def _is_repetitive(text: str, threshold: float) -> bool:
@@ -307,8 +314,8 @@ class STTWorker(threading.Thread):
 
         transcriber.start()
         try:
-            for chunk in self._feed_chunks(segment.audio):
-                transcriber.add_audio(chunk, self.config.sample_rate)
+            samples = self._pcm_to_float32(segment.audio).tolist()
+            transcriber.add_audio(samples, self.config.sample_rate)
         finally:
             # stop() flushes the decoder and resets its state (verified in
             # the module docstring); skipping it on error would leave the
@@ -316,13 +323,6 @@ class STTWorker(threading.Thread):
             transcriber.stop()
 
         return str(collector.text())
-
-    def _feed_chunks(self, pcm_bytes: bytes) -> Iterator[list[float]]:
-        """Yield float32 sample lists of feed_chunk_samples each (last may be short)."""
-        samples = self._pcm_to_float32(pcm_bytes)
-        step = self.config.feed_chunk_samples
-        for i in range(0, len(samples), step):
-            yield samples[i : i + step].tolist()
 
     # ── Helpers ──────────────────────────────────────────────────
 
