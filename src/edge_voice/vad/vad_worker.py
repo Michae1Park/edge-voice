@@ -124,6 +124,7 @@ class VADWorker(threading.Thread):
         self,
         routed_queue: "queue.Queue[AudioPacket]",
         segment_queue: "queue.Queue[SpeechSegment]",
+        channel_ids: list[str],
         config: VADWorkerConfig | None = None,
         model=None,
         name: str = "VADWorker",
@@ -140,7 +141,18 @@ class VADWorker(threading.Thread):
         # _new_channel_state for why. Left as None, each channel loads its own.
         self.model = model
 
-        self._channels: dict[str, _ChannelState] = {}
+        # Fixed set, same shape as ChannelRouter's own channel_ids param --
+        # every channel's state (incl. its own Silero model) is built right
+        # here, during construction, not discovered from traffic. Two
+        # consequences: (issue #10) a model load can never land on the
+        # real-time packet-handling path, since there's nothing left for
+        # _handle_packet to lazily create; and _handle_packet can trust
+        # packet.channel_id is always a valid key -- ChannelRouter has
+        # already dropped anything outside this same configured set before
+        # it reaches this worker's queue.
+        self._channels: dict[str, _ChannelState] = {
+            channel_id: self._new_channel_state() for channel_id in channel_ids
+        }
         self._stop_event = threading.Event()
         # Monotonic timestamp of the last packet handled, read by the
         # supervisor's stall check (docs/BUILDPLAN.md Milestone 6). A plain
@@ -291,10 +303,11 @@ class VADWorker(threading.Thread):
     # ── Per-packet handling ─────────────────────────────────────
 
     def _handle_packet(self, packet: AudioPacket) -> None:
-        state = self._channels.get(packet.channel_id)
-        if state is None:
-            state = self._new_channel_state()
-            self._channels[packet.channel_id] = state
+        # No .get()/None-check: __init__ builds state for every channel_id in
+        # channel_ids up front, and ChannelRouter has already dropped
+        # anything outside that same configured set -- so a KeyError here
+        # would mean that invariant broke upstream, not a case to paper over.
+        state = self._channels[packet.channel_id]
         state.last_packet_at = time.monotonic()
 
         float_chunk = self._bytes_to_float_tensor(packet.samples)

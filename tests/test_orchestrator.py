@@ -92,6 +92,22 @@ def test_build_creates_correct_workers():
     assert orch._stt is not None
 
 
+def test_build_gives_vad_a_channel_per_configured_channel():
+    """Issue #10: model loading moves to VADWorker construction, off the
+    real-time path -- see VADWorker.__init__'s docstring.
+
+    Before this, VADWorker._channels was only populated lazily by the first
+    packet on each channel_id. _build_vad() now passes
+    Settings.mqtt.channels straight into the constructor, so build() alone
+    -- no packet, no start() -- already has channel state (and therefore a
+    loaded model) for every configured channel.
+    """
+    s = _minimal_settings()
+    orch = PipelineOrchestrator(s)
+    orch.build()
+    assert set(orch._vad._channels) == {"rx", "tx"}
+
+
 def test_build_with_dump_enabled():
     s = _minimal_settings()
     s.dump.enabled = True
