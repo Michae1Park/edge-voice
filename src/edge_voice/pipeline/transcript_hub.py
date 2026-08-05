@@ -68,3 +68,12 @@ class TranscriptHub:
     def unsubscribe(self, sub: "queue.Queue[TranscriptEvent]") -> None:
         with self._lock:
             self._subscribers.discard(sub)
+
+    def clear(self) -> None:
+        """Wipe the replay backlog so a newly (re)connecting client starts blank.
+
+        Doesn't touch live subscribers' queues -- a clear is about history,
+        not about pausing whatever's currently mid-segment.
+        """
+        with self._lock:
+            self._backlog.clear()

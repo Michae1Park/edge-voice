@@ -76,6 +76,24 @@ def test_unsubscribe_unknown_queue_is_a_noop():
     hub.unsubscribe(stray)  # must not raise
 
 
+def test_clear_empties_the_replay_backlog():
+    hub = TranscriptHub()
+    hub.publish(_event("first"))
+    hub.clear()
+    sub = hub.subscribe()
+    assert sub.empty()
+
+
+def test_clear_does_not_affect_live_subscribers():
+    hub = TranscriptHub()
+    sub = hub.subscribe()
+    hub.publish(_event("first"))
+    hub.clear()
+    hub.publish(_event("second"))
+    assert sub.get_nowait().text == "first"
+    assert sub.get_nowait().text == "second"
+
+
 def test_full_subscriber_queue_drops_without_raising():
     hub = TranscriptHub()
     sub = hub.subscribe()

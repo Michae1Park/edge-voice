@@ -143,6 +143,25 @@
     padding: 5px 10px 5px 8px;
     transition: color 0.2s ease;
   }
+  .clear-btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  .clear-btn:hover { color: var(--ink); border-color: var(--ink-faint); }
+  .clear-btn:focus-visible {
+    outline: 2px solid var(--tx);
+    outline-offset: 2px;
+  }
+
   .live-pill.stopped { color: var(--stopped); }
   /* Pipeline running, but something is wrong -- either the supervisor has
      flagged a worker degraded (crash-looping past its restart budget) or the
@@ -472,6 +491,7 @@
     <div class="right">
       <span class="clock" id="clock">--:--:--</span>
       <span class="live-pill stopped" id="livePill"><span class="dot live"></span><span id="liveLabel">connecting</span></span>
+      <button class="clear-btn" id="clearBtn" type="button" title="Clear transcript history">clear</button>
     </div>
   </header>
 
@@ -514,6 +534,7 @@
     var clockEl = document.getElementById("clock");
     var livePill = document.getElementById("livePill");
     var liveLabel = document.getElementById("liveLabel");
+    var clearBtn = document.getElementById("clearBtn");
     var chipMqtt = document.getElementById("chipMqtt");
     var mqttVal = document.getElementById("mqttVal");
     var chipQueues = document.getElementById("chipQueues");
@@ -631,6 +652,22 @@
 
     jumpBtn.addEventListener("click", function () {
       scrollToBottom(true);
+    });
+
+    // Kiosk has no mouse (see legend-bar comment) -- a touchscreen invites
+    // stray taps, so this confirms before wiping anything.
+    clearBtn.addEventListener("click", function () {
+      if (!window.confirm("Clear all transcripts?")) return;
+      fetch("/api/transcripts/clear", { method: "POST" }).catch(function () {});
+      // Clears this tab's view immediately rather than waiting on the fetch
+      // -- it's the only client (see app.py), so there's nothing to stay in
+      // sync with, and a slow/failed POST shouldn't leave a stale feed.
+      liveBubbles = Object.create(null);
+      while (inner.firstChild && inner.firstChild !== cursorRow) {
+        inner.removeChild(inner.firstChild);
+      }
+      empty.hidden = false;
+      jumpBtn.hidden = true;
     });
 
     feed.addEventListener("scroll", function () {

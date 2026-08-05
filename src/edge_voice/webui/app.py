@@ -83,6 +83,13 @@ def create_app(orchestrator: PipelineOrchestrator) -> FastAPI:
     async def transcript_stream(request: Request) -> StreamingResponse:
         return StreamingResponse(_sse_events(orchestrator, request), media_type="text/event-stream")
 
+    @app.post("/api/transcripts/clear")
+    def clear_transcripts() -> dict:
+        # Just a lock + deque.clear() -- no run_in_threadpool needed, same
+        # reasoning as /api/status.
+        orchestrator.transcripts.clear()
+        return {"cleared": True}
+
     return app
 
 
