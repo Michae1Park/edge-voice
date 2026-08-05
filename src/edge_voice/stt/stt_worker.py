@@ -61,6 +61,8 @@ Assumptions:
 
 from __future__ import annotations
 
+import ctypes
+import os
 import queue
 import threading
 import time
@@ -105,6 +107,66 @@ class STTWorkerConfig:
     # skipped rather than transcribed (see _handle_partial). Only consulted
     # when vad.partial_interval_s has partials switched on at all.
     partial_max_queue_depth: int = 0
+
+
+class _OrtApiBase(ctypes.Structure):
+    # First two fields of ONNX Runtime's stable C ABI struct (the rest is a
+    # large, version-sensitive function table we don't need):
+    # struct OrtApiBase { const OrtApi*(*GetApi)(uint32_t); const char*(*GetVersionString)(void); };
+    _fields_ = [("GetApi", ctypes.c_void_p), ("GetVersionString", ctypes.c_void_p)]
+
+
+def _confirm_onnx_runtime_backend(model_path: str) -> None:
+    """One-time startup proof the model is served by ONNX Runtime.
+
+    moonshine_voice ships no torch/tf dependency, and its only inference
+    path is libmoonshine.so -> onnxruntime's C API -- confirmed with gdb by
+    breaking on libmoonshine.so's exported `ort_run` symbol and tracing a
+    real transcription: moonshine_transcribe_stream ->
+    Transcriber::transcribe_stream -> MoonshineModel::transcribe -> ort_run.
+
+    Must run *after* Transcriber() is constructed: onnxruntime is dlopen'd
+    lazily (verified absent from /proc/self/maps right after `import
+    moonshine_voice`, present right after construction), so calling this any
+    earlier would find nothing mapped.
+
+    Reports the version via ONNX Runtime's own C API
+    (OrtGetApiBase().GetVersionString()) against the exact .so mapped into
+    this process, rather than parsing it out of a filename -- so it can't
+    silently drift out of sync with what's actually loaded.
+    """
+    try:
+        with open(f"/proc/{os.getpid()}/maps") as f:
+            onnx_lib_paths = sorted({line.split()[-1] for line in f if "libonnxruntime" in line})
+        if not onnx_lib_paths:
+            logger.warning(
+                "STTWorker: no onnxruntime shared library mapped in this process "
+                "-- inference backend could not be confirmed"
+            )
+            return
+        onnx_lib_path = onnx_lib_paths[0]
+
+        lib = ctypes.CDLL(onnx_lib_path)
+        lib.OrtGetApiBase.restype = ctypes.c_void_p
+        api_base = ctypes.cast(lib.OrtGetApiBase(), ctypes.POINTER(_OrtApiBase)).contents
+        get_version_string = ctypes.CFUNCTYPE(ctypes.c_char_p)(api_base.GetVersionString)
+        onnx_version = get_version_string().decode()
+
+        model_files = (
+            sorted(f for f in os.listdir(model_path) if f.endswith((".onnx", ".ort")))
+            if os.path.isdir(model_path)
+            else []
+        )
+
+        logger.info(
+            "STTWorker: model running on ONNX Runtime v%s (%s) -- model files=%s at %s",
+            onnx_version,
+            onnx_lib_path,
+            model_files,
+            model_path,
+        )
+    except Exception:
+        logger.exception("STTWorker: failed to confirm ONNX Runtime backend")
 
 
 def _is_repetitive(text: str, threshold: float) -> bool:
@@ -421,11 +483,15 @@ class STTWorker(threading.Thread):
             )
         model_path, model_arch = self._resolved_model
 
-        return Transcriber(
+        transcriber = Transcriber(
             model_path=model_path,
             model_arch=model_arch,
             options=self.config.options,
         )
+        # After construction, not before: onnxruntime is dlopen'd lazily by
+        # libmoonshine.so, only once a Transcriber actually exists.
+        _confirm_onnx_runtime_backend(model_path)
+        return transcriber
 
     def _pcm_to_float32(self, pcm_bytes: bytes) -> np.ndarray:
         # int16 mono PCM -> float32 normalized to [-1, 1]
