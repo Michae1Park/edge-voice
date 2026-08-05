@@ -1,155 +1,137 @@
-"""Standalone microphone audio source for testing/dev.
+"""Live microphone audio source that publishes PCM frames to MQTT for the
+pipeline.
 
-Captures from the system microphone, converts to the format expected by
-edge_voice pipeline, and publishes audio chunks to an ingest queue or
-MQTT broker tagged with a channel_id.
+Captures from a system microphone, splits into 20ms chunks, and publishes
+each frame as raw PCM bytes (no envelope) to the configured MQTT topics --
+same wire format as wav_source_raw.py, which MqttAudioIngest consumes
+directly as PCM samples (audio_ingest/mqtt_client.py:_on_message). This is
+what lets edge-voice (run via cli.py, listening on stt/audio_chunks_*)
+simply receive and transcribe whatever this script captures.
 
-Run standalone in its own terminal:
-    python mic_source.py --output-queue  # push to in-memory queue
-    python mic_source.py --mqtt           # push to MQTT broker
+Run as a separate process, alongside the real edge-voice pipeline:
+    python -m edge_voice.utils.audio_generation.mic_source --channel rx
+    python -m edge_voice.utils.audio_generation.mic_source --list-devices
 
-This is NOT imported by cli.py or pipeline/orchestrator.py. It's a separate
-process, just like a real call leg would be.
+Not imported by cli.py/orchestrator.py -- a live mic is a single ongoing
+capture, not something the pipeline itself owns; it's a separate process
+publishing over MQTT, just like a real call leg (or wav_source_raw.py) would.
 """
 
 from __future__ import annotations
 
 import argparse
-from typing import Any
 import logging
-import queue
-import threading
 import time
+from collections.abc import Sequence
+
+import paho.mqtt.client as mqtt  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 
-# Audio format: 16-bit PCM, mono, 16kHz (matches default YAML config)
+# Matches configs/default.yaml audio.sample_rate / the 20ms chunk every
+# other audio_generation source uses.
 SAMPLE_RATE = 16000
-CHUNK_SAMPLES = 320  # 20ms chunks (160 bytes @ 16bit)
-PACKET_PUT_TIMEOUT = 0.01
+CHUNK_SAMPLES = 320
+MQTT_QOS = 1
 
 
-class MicSource(threading.Thread):
-    """Captures from the system microphone and pushes chunks onto a queue."""
+def _list_devices() -> None:
+    import sounddevice as sd
 
-    def __init__(
-        self,
-        ingest_queue: queue.Queue,
-        channel_ids: list[str],
-        device_index: int | None = None,
-    ) -> None:
-        super().__init__(name="MicSource", daemon=True)
-        self._ingest_queue = ingest_queue
-        self._channel_ids = channel_ids
-        self._device_index = device_index
-        self._stopped = threading.Event()
-
-    def run(self) -> None:
-        """Capture audio and push to ingest queue."""
-        import sounddevice as sd
-
-        logger.info("MicSource: initializing sounddevice...")
-
-        if self._device_index is not None:
-            device_count = len(sd.query_devices())
-            if self._device_index >= device_count:
-                raise ValueError(
-                    f"Device index {self._device_index} out of range (0-{device_count - 1})"
-                )
-            logger.info("MicSource: using device %d", self._device_index)
-        else:
-            for i, info in enumerate(sd.query_devices()):
-                logger.info(
-                    "  Device %d: %s (%d in, %d out)",
-                    i,
-                    info["name"],
-                    info["max_input_channels"],
-                    info["max_output_channels"],
-                )
-
-        stream = sd.RawInputStream(
-            samplerate=SAMPLE_RATE,
-            channels=1,
-            dtype="int16",
-            blocksize=CHUNK_SAMPLES,
-            device=self._device_index,
+    for i, info in enumerate(sd.query_devices()):
+        print(
+            f"{i}: {info['name']} ({info['max_input_channels']} in, {info['max_output_channels']} out)"
         )
-        stream.start()
-        logger.info("MicSource: capturing on %s", self._channel_ids)
-
-        packet_num = 0
-        try:
-            while not self._stopped.is_set():
-                raw, _overflowed = stream.read(CHUNK_SAMPLES)
-                chunk = _raw_to_numpy(bytes(raw))
-
-                for channel_id in self._channel_ids:
-                    packet = _create_packet(channel_id, chunk)
-                    try:
-                        self._ingest_queue.put(packet, timeout=PACKET_PUT_TIMEOUT)
-                        packet_num += 1
-                    except queue.Full:
-                        logger.warning("ingest_queue full, dropping packet for %s", channel_id)
-
-                if packet_num % 50 == 0 and packet_num > 0:
-                    logger.debug("MicSource: sent %d packets", packet_num)
-
-        except Exception as e:
-            logger.error("MicSource: error: %s", e)
-        finally:
-            stream.stop()
-            stream.close()
-            logger.info("MicSource: stopped after %d packets", packet_num)
-
-    def stop(self) -> None:
-        self._stopped.set()
-
-    def is_alive(self) -> bool:
-        return not self._stopped.is_set()
 
 
-def _raw_to_numpy(raw: bytes) -> Any:
-    """Convert raw audio bytes to numpy int16 array."""
-    import numpy as np
-
-    return np.frombuffer(raw, dtype=np.int16)
-
-
-def _create_packet(
-    channel_id: str,
-    samples,  # type: ignore
-    timestamp: float | None = None,
-) -> Any:
-    """Convert numpy array to AudioPacket."""
-    from edge_voice.pipeline.models import AudioPacket
-
-    return AudioPacket(
-        channel_id=channel_id,
-        timestamp=timestamp or time.time(),
-        samples=samples.tobytes(),
+def main(argv: Sequence[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        description="Publish live microphone audio to MQTT for the edge-voice pipeline"
     )
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="MicSource standalone test")
+    parser.add_argument("--broker", default="localhost", help="MQTT broker host")
+    parser.add_argument("--port", type=int, default=1883, help="MQTT broker port")
     parser.add_argument(
-        "-d", "--device", type=int, default=None, help="sounddevice device index (default: auto)"
+        "--channels",
+        nargs="+",
+        default=["rx"],
+        help=(
+            "Channel(s) to publish to (e.g. rx, or rx tx to duplicate this "
+            "one mic to both -- a live mic is one feed, so 'rx' alone is "
+            "the common case)"
+        ),
+    )
+    parser.add_argument("--sr", type=int, default=SAMPLE_RATE, help="Capture sample rate")
+    parser.add_argument("--chunk", type=int, default=CHUNK_SAMPLES, help="Chunk size in samples")
+    parser.add_argument(
+        "-d", "--device", type=int, default=None, help="sounddevice input device index"
     )
     parser.add_argument(
-        "-c", "--channel", type=str, default="ch1", help="Channel ID to tag packets with"
+        "--list-devices", action="store_true", help="List available audio devices and exit"
     )
-    parser.add_argument("-q", "--queue-type", choices=["memory", "mqtt"], default="memory")
     parser.add_argument("--debug", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
 
-    if args.queue_type == "memory":
-        q: queue.Queue[Any] = queue.Queue(maxsize=256)
-        source = MicSource(q, [args.channel], args.device)
-        source.run()
-    else:
-        logger.info("MQTT mode not yet implemented")
+    if args.list_devices:
+        _list_devices()
+        return
+
+    import sounddevice as sd
+
+    topic_map = {ch: f"stt/audio_chunks_{ch}" for ch in args.channels}
+
+    client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
+    connected = False
+
+    def on_connect(_client, _userdata, flags, rc, props):
+        nonlocal connected
+        connected = True
+
+    client.on_connect = on_connect  # type: ignore[assignment]
+    client.connect(args.broker, args.port)
+    client.loop_start()
+
+    while not connected:
+        time.sleep(0.05)
+
+    logger.info(
+        "MicSource: capturing from device=%s at %d Hz -> %s",
+        args.device if args.device is not None else "default",
+        args.sr,
+        {ch: topic_map[ch] for ch in args.channels},
+    )
+
+    stream = sd.RawInputStream(
+        samplerate=args.sr,
+        channels=1,
+        dtype="int16",
+        blocksize=args.chunk,
+        device=args.device,
+    )
+    stream.start()
+
+    frame_num = 0
+    start = time.time()
+    try:
+        while True:
+            # A blocking read paces this loop at real time on its own --
+            # unlike wav_source_raw.py, which reads a file near-instantly
+            # and has to throttle itself to match.
+            raw, _overflowed = stream.read(args.chunk)
+            payload = bytes(raw)
+            for ch in args.channels:
+                client.publish(topic_map[ch], payload, qos=MQTT_QOS)
+            frame_num += 1
+    except KeyboardInterrupt:
+        pass
+    finally:
+        stream.stop()
+        stream.close()
+        client.loop_stop()
+        client.disconnect()
+        elapsed = time.time() - start
+        logger.info("MicSource: stopped after %d frames (%.1fs)", frame_num, elapsed)
 
 
 if __name__ == "__main__":
