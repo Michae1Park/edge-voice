@@ -7,7 +7,11 @@ req:
 		-o requirements-dev.txt \
 		pyproject.toml
 
+# Native PortAudio lib (Debian/Raspberry Pi OS package, not pip) is needed
+# for sounddevice, used by mic_source.py to capture from a live mic.
 install:
+	sudo apt-get update
+	sudo apt-get install -y libportaudio2
 	pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[dev]"
 
 # Deploys/restarts the systemd unit -- separate from `install` since this
