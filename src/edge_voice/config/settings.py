@@ -88,6 +88,16 @@ class VADSettings(BaseModel):
     soft_cut_s: float = 5.0
     soft_cut_lookahead_s: float = 1.0
     soft_cut_min_dip: float = 0.10
+    # Emit a revisable transcript of the in-progress segment every this many
+    # seconds of accumulated speech. 0 disables (same convention as
+    # idle_flush_s) and is the default: on a non-streaming model every
+    # partial re-transcribes the whole prefix from scratch, so this costs
+    # real inference. Measure on the target device before raising it.
+    partial_interval_s: float = Field(default=0.0, ge=0)
+    # Don't emit partials until the segment is at least this long. Short
+    # turns finalize fast enough that a partial adds nothing but load, so
+    # this keeps ordinary turn-taking paying zero.
+    partial_min_segment_s: float = Field(default=1.5, gt=0)
 
     @model_validator(mode="after")
     def _check_soft_cut_below_hard_cap(self) -> "VADSettings":
@@ -127,6 +137,11 @@ class STTSettings(BaseModel):
     log_api_calls: bool = False
     save_input_wav_path: str = ""
     return_audio_data: bool = False
+    # Backpressure guard for vad.partial_interval_s. A partial is throwaway,
+    # so when segment_queue is this deep or deeper it's skipped rather than
+    # queued ahead of real work -- finals are never dropped. 0 means "drop a
+    # partial whenever anything else is already waiting".
+    partial_max_queue_depth: int = Field(default=0, ge=0)
 
 
 class LoggingSettings(BaseModel):

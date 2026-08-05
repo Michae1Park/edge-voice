@@ -70,6 +70,15 @@ class VADWorkerConfig:
     soft_cut_lookahead_s: float = 1.0  # how far back to scan for that pause
     soft_cut_min_dip: float = 0.10  # dip must be this far below current score
 
+    # ── Partial transcripts (off by default) ────────────────────
+    # Emit the in-progress segment as a revisable prefix every
+    # partial_interval_s of accumulated speech, so the UI can show text
+    # before the speaker stops. 0 disables (same convention as
+    # idle_flush_s). These prefixes never reach dump_queue and are dropped
+    # rather than queued when the pipeline is behind -- see _emit_partial.
+    partial_interval_s: float = 0.0
+    partial_min_segment_s: float = 1.5
+
 
 class _ScoreCapturingModel:
     """Records the speech probability VADIterator computes internally.
@@ -115,6 +124,11 @@ class _ChannelState:
     # (chunk_index, score) pairs, only recorded once a segment approaches
     # soft_cut_s -- see _maybe_cut. Empty for normal-length segments.
     scores: list = field(default_factory=list)
+    # Segment-relative seconds at which this segment's last partial was
+    # emitted, pacing the next one. Reset wherever segment_chunks is
+    # (re)seeded, so a cut tail starts its own partial clock rather than
+    # inheriting the emitted head's.
+    last_partial_s: float = 0.0
 
 
 class VADWorker(threading.Thread):
@@ -359,6 +373,7 @@ class VADWorker(threading.Thread):
         state.segment_start_ts = state.preroll[0][0] if state.preroll else packet.timestamp
         state.preroll.clear()
         state.scores.clear()
+        state.last_partial_s = 0.0
         self._new_segment_id(packet.channel_id, state)
 
     def _end_segment(self, packet: AudioPacket, state: _ChannelState) -> None:
@@ -372,6 +387,66 @@ class VADWorker(threading.Thread):
         enabled at all -- otherwise there's nothing to do)."""
         if self.config.segment_limits_enabled:
             self._maybe_cut(packet.channel_id, state, packet)
+        # Deliberately after the cut check: a cut finalizes the head and
+        # re-seeds a short tail, so a partial emitted first would describe
+        # audio that its own final is about to supersede anyway.
+        if self.config.partial_interval_s > 0:
+            self._maybe_emit_partial(packet.channel_id, state, packet)
+
+    # ── Partial transcripts ─────────────────────────────────────
+
+    def _maybe_emit_partial(
+        self, channel_id: str, state: _ChannelState, packet: AudioPacket
+    ) -> None:
+        """Emit the in-progress prefix if partial_interval_s has elapsed.
+
+        Paced by accumulated *speech*, not wall clock, so the cadence is
+        identical whether audio arrives live or is replayed from a file.
+        """
+        cfg = self.config
+        samples_per_chunk = len(packet.samples) // 2  # int16
+        start_ts = state.segment_start_ts
+        if samples_per_chunk <= 0 or start_ts is None or not state.segment_chunks:
+            return
+
+        seg_s = len(state.segment_chunks) * (samples_per_chunk / cfg.sample_rate)
+        if seg_s < cfg.partial_min_segment_s:
+            return
+        if seg_s - state.last_partial_s < cfg.partial_interval_s:
+            return
+
+        state.last_partial_s = seg_s
+        self._emit_partial(channel_id, state, start_ts, seg_s)
+
+    def _emit_partial(
+        self, channel_id: str, state: _ChannelState, start_ts: float, seg_s: float
+    ) -> None:
+        """Put a prefix on segment_queue only -- never dump_queue.
+
+        Uses put_nowait rather than fanout_put for two reasons: a dump of
+        every prefix would bury the real segments in segment_audio_dump, and
+        a partial is throwaway, so a full queue already means "STT is
+        behind". Blocking this real-time thread for fanout_put's timeout to
+        deliver work STT would then drop is strictly worse than skipping it
+        here. It carries the in-progress segment_id, so the final that
+        eventually lands replaces it rather than appending.
+        """
+        segment = SpeechSegment(
+            channel_id=channel_id,
+            start=start_ts,
+            end=start_ts + seg_s,
+            audio=b"".join(state.segment_chunks),
+            segment_id=state.segment_id or self._new_segment_id(channel_id, state),
+            is_partial=True,
+        )
+        try:
+            self.segment_queue.put_nowait(segment)
+        except queue.Full:
+            logger.debug(
+                "VADWorker: segment_queue full -- dropping partial on channel=%s",
+                channel_id,
+                extra={"channel_id": channel_id, "segment_id": segment.segment_id},
+            )
 
     # ── Segment-length limits ───────────────────────────────────
 
@@ -473,6 +548,10 @@ class VADWorker(threading.Thread):
         state.segment_chunks = []
         state.segment_start_ts = None
         state.segment_id = None
+        # The tail _cut_segment re-seeds after this is its own segment, so it
+        # starts a fresh partial clock rather than inheriting the emitted
+        # head's elapsed time.
+        state.last_partial_s = 0.0
 
     # ── Helpers ──────────────────────────────────────────────────
 

@@ -393,3 +393,83 @@ def test_health_is_a_superset_of_get_status():
         assert health[key] == value
     assert health["status"] == "down"  # built but not started
     assert set(health["channels"]) == {"rx", "tx"}
+
+
+# -- partial transcripts -----------------------------
+
+
+def _built_orchestrator_and_callback():
+    """The _on_transcript closure _build_stt hands to STTWorker."""
+    orch = PipelineOrchestrator(_minimal_settings())
+    orch.build()
+    return orch, orch._stt._on_transcript
+
+
+def test_partial_transcript_does_not_emit_the_segment_closing_log_line(caplog):
+    """TRANSCRIPT is the one-per-segment lifecycle close (see _on_transcript).
+    A revisable prefix must not fire it, or the trace gains N lines per
+    segment and each reports a latency belonging to some other segment."""
+    from edge_voice.pipeline.models import TranscriptEvent
+
+    orch, on_transcript = _built_orchestrator_and_callback()
+    with caplog.at_level("DEBUG"):
+        on_transcript(
+            TranscriptEvent(
+                channel_id="rx",
+                segment_id="rx-1",
+                text="안녕",
+                start=0.0,
+                end=1.5,
+                is_final=False,
+            )
+        )
+
+    assert not any("TRANSCRIPT" in r.message for r in caplog.records)
+    assert any("PARTIAL" in r.message for r in caplog.records)
+
+
+def test_partial_transcript_does_not_read_stale_stt_latency(caplog):
+    """last_latency_s belongs to the last *final*; _handle_partial leaves it
+    alone, so the partial branch must not attach it to this segment."""
+    from edge_voice.pipeline.models import TranscriptEvent
+
+    orch, on_transcript = _built_orchestrator_and_callback()
+    with caplog.at_level("DEBUG"):
+        on_transcript(
+            TranscriptEvent(
+                channel_id="rx", segment_id="rx-1", text="안녕", start=0.0, end=1.5, is_final=False
+            )
+        )
+
+    assert not any(hasattr(r, "stt_latency_s") for r in caplog.records)
+
+
+def test_partial_transcript_still_reaches_the_live_feed():
+    from edge_voice.pipeline.models import TranscriptEvent
+
+    orch, on_transcript = _built_orchestrator_and_callback()
+    sub = orch.transcripts.subscribe()
+    event = TranscriptEvent(
+        channel_id="rx", segment_id="rx-1", text="안녕", start=0.0, end=1.5, is_final=False
+    )
+    on_transcript(event)
+
+    assert sub.get_nowait() is event
+
+
+def test_final_transcript_still_emits_the_closing_log_line(caplog):
+    from edge_voice.pipeline.models import TranscriptEvent
+
+    orch, on_transcript = _built_orchestrator_and_callback()
+    # _handle_segment always sets this immediately before publishing a final
+    # (see _on_transcript's comment); the log line formats it as %.3f, so
+    # standing in for that write is what makes this callable in isolation.
+    orch._stt._last_latency_s = 0.42
+    with caplog.at_level("INFO"):
+        on_transcript(
+            TranscriptEvent(
+                channel_id="rx", segment_id="rx-1", text="안녕하세요", start=0.0, end=2.0
+            )
+        )
+
+    assert any("TRANSCRIPT" in r.message for r in caplog.records)
