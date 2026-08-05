@@ -7,11 +7,15 @@ req:
 		-o requirements-dev.txt \
 		pyproject.toml
 
-# Native PortAudio lib (Debian/Raspberry Pi OS package, not pip) is needed
-# for sounddevice, used by mic_source.py to capture from a live mic.
+# System packages (Debian/Raspberry Pi OS, not pip):
+#   libportaudio2      -- native lib behind sounddevice, used by mic_source.py
+#   mosquitto          -- the MQTT broker the pipeline ingests audio from;
+#                         apt enables it on localhost:1883, matching the
+#                         mqtt.broker_host/broker_port defaults
+#   mosquitto-clients  -- mosquitto_sub/pub, for inspecting topics by hand
 install:
 	sudo apt-get update
-	sudo apt-get install -y libportaudio2
+	sudo apt-get install -y libportaudio2 mosquitto mosquitto-clients
 	pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[dev]"
 
 # Deploys/restarts the systemd unit -- separate from `install` since this

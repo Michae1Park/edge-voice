@@ -28,8 +28,10 @@ Two logically separate pieces talk only over MQTT; everything after ingestion ru
 ## Requirements
 
 - Python 3.12
-- An MQTT broker reachable by the pipeline (e.g. [Mosquitto](https://mosquitto.org/)) — audio ingestion is MQTT-only, there is no direct-mic-to-pipeline path in production use
-- For live mic capture (`--mic` / `mic_source.py`): the native PortAudio library (`make install` installs `libportaudio2` via `apt`; Debian/Raspberry Pi OS only)
+- An MQTT broker reachable by the pipeline — audio ingestion is MQTT-only, there is no direct-mic-to-pipeline path in production use
+- The native PortAudio library, for live mic capture (`--mic` / `mic_source.py`)
+
+On Debian/Raspberry Pi OS, `make install` installs both via `apt` ([`mosquitto`](https://mosquitto.org/) + `mosquitto-clients`, and `libportaudio2`) — apt starts the broker on `localhost:1883`, matching the defaults in [Configuration](#configuration). On other platforms, install them yourself; only the `pip install` line in the `install` target applies.
 
 ## Quick start
 
@@ -40,13 +42,13 @@ cd edge-voice
 python3.12 -m venv venv
 source venv/bin/activate
 
-make install   # pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[dev]"
+make install   # apt: mosquitto, mosquitto-clients, libportaudio2 -- then pip install -e ".[dev]"
 make test      # pytest
 ```
 
 ## Running the pipeline
 
-The pipeline consumes audio over MQTT, so it expects a broker running (`localhost:1883` by default — see [Configuration](#configuration)) and something publishing per-channel audio to it. That something can be any MQTT publisher — a live audio feed streamed in from elsewhere, a radio bridge, whatever fits your setup — in which case Terminal 1 below is all you need to run.
+The pipeline consumes audio over MQTT, so it expects a broker running (`localhost:1883` by default — see [Configuration](#configuration); `make install` sets this up on Debian/Raspberry Pi OS) and something publishing per-channel audio to it. That something can be any MQTT publisher — a live audio feed streamed in from elsewhere, a radio bridge, whatever fits your setup — in which case Terminal 1 below is all you need to run.
 
 **Terminal 1 — start the pipeline:**
 
