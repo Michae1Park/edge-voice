@@ -15,6 +15,8 @@ Run as a separate process, alongside the real edge-voice pipeline:
 Not imported by cli.py/orchestrator.py -- a live mic is a single ongoing
 capture, not something the pipeline itself owns; it's a separate process
 publishing over MQTT, just like a real call leg (or wav_source_raw.py) would.
+`edge-voice --mic` spawns this file as a subprocess for convenience; it
+still runs and shuts down as its own process, not in-process capture.
 """
 
 from __future__ import annotations

@@ -29,6 +29,7 @@ Two logically separate pieces talk only over MQTT; everything after ingestion ru
 
 - Python 3.12
 - An MQTT broker reachable by the pipeline (e.g. [Mosquitto](https://mosquitto.org/)) — audio ingestion is MQTT-only, there is no direct-mic-to-pipeline path in production use
+- For live mic capture (`--mic` / `mic_source.py`): the native PortAudio library (`make install` installs `libportaudio2` via `apt`; Debian/Raspberry Pi OS only)
 
 ## Quick start
 
@@ -64,12 +65,28 @@ python -m edge_voice.utils.audio_generation.wav_source_raw \
     --wav wav/rx_recorded_1.wav wav/tx_recorded_1.wav --channels rx tx
 ```
 
+**Or, to use a real microphone instead:**
+
+```bash
+edge-voice --mic
+```
+
+This spawns [`mic_source.py`](src/edge_voice/utils/audio_generation/mic_source.py) as a subprocess alongside the pipeline, capturing from the system's default input device and publishing to the `rx` channel over MQTT (same wire format as any other audio source — the mic isn't wired into the pipeline directly). It captures at the device's native sample rate and resamples to match the pipeline's configured rate. It's shut down automatically when `edge-voice` exits.
+
+To pick a specific device, list channels, or run the mic capture on its own (e.g. against a pipeline on another machine), invoke it directly instead:
+
+```bash
+python -m edge_voice.utils.audio_generation.mic_source --list-devices
+python -m edge_voice.utils.audio_generation.mic_source --device 2 --channels rx
+```
+
 Useful `edge-voice` flags:
 
 | Flag | Default | Description |
 |---|---|---|
 | `--run-secs N` | `0` | Exit automatically after `N` seconds (`0` = run until Ctrl-C) |
 | `--debug` | off | Verbose (`DEBUG`-level) logging |
+| `--mic` | off | Also launch a live mic capture, publishing to the `rx` channel over MQTT |
 
 ## Configuration
 
