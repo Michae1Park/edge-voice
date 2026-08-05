@@ -24,7 +24,10 @@ import logging
 import time
 from collections.abc import Sequence
 
+import numpy as np
 import paho.mqtt.client as mqtt  # type: ignore[import-untyped]
+import torch
+import torchaudio
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +47,11 @@ def _list_devices() -> None:
         )
 
 
+def _resample(data: np.ndarray, resampler: torchaudio.transforms.Resample) -> np.ndarray:
+    tensor = torch.as_tensor(data, dtype=torch.float32).unsqueeze(0)
+    return resampler(tensor).squeeze(0).numpy().astype(np.int16)
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description="Publish live microphone audio to MQTT for the edge-voice pipeline"
@@ -60,7 +68,13 @@ def main(argv: Sequence[str] | None = None) -> None:
             "the common case)"
         ),
     )
-    parser.add_argument("--sr", type=int, default=SAMPLE_RATE, help="Capture sample rate")
+    parser.add_argument(
+        "--sr",
+        type=int,
+        default=SAMPLE_RATE,
+        help="Target sample rate published to MQTT (captured at the device's "
+        "native rate and resampled down if it differs)",
+    )
     parser.add_argument("--chunk", type=int, default=CHUNK_SAMPLES, help="Chunk size in samples")
     parser.add_argument(
         "-d", "--device", type=int, default=None, help="sounddevice input device index"
@@ -95,18 +109,30 @@ def main(argv: Sequence[str] | None = None) -> None:
     while not connected:
         time.sleep(0.05)
 
+    # Most mic hardware (esp. USB mics) only supports fixed native rates
+    # (44100/48000), not arbitrary ones -- so capture at whatever the
+    # device actually supports and resample down to the target rate per
+    # chunk, same idea as wav_source.py's whole-file resample.
+    native_sr = int(sd.query_devices(args.device, "input")["default_samplerate"])
+    resampler = None
+    native_chunk = args.chunk
+    if native_sr != args.sr:
+        native_chunk = round(args.chunk * native_sr / args.sr)
+        resampler = torchaudio.transforms.Resample(native_sr, args.sr, lowpass_filter_width=64)
+
     logger.info(
-        "MicSource: capturing from device=%s at %d Hz -> %s",
+        "MicSource: capturing from device=%s at %d Hz -> %d Hz -> %s",
         args.device if args.device is not None else "default",
+        native_sr,
         args.sr,
         {ch: topic_map[ch] for ch in args.channels},
     )
 
     stream = sd.RawInputStream(
-        samplerate=args.sr,
+        samplerate=native_sr,
         channels=1,
         dtype="int16",
-        blocksize=args.chunk,
+        blocksize=native_chunk,
         device=args.device,
     )
     stream.start()
@@ -118,8 +144,15 @@ def main(argv: Sequence[str] | None = None) -> None:
             # A blocking read paces this loop at real time on its own --
             # unlike wav_source_raw.py, which reads a file near-instantly
             # and has to throttle itself to match.
-            raw, _overflowed = stream.read(args.chunk)
-            payload = bytes(raw)
+            raw, _overflowed = stream.read(native_chunk)
+            data = np.frombuffer(bytes(raw), dtype=np.int16)
+            if resampler is not None:
+                data = _resample(data, resampler)
+                if len(data) < args.chunk:
+                    data = np.pad(data, (0, args.chunk - len(data)), "constant")
+                else:
+                    data = data[: args.chunk]
+            payload = data.tobytes()
             for ch in args.channels:
                 client.publish(topic_map[ch], payload, qos=MQTT_QOS)
             frame_num += 1
