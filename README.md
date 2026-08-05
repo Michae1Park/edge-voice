@@ -1,12 +1,33 @@
 # edge-voice
 
-Real-time, dual-channel (Rx/Tx) phone-call transcription for edge devices (Raspberry Pi 5, Jetson), using Silero VAD for speech segmentation and Moonshine for streaming STT. Audio for each call leg arrives as a separate MQTT stream and is transcribed independently, in order, with channel attribution preserved throughout.
+Real-time, dual-channel (Rx/Tx) transcription for edge devices (Raspberry Pi 5, Jetson), using Silero VAD for speech segmentation and Moonshine for streaming STT. Built for any two-party audio source, where each party's audio arrives as its own MQTT stream and is transcribed independently, in order, with channel attribution preserved throughout.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design doc and [`docs/BUILDPLAN.md`](docs/BUILDPLAN.md) for current status and what's next.
 
+## Architecture
+
+Two logically separate pieces talk only over MQTT; everything after ingestion runs in-process on worker threads connected by bounded queues:
+
+```
+ Audio source              MQTT broker              Pipeline (in-process)
+ (live audio feed, or      ┌──────────┐    ┌──────────────────────────────────┐
+  wav_source.py for dev)   │          │    │  MqttAudioIngest                 │
+        │  publish PCM     │          │    │        │                        │
+        │  per channel  ─▶ │          │ ─▶ │  ChannelRouter                   │
+        └──────────────────┘          │    │        │                        │
+                            └──────────┘    │  VADWorker  (Silero, per-channel)│
+                                             │        │                        │
+                                             │  STTWorker  (Moonshine)          │
+                                             │        │                        │
+                                             │  TranscriptEvent → logs / UI    │
+                                             └──────────────────────────────────┘
+```
+
+`MqttAudioIngest → ChannelRouter → VADWorker → STTWorker` communicate via in-memory `queue.Queue`s — no MQTT between pipeline stages, only at the boundary.
+
 ## Requirements
 
-- Python 3.12+
+- Python 3.12
 - An MQTT broker reachable by the pipeline (e.g. [Mosquitto](https://mosquitto.org/)) — audio ingestion is MQTT-only, there is no direct-mic-to-pipeline path in production use
 
 ## Quick start
@@ -24,7 +45,7 @@ make test      # pytest
 
 ## Running the pipeline
 
-The pipeline consumes audio over MQTT, so it expects a broker running (`localhost:1883` by default — see [Configuration](#configuration)) and a source publishing per-channel audio to it. In production the source is a real call leg; for local development, `wav_source.py` replays a `.wav` file over MQTT the same way a real leg would.
+The pipeline consumes audio over MQTT, so it expects a broker running (`localhost:1883` by default — see [Configuration](#configuration)) and something publishing per-channel audio to it. That something can be any MQTT publisher — a live audio feed streamed in from elsewhere, a radio bridge, whatever fits your setup — in which case Terminal 1 below is all you need to run.
 
 **Terminal 1 — start the pipeline:**
 
@@ -33,10 +54,12 @@ edge-voice
 # or: python -m edge_voice.cli
 ```
 
-**Terminal 2 — publish audio to it:**
+**Terminal 2 (optional) — publish pre-recorded audio to it:**
+
+If you don't already have a live source publishing to MQTT, `wav_source.py` replays a `.wav` file over MQTT the same way one would — useful for local development/demos:
 
 ```bash
-# Real recorded call legs, one file per channel
+# Real recorded audio, one file per channel (e.g. two call legs)
 python -m edge_voice.utils.audio_generation.wav_source_raw \
     --wav wav/rx_recorded_1.wav wav/tx_recorded_1.wav --channels rx tx
 ```
@@ -47,16 +70,6 @@ Useful `edge-voice` flags:
 |---|---|---|
 | `--run-secs N` | `0` | Exit automatically after `N` seconds (`0` = run until Ctrl-C) |
 | `--debug` | off | Verbose (`DEBUG`-level) logging |
-
-### Running as a persistent service
-
-For a deployment that should survive reboots and auto-restart on crash/hang (see [`deploy/edge-voice.service`](deploy/edge-voice.service) and `pipeline/supervisor.py`), install it as a systemd unit instead of running `edge-voice` directly:
-
-```bash
-make install-service   # sudo cp deploy/edge-voice.service /etc/systemd/system/, daemon-reload, enable --now
-```
-
-Edit `User=`, `WorkingDirectory=`, and `ExecStart=` in `deploy/edge-voice.service` to match your install (venv path, user) before running this — the checked-in values are placeholders. Re-run `make install-service` any time you change that file.
 
 ## Configuration
 
@@ -69,26 +82,15 @@ Settings are layered, lowest to highest precedence:
 
 `configs/default.yaml` documents every tunable inline — MQTT broker/topics, audio format, VAD thresholds and segment-cut limits, STT model/language selection, and queue sizes.
 
-## Architecture
+## Deployment
 
-Two logically separate pieces talk only over MQTT; everything after ingestion runs in-process on worker threads connected by bounded queues:
+For a deployment that should survive reboots and auto-restart on crash/hang (see [`deploy/edge-voice.service`](deploy/edge-voice.service) and `pipeline/supervisor.py`), install it as a systemd unit instead of running `edge-voice` directly:
 
-```
- Audio source              MQTT broker              Pipeline (in-process)
- (real call leg, or        ┌──────────┐    ┌──────────────────────────────────┐
-  wav_source.py for dev)   │          │    │  MqttAudioIngest                 │
-        │  publish PCM     │          │    │        │                        │
-        │  per channel  ─▶ │          │ ─▶ │  ChannelRouter                   │
-        └──────────────────┘          │    │        │                        │
-                            └──────────┘    │  VADWorker  (Silero, per-channel)│
-                                             │        │                        │
-                                             │  STTWorker  (Moonshine)          │
-                                             │        │                        │
-                                             │  TranscriptEvent → logs / UI    │
-                                             └──────────────────────────────────┘
+```bash
+make install-service   # sudo cp deploy/edge-voice.service /etc/systemd/system/, daemon-reload, enable --now
 ```
 
-`MqttAudioIngest → ChannelRouter → VADWorker → STTWorker` communicate via in-memory `queue.Queue`s — no MQTT between pipeline stages, only at the boundary.
+Edit `User=`, `WorkingDirectory=`, and `ExecStart=` in `deploy/edge-voice.service` to match your install (venv path, user) before running this — the checked-in values are placeholders. Re-run `make install-service` any time you change that file.
 
 ## Development
 
@@ -104,4 +106,13 @@ CI (`.github/workflows/ci.yml`) runs `make ci` equivalent checks on every push a
 
 ## Project status
 
-Core pipeline (MQTT ingest → routing → VAD → STT) is real end-to-end. Reliability (worker supervision/restart), observability, health reporting, and the web UI are planned but not yet built — see [`docs/BUILDPLAN.md`](docs/BUILDPLAN.md) for the milestone-by-milestone breakdown.
+Core pipeline (MQTT ingest → routing → VAD → STT) is real end-to-end, with worker supervision/restart, observability (structured logging + metrics), health reporting, and a live web UI all built — see [`docs/BUILDPLAN.md`](docs/BUILDPLAN.md) for the milestone-by-milestone breakdown.
+
+## Third-party models
+
+**Powered by [Moonshine AI](https://www.moonshine.ai).**
+
+This project uses two pretrained models, under two different licenses:
+
+- **[Silero VAD](https://github.com/snakers4/silero-vad)** — MIT license.
+- **[Moonshine](https://www.moonshine.ai)** (STT) — the `moonshine_voice` client library is MIT, but the model weights are not: multilingual models (`ko`, `ja`, etc. — see `configs/default.yaml` for the full list) are released under the **[Moonshine AI Community License](https://www.moonshine.ai/moonshine_community_license.txt)**, while English (`en`) models are MIT instead (see the license for full commercial-use terms). This Moonshine AI Model is licensed under the Moonshine AI Community License.
