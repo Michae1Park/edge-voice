@@ -6,9 +6,7 @@ from edge_voice.pipeline.models import TranscriptEvent
 from edge_voice.pipeline.transcript_hub import TranscriptHub
 
 
-def _event(
-    text: str = "hello", channel_id: str = "rx", is_final: bool = True
-) -> TranscriptEvent:
+def _event(text: str = "hello", channel_id: str = "rx", is_final: bool = True) -> TranscriptEvent:
     return TranscriptEvent(
         channel_id=channel_id,
         segment_id="seg-1",
