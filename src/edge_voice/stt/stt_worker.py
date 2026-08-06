@@ -78,6 +78,20 @@ logger = get_stage_logger(__name__, stage="stt")
 
 QUEUE_GET_TIMEOUT_S = 0.2
 
+# Models moonshine_voice publishes on its CDN but omits from its own registry.
+#
+# moonshine-voice hardcodes a MODEL_INFO table mapping (language, arch) to a
+# download URL, and its Korean entry is wrong: one model named "base-ko" but
+# tagged ModelArch.TINY and pointing at the tiny-ko URL. So asking for
+# ("ko", BASE) raises ValueError("Model not found...") even though base-ko is
+# published and works -- verified by downloading it and transcribing with it
+# (~2.2x tiny's decode time, slightly better punctuation). Checked 0.0.73 and
+# 0.1.0: same entry, and 0.1.0 moved the table into libmoonshine.so, so an
+# upgrade doesn't fix it. Drop an entry here once upstream lists it.
+_MODEL_REGISTRY_OVERRIDES: dict[tuple[str, str], str] = {
+    ("ko", "base"): "https://download.moonshine.ai/model/base-ko/quantized/base-ko",
+}
+
 
 def _default_options() -> dict[str, str]:
     return {
@@ -473,11 +487,10 @@ class STTWorker(threading.Thread):
         if self._transcriber_factory is not None:
             return self._transcriber_factory()
 
-        from moonshine_voice import Transcriber, get_model_for_language, string_to_model_arch
+        from moonshine_voice import Transcriber
 
         if self._resolved_model is None:
-            arch = string_to_model_arch(self.config.model_arch)
-            self._resolved_model = get_model_for_language(self.config.language, arch)
+            self._resolved_model = self._resolve_model()
             logger.info(
                 "STTWorker: model=%s arch=%s", self._resolved_model[0], self._resolved_model[1]
             )
@@ -492,6 +505,52 @@ class STTWorker(threading.Thread):
         # libmoonshine.so, only once a Transcriber actually exists.
         _confirm_onnx_runtime_backend(model_path)
         return transcriber
+
+    def _resolve_model(self) -> tuple[str, Any]:
+        """(model_path, ModelArch) for the configured language + arch.
+
+        moonshine's own resolver first; _MODEL_REGISTRY_OVERRIDES fills the
+        gaps its registry has. Overridden entries still go through
+        download_model_from_info(), so they share the same cache directory,
+        component list and download logic as everything else -- the override
+        supplies only the table row moonshine is missing.
+        """
+        from moonshine_voice import (
+            download_spelling_model_for_language,
+            get_model_for_language,
+            string_to_model_arch,
+        )
+        from moonshine_voice.download import download_model_from_info
+
+        language, arch_name = self.config.language, self.config.model_arch
+        override_url = _MODEL_REGISTRY_OVERRIDES.get((language, arch_name))
+        arch = string_to_model_arch(arch_name)
+        if override_url is None:
+            return get_model_for_language(language, arch)
+
+        logger.info(
+            "STTWorker: %s/%s missing from moonshine's registry, using override %s",
+            language,
+            arch_name,
+            override_url,
+        )
+        resolved = download_model_from_info(
+            {
+                "model_name": f"{arch_name}-{language}",
+                "model_arch": arch,
+                "language": language,
+                "download_url": override_url,
+            }
+        )
+        # get_model_for_language() prefetches this alongside the transcriber;
+        # do the same here so the two paths differ only in the table row. Also
+        # best-effort: the spelling model is optional, and today only "en"
+        # publishes one at all.
+        try:
+            download_spelling_model_for_language(language)
+        except Exception as exc:
+            logger.warning("STTWorker: spelling-model prefetch failed for %s: %s", language, exc)
+        return resolved
 
     def _pcm_to_float32(self, pcm_bytes: bytes) -> np.ndarray:
         # int16 mono PCM -> float32 normalized to [-1, 1]

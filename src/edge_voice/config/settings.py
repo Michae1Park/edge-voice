@@ -118,8 +118,12 @@ class STTSettings(BaseModel):
     language + model_arch together select the model -- there's no separate
     model-name field, because moonshine resolves downloaded models only via
     get_model_for_language(language, arch). Not every arch exists for every
-    language (en has all of them, ko only has "tiny"); an unavailable
+    language (en has all of them, ko has "tiny" and "base"); an unavailable
     combination raises at startup with the list of what is available.
+
+    ko + "base" works via _MODEL_REGISTRY_OVERRIDES in stt_worker.py -- the
+    model is published but missing from moonshine's registry; see the comment
+    there.
     """
 
     language: str = "ko"
