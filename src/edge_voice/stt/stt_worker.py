@@ -120,6 +120,7 @@ def _default_options() -> dict[str, str]:
         # 13.0 (the scratch script's value) truncates Korean mid-sentence;
         # see configs/default.yaml for the measurements behind 30.0.
         "max_tokens_per_second": "20.0",
+        "vad_threshold": "0",
         "identify_speakers": "false",
         "log_api_calls": "false",
         "save_input_wav_path": "",

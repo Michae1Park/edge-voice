@@ -556,6 +556,7 @@ class PipelineOrchestrator:
                 sample_rate=self._settings.audio.sample_rate,
                 options={
                     "max_tokens_per_second": stt.max_tokens_per_second,
+                    "vad_threshold": stt.vad_threshold,
                     "identify_speakers": str(stt.identify_speakers).lower(),
                     "log_api_calls": str(stt.log_api_calls).lower(),
                     "save_input_wav_path": stt.save_input_wav_path,

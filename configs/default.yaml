@@ -107,6 +107,7 @@ stt:
   # 30 leaves headroom for fast speakers. Must be set -- omitting the option
   # entirely truncates worse than any explicit value.
   max_tokens_per_second: "18.0"
+  vad_threshold: "0"
   identify_speakers: false
   log_api_calls: false
   save_input_wav_path: ""

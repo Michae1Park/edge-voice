@@ -146,7 +146,8 @@ class STTSettings(BaseModel):
         "medium-streaming",
     ] = "tiny"
     # See configs/default.yaml -- 13.0 truncates Korean mid-sentence.
-    max_tokens_per_second: str = "30.0"
+    max_tokens_per_second: str = "20.0"
+    vad_threshold: str = "0"
     identify_speakers: bool = False
     log_api_calls: bool = False
     save_input_wav_path: str = ""
