@@ -84,8 +84,8 @@ vad:
   # finer buys almost nothing: 1.0/0.75 moves first text by 0.01s for 3.8x.
   # Re-measure on the Pi before changing these -- watch the dropped:
   # transcribed ratio from STTWorker.partial_stats().
-  partial_interval_s: 1.5
-  partial_min_segment_s: 1.5  # skip partials on turns shorter than this
+  partial_interval_s: 1.0
+  partial_min_segment_s: 1.0  # skip partials on turns shorter than this
   max_segment_s: 3.0         # hard cap if no suitable pause is found
 
 stt:
