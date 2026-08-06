@@ -100,8 +100,9 @@ Next action: Milestone 8's remaining gaps — unit tests for `config`
              integration fixture covers those). CI itself already runs
              lint + format + mypy + the default suite on push and PR.
 Blocked on: nothing for ms 8. Two scoped features are parked:
-             docs/STREAMING_STT_PLAN.md needs an on-device RTF measurement
-             before it can be committed to, and docs/CALL_LIFECYCLE_PLAN.md
+             docs/STREAMING_STT_PLAN.md is on hold deliberately (2026-08-06,
+             possibly indefinitely) — benchmarking showed no throughput win,
+             see the doc's own status line — and docs/CALL_LIFECYCLE_PLAN.md
              awaits a decision to start.
 ```
 
@@ -833,18 +834,21 @@ milestones above.
   `wav_source.py` publishes a JSON envelope, while `wav_source_raw.py` and
   `mic_source.py` publish raw PCM, which is all `MqttAudioIngest` consumes
   today.
-- **`docs/STREAMING_STT_PLAN.md`** — scoped, not started. Streaming archs exist
-  for English only, so the plan's first deliverable is a `(language, arch)`
-  validation layer (`stt/model_registry.py`) that rejects an unsupported pair at
-  startup with a clean exit instead of a `ValueError` from inside a worker
-  thread. That piece is independent of streaming and useful today.
-  **Correction to the earlier framing:** streaming is *not* a speed win —
-  measured at 3.3×–10.7× the compute of non-streaming segment decode, because
-  every `update_interval` re-decodes. It buys incremental text during an
-  utterance and replaces the partial-transcript mechanism. Whether two streaming
-  channels fit on a Pi is unmeasured and decides whether the plan proceeds.
-  English test audio is no longer missing (`wav/obama_2012.wav`), though it's a
-  studio-quality monologue, not two-party telephone audio.
+- **`docs/STREAMING_STT_PLAN.md`** — **on hold (2026-08-06), deliberately, no
+  committed timeline to resume.** Scoped and fully benchmarked, not merely
+  unstarted: streaming turned out **not** to be a speed win — measured at
+  3.3×–10.7× the compute of non-streaming segment decode, because every
+  `update_interval` re-decodes the current line from scratch. It buys
+  incremental text during an utterance (replacing the partial-transcript
+  mechanism), not throughput, and the current VAD-bounded short-segment design
+  is already close to the cheapest approach available. If resumed: the first
+  deliverable would be a `(language, arch)` validation layer
+  (`stt/model_registry.py`) rejecting an unsupported pair at startup instead of
+  a `ValueError` from inside a worker thread — independent of streaming and
+  useful on its own. Whether two streaming channels fit on a Pi is unmeasured
+  and would decide whether the rest proceeds. English test audio is no longer
+  missing (`wav/obama_2012.wav`), though it's a studio-quality monologue, not
+  two-party telephone audio.
 
 ---
 

@@ -1,6 +1,12 @@
 # Streaming Moonshine STT — Design Plan
 
-**Status:** Scoping. No code written yet.
+**Status:** On hold (2026-08-06) — deliberately, not for lack of time. The
+analysis below is complete and still accurate; benchmarking showed streaming
+is not a throughput win (§4.1) and the current VAD-bounded, short-segment
+design is already close to the cheapest approach available (§8). No code was
+written, and there is no committed timeline to resume — possibly never. If
+this is picked up again, start from §9's suggested order rather than
+re-deriving the findings below.
 **Companion to:** `ARCHITECTURE.md`, `BUILDPLAN.md`
 
 ## Goal
