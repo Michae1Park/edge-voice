@@ -1,6 +1,6 @@
 # edge-voice Build Plan
 
-**Companion to:** `ARCHITECTURE.md` (v0.1)
+**Companion to:** `ARCHITECTURE.md` (v0.3)
 **Purpose:** answer "what do I type next?" in under 10 seconds after time away.
 
 ---
@@ -22,15 +22,19 @@ map onto packages:
 | Entry point                  | `cli.py`                     |
 | Config                       | `config/`                    |
 | Web UI                       | `webui/` (in-process with `cli.py`/`orchestrator`) |
-| Observability                | `observability/` *(planned — Milestone 7, not yet built)* |
-| Health                       | `health/` *(planned — Milestone 7, not yet built)* |
+| Observability                | `observability/logging.py`, `observability/metrics.py` |
+| Health                       | `health/reporting.py`        |
+| Deployment                   | `Makefile` (`install`, `install-service`), `deploy/edge-voice.service` |
 
 **Note on `audio_generation`:** this is a dev/test tool, not a production
 package — it simulates the real-world audio source (a phone call leg) by
 either capturing the mic or replaying a `.wav` file and publishing it over
 MQTT exactly like a real call leg would. It runs as its own **separate
 process**, in its own terminal, and is never imported by `cli.py` or
-`pipeline/orchestrator.py`. The two talk only through the MQTT broker —
+`pipeline/orchestrator.py`. `edge-voice --mic` is a convenience that *spawns*
+`mic_source.py` as a subprocess (and SIGINTs it on exit) — it is still a
+separate process publishing over MQTT, not in-process capture. The two talk
+only through the MQTT broker —
 that's deliberate, not a shortcut: `audio_ingest` should never be able to
 tell the difference between a simulated leg and a real one, and the only
 way to guarantee that is to never let them share a process.
@@ -51,10 +55,16 @@ pipeline/orchestrator.py
   ▼
 pipeline/supervisor.py
   │  watches the worker threads orchestrator handed it, restarts
-  │  on unexpected exit, tracks restart counts / degraded status —
+  │  on unexpected exit or stall, tracks restart counts / degraded status —
   │  doesn't know or care what a "channel router" is, just supervises threads
   ▼
 audio_ingest/  →  channel/  →  vad/  →  stt/   (the actual worker threads)
+  ▲                                        │
+  │  observability/metrics.py samples all of the above on its own tick
+  │  (queue depths, per-stage latency, restart budget, MQTT state)
+  │                                        ▼
+  └── health/reporting.py assembles metrics' latest snapshot + live
+      pipeline state per request → webui GET /api/status
 ```
 
 `utils/audio_generation/` sits entirely outside this tree. It's a separate
@@ -73,22 +83,26 @@ Conflating the two will make restart-count metrics noisy and useless.
 ## STATUS (update this every session, even with one line)
 
 ```
-Last updated: 2026-07-30
-Current milestone: 7 — Observability + Health
-Done: ms 0, 1, 2, 3, 4, 5, 6
-In progress: Milestone 7 items 1-2 done. Item 1 (observability/logging.py)
-             plus its plumbing prerequisites (queue_depths,
-             MqttAudioIngest.connected, Supervisor restart-budget accessor,
-             VAD segment_id-at-start). Item 2 (observability/metrics.py):
-             MetricsCollector thread aggregates queue depths, STT latency
-             (new STTWorker.last_latency_s), restart budget, and MQTT
-             connectivity into one structured log line + in-memory
-             snapshot() per MetricsSettings.emit_interval_s; wired into
-             orchestrator.py (built/started/stopped alongside supervisor).
-             See scratch/demo_metrics.py. Items 3-4 (health/reporting.py,
-             webui wiring) not started.
-Next action: health/reporting.py
-Blocked on: none
+Last updated: 2026-08-06
+Current milestone: 8 — Testing & CI (partially pre-satisfied; see below)
+Done: ms 0, 1, 2, 3, 4, 5, 6, 7
+Since ms 7 (not part of any milestone — see "Unplanned work that landed"):
+             partial transcripts (vad.partial_interval_s, on by default),
+             one-add_audio()-per-segment STT fix, eager model construction
+             for both VAD and STT, ONNX Runtime backend confirmation at
+             startup, rms_gate_enabled flipped back on (RPi5 queue clogging),
+             webui clear button + legend/freshness bar, live mic capture over
+             MQTT + `edge-voice --mic`, systemd crash-loop protection +
+             `make install-service`, mosquitto/portaudio via `make install`.
+Next action: Milestone 8's remaining gaps — unit tests for `config`
+             validation and `observability/logging.py`, and unit tests for
+             VAD segmentation / router correctness (today only the
+             integration fixture covers those). CI itself already runs
+             lint + format + mypy + the default suite on push and PR.
+Blocked on: nothing for ms 8. Two scoped features are parked:
+             docs/STREAMING_STT_PLAN.md is blocked upstream (no Korean
+             streaming model) and docs/CALL_LIFECYCLE_PLAN.md awaits a
+             decision to start.
 ```
 
 ---
@@ -132,8 +146,8 @@ yet.
 1. `src/edge_voice/config/settings.py` — pydantic `Settings` with layered
    config: code defaults → `configs/default.yaml` → `configs/local.yaml`
    (gitignored) → env vars (`EDGE_VOICE__<SECTION>__<FIELD>`). Validation
-   on load (e.g. `AudioSettings.format` must be `"int16"`, `STTSettings.feed_windows > 0`,
-   `WebUISettings.port > 0`). `_deep_merge()` helper for recursive YAML merging.
+   on load (e.g. `AudioSettings.format` must be one of `int16`/`int32`/
+   `float32`, `WebUISettings.port` in range, `vad.partial_interval_s >= 0`). `_deep_merge()` helper for recursive YAML merging.
 2. `src/edge_voice/pipeline/orchestrator.py` — `PipelineOrchestrator` class
    owns the wire shape: constructs `WavSource`/`MicSource` → `FakeRouter` →
    `FakeVADWorker` → `FakeSTTWorker` from `Settings`. Exposes
@@ -150,19 +164,27 @@ yet.
    reverse proxy or IPC boundary buys anything when the only client is a
    kiosk browser on the same machine, so the web UI now runs **in-process**
    with `cli.py`/`orchestrator` (see Milestone 5). `--config`/`--channels`/
-   `--wav-file`/`--with-ui` flags still don't exist yet — add them if/when
-   the features behind them actually land, not before.
-4. `src/edge_voice/main.py` — still exists but its wiring logic moved to
-   `orchestrator.py`. Kept as dev convenience for running without installing.
-5. `src/edge_voice/utils/audio_generation/mic_source.py` — `MicSource`
-   class captures from system mic via pyaudio, publishes `AudioPacket`s
-   over MQTT (MQTT publish not yet implemented — prints stub), standalone
-   CLI entry point via `main()`, no import of `pipeline`, `cli`, or
-   `orchestrator`.
-6. `src/edge_voice/utils/audio_generation/wav_source.py` — `WavSource`
-   class reads `.wav` via `soundfile`, resamples via `torchaudio`, streams
-   at 20ms real-time pace to the ingest queue. No MQTT publish yet —
-   pushes to in-memory queue.
+   `--wav-file`/`--with-ui` flags still don't exist — add them if/when the
+   features behind them actually land, not before. The one flag that has
+   been added since is `--mic` (2026-08-05), which spawns `mic_source.py`
+   as a subprocess.
+4. `src/edge_voice/main.py` — its wiring logic moved to `orchestrator.py`,
+   and the file itself has since been **deleted**: `python -m edge_voice.cli`
+   already covers running without installing, so keeping a second entry point
+   only risked the two drifting apart.
+5. `src/edge_voice/utils/audio_generation/mic_source.py` — captures from
+   the system mic, standalone CLI entry point via `main()`, no import of
+   `pipeline`, `cli`, or `orchestrator`. **Completed 2026-08-05:** the MQTT
+   publish was a stub print until then; it now captures at the device's
+   native rate, resamples to the target, and publishes raw PCM frames —
+   same wire format as `wav_source_raw.py`, which is what
+   `MqttAudioIngest` consumes.
+6. `src/edge_voice/utils/audio_generation/wav_source.py` — reads `.wav`,
+   resamples, streams at a 20ms real-time pace. Now publishes over MQTT as a
+   JSON envelope (`{"samples_b64": ..., "timestamp": ...}`); `wav_source_raw.py`
+   is the raw-PCM variant used against the real pipeline, since raw PCM is
+   what ingest consumes today. The envelope form is the shape
+   `CALL_LIFECYCLE_PLAN.md` would standardize on.
 7. Both `audio_generation` sources verified: import lines contain no
    `pipeline`, `cli`, or `orchestrator` imports.
 
@@ -262,8 +284,11 @@ see `tests/test_pipeline_integration.py`.
      there's no concurrency to isolate. Halves the memory footprint
      (~175MB/channel not held open) and matches the turn-taking nature of
      the audio.
-   - `feed_windows=64`, language + model arch configurable
-     (`STTSettings.language`, `STTSettings.model_arch`)
+   - Language + model arch configurable (`STTSettings.language`,
+     `STTSettings.model_arch`). **Superseded 2026-08-04:** the original
+     `feed_windows=64` windowed feeding is gone — each segment is now fed in
+     one `add_audio()` call (~2.7x faster, no boundary duplication), and the
+     setting no longer exists.
    - Repetitive-output guard: falls back to the best partial line when the
      decoder loops on itself (beam-search collapse at awkward boundaries)
 2. Swapped fake STT for `stt/stt_worker.py` inside `pipeline/orchestrator.py`.
@@ -461,6 +486,9 @@ catches a failure mode the other structurally cannot:
    now that `supervisor.py` exists for it to call into. Lower priority
    than 1–6 — the point of this milestone is *not* needing a human at the
    console — keep only if a manual override is still wanted for debugging.
+   **Still not built as of 2026-08-06**, and nothing has needed it: the
+   supervisor's automatic restarts plus the systemd layer have covered every
+   failure seen so far.
 
 **Scope, sized against `test_orchestrator.py` (236 lines) as the closest
 existing precedent** — comparable to a full earlier milestone (VAD or STT),
@@ -490,7 +518,56 @@ not a small patch:
 
 ---
 
-## Milestone 7 — Observability + Health
+## Milestone 7 — Observability + Health ✅ Done
+
+**Shipped:** `observability/logging.py` (JSON formatter + merging stage
+adapter + `configure_logging`), `observability/metrics.py` (`MetricsCollector`
+thread), `health/reporting.py` (`build_health_report`), the four plumbing
+prerequisites below, `webui`'s `/api/status` repointed to
+`orchestrator.health()` with `console.html` rendering the new payload, and
+`LoggingSettings`/`MetricsSettings`/`HealthSettings` all actually consumed —
+no dead config stubs remain. Tests: `test_metrics.py`,
+`test_health_reporting.py`, plus updates to `test_orchestrator.py`/
+`test_webui_app.py` for the richer shape. Reference docs: `HEALTH.md`.
+
+**Delivered beyond the plan below** (worth knowing, since the item text
+doesn't mention them):
+
+- **A file sink alongside the console one**, each independently toggleable,
+  plus a `logging.enabled` master switch that `logging.disable()`s the
+  process for runs where logging overhead itself matters. The plan had
+  explicitly rejected a second sink (see the 2026-07-28 correction); the
+  correction stands for *format selection* — what changed is that a
+  headless kiosk with no terminal attached needs a durable local sink, so
+  the file handler is always JSON regardless of the console's format.
+- `ensure_ascii=False` in the JSON formatter — the default escaped every
+  Korean transcript into `\uXXXX`.
+- **Per-channel latency for VAD (Silero vs. RMS-gate path), router
+  re-packetize, and STT**, not just the single scalar STT latency the plan
+  called for — with `MetricsSettings.latency_log_decimals` controlling log
+  rounding only, never the snapshot.
+- Per-segment STT latency on the `TRANSCRIPT` log line itself
+  (`stt_latency_s`), so a single segment's cost is greppable without
+  correlating against a metrics tick.
+- `Supervisor`'s own thread liveness in `get_status()` — nothing supervises
+  the supervisor, so its death would otherwise freeze restart/degraded state
+  silently rather than reporting it.
+- `console.html` module chips (per-stage state + worst-channel latency) and
+  the status strip, which is more than the "render at least one of each"
+  the Done-when asked for.
+
+**Two decisions recorded while building, worth not re-litigating:**
+
+- **Health is query-driven, not a thread.** `metrics.py` and `supervisor.py`
+  are tick-driven pushers; health assembles synchronously per request, with
+  no cadence of its own. That's why it takes plain values rather than the
+  callables those two take.
+- **Deliberate omissions from the payload**: the snapshot's per-worker
+  `state` (live worker state already ships in `workers`, one tick fresher)
+  and the scalar `stt_last_latency_s` (the per-channel `stt` map is already
+  there, and the two legitimately disagree). Two similar-looking numbers of
+  different ages in one payload is the exact trap the router-vs-VAD clock
+  decision avoided.
 
 **Starting point, not a blank slate:** `config/settings.py` already has two
 stubs anticipating this milestone that nothing reads today —
@@ -541,12 +618,12 @@ sections for logging format / staleness threshold.
   duration — isolates model/inference performance, which is what you'd
   actually act on differently (model size vs. queue size) if it regressed.
 
-**New plumbing this milestone requires** (none of this exists yet):
-1. `orchestrator.py` — a `queue_depths() -> dict[str, int]` method calling
+**New plumbing this milestone required** (all four landed):
+1. ✅ `orchestrator.py` — a `queue_depths() -> dict[str, int]` method calling
    `.qsize()` on `_ingest_queue`/`_routed_queue`/`_segment_queue`/
    `_dump_queue`/`_segment_dump_queue`. Only `ingest_queue` has a public
    property today (orchestrator.py:66); the other four are private.
-2. `audio_ingest/mqtt_client.py` — a public `connected` property reading
+2. ✅ `audio_ingest/mqtt_client.py` — a public `connected` property reading
    the existing `_connected_event` (already set/cleared in
    `_on_connect`/`_on_disconnect`; just never exposed), same shape as the
    existing `stopping`/`last_activity` properties. **Health reporting must
@@ -554,10 +631,10 @@ sections for logging format / staleness threshold.
    `WavSource`/`MicSource` with no MQTT involved at all (dev/test runs) —
    report MQTT connectivity only when the configured source actually has
    a `connected` attribute, not as a hard requirement.
-3. `pipeline/supervisor.py` — expose `max_restarts`/`restart_window_s` (or
+3. ✅ `pipeline/supervisor.py` — expose `max_restarts`/`restart_window_s` (or
    a combined ratio) so health/metrics can report "3/3 restarts used,"
    not just the bare count `status()` already returns.
-4. `vad/vad_worker.py` — `_ChannelState.segment_id` field + the
+4. ✅ `vad/vad_worker.py` — `_ChannelState.segment_id` field + the
    `_new_segment_id` helper described above (this is also new plumbing,
    not just a logging change — anything reading VAD state externally in
    the future benefits too).
@@ -594,14 +671,14 @@ sections for logging format / staleness threshold.
    Prometheus, per the existing out-of-scope note) and keeps the latest
    snapshot in memory for `health/reporting.py` to read directly (no need
    to round-trip through logs for that).
-3. `health/reporting.py` — health object: overall status + per-worker
+3. ✅ `health/reporting.py` — health object: overall status + per-worker
    state (from `orchestrator.get_status()`, unchanged — don't re-derive),
    queue depths + MQTT connectivity + restart budget (from
    `metrics.py`'s latest snapshot), per-channel freshness (from
    `ChannelRouter.get_freshness()` for each `get_channel_ids()`, flagged
    stale past `HealthSettings.stale_segment_warning_s` — the other
    currently-dead settings stub this milestone wires up).
-4. `webui/app.py`'s `/api/status` returns this richer object instead of
+4. ✅ `webui/app.py`'s `/api/status` returns this richer object instead of
    the bare `orchestrator.get_status()` passthrough it is today — as a
    superset of the current `{running, degraded, workers}` shape so nothing
    already reading those three fields breaks. **This is its own scope
@@ -610,10 +687,13 @@ sections for logging format / staleness threshold.
    needs new DOM/JS to actually render queue depths, MQTT state, and
    per-channel freshness, not just a richer payload nobody looks at.
 
-**Scope, sized against Milestone 6** (comparable: a new package from
-scratch, `pipeline/supervisor.py`, was the largest piece there; here it's
-two new packages, `observability/` and `health/`, both currently empty —
-`health/` has no `__init__.py` yet, `observability/` doesn't exist at all):
+**Scope as estimated before building** (sized against Milestone 6, where a
+new package from scratch, `pipeline/supervisor.py`, was the largest piece;
+here it was two new packages, `observability/` and `health/`, both empty or
+nonexistent at the time). Kept for calibration — it held up, except that
+`test_observability_logging.py` was never written, so the JSON formatter and
+stage adapter are covered only incidentally by everything that logs. That gap
+carries into Milestone 8:
 
 | Piece | Scope |
 |---|---|
@@ -641,19 +721,124 @@ two new packages, `observability/` and `health/`, both currently empty —
 
 ---
 
-## Milestone 8 — Testing & CI
+## Milestone 8 — Testing & CI (partially pre-satisfied)
+
+Most of this arrived incrementally alongside Milestones 5–7 rather than as
+its own pass. What's left is a short list of real gaps, not a from-scratch
+milestone — the honest framing is "close the gaps," not "build testing."
 
 1. Unit tests: `channel` routing, `vad` segmentation logic, `config`
    validation, `pipeline/supervisor.py` restart behavior in isolation
    (kill a fake thread, assert it restarts)
+   - ✅ `pipeline/supervisor.py` — `test_supervisor.py` (crash, stall,
+     degrade, watchdog ping), all driven with fake workers.
+   - ⚠️ `channel` / `vad` — `test_router.py` and `test_vad_worker.py` exist
+     but cover **latency accounting and channel bookkeeping**, not
+     segmentation boundaries or routing correctness. Those are still only
+     verified through the integration fixture in item 2. This is the main
+     remaining gap.
+   - ❌ `config` validation — no `test_settings.py`; the layered
+     defaults → YAML → local → env merge and its validators are exercised
+     only incidentally.
+   - ❌ `observability/logging.py` — planned in Milestone 7's test list,
+     never written (see the note there).
+   - ✅ Not in the original list but shipped: `test_metrics.py`,
+     `test_health_reporting.py`, `test_partial_transcripts.py`,
+     `test_transcript_hub.py`, `test_webui_app.py`, `test_mqtt_client.py`,
+     `test_atomic_write.py`, `test_systemd_watchdog.py`,
+     `test_stt_worker.py`, `test_models.py`, `test_orchestrator.py`.
 2. Integration tests:
    - `audio_generation` (wav_source, its own process) → `audio_ingest` →
      `channel` → `vad`
    - Full end-to-end fixture through `stt`
+   - ✅ Both live in `test_pipeline_integration.py`, marked `integration`
+     and excluded from the default run (`addopts = ["-m", "not integration"]`)
+     since they need a live broker. Run with `pytest -m integration`.
 3. CI workflow running both (perf validation stays manual, on-device)
+   - ✅ `.github/workflows/ci.yml` runs on push to `main` and on every PR:
+     `ruff check`, `ruff format --check`, `mypy --package edge_voice`,
+     `pytest` — installing from `requirements-dev.txt` plus
+     `portaudio19-dev`.
+   - ❌ The integration job is **not** in CI (no broker there). Deciding
+     whether to stand up a `mosquitto` service container, or to leave these
+     as a deliberate on-device-only check like the Milestone 6 watchdog
+     verification, is the open call.
 
 **Done when:** CI is green on a clean clone with no manual setup beyond
-`pip install` from the lockfile.
+`pip install` from the lockfile *(already true)*, and the three ❌/⚠️ gaps
+above are either closed or explicitly recorded as won't-do.
+
+---
+
+## Unplanned work that landed after Milestone 7
+
+Not part of any milestone — recorded here so the milestone list doesn't read
+as the complete history of the project.
+
+**Latency / quality**
+
+- **Partial transcripts** (`vad.partial_interval_s`, PR #13, on by default).
+  VAD emits the in-progress prefix of a segment on a cadence so text appears
+  before the speaker stops — the standing workaround for having no streaming
+  model. Droppable under backlog, excluded from latency metrics and audio
+  dumps, carrying the eventual final's `segment_id` so the UI replaces in
+  place. Tuning measurements are in `configs/default.yaml`.
+- **One `add_audio()` per segment**, replacing windowed feeding: ~2.7x faster
+  on real audio and it removed word duplication at window boundaries.
+- **Eager model construction** for both VAD (per channel, issue #10) and STT
+  (PR #12) — model loads moved off the real-time path into `__init__`, where
+  they can't masquerade as a stall.
+- **ONNX Runtime backend confirmation** logged once at startup, so "is this
+  actually running on ORT" stops being a guess.
+- `rms_gate_enabled` **back on by default**: the gate skips Silero inference
+  on silent frames, which on an RPi5 is what keeps the routed queue from
+  clogging. This supersedes the earlier decision to leave it off.
+- `min_silence_duration_ms` reduced, and the segment-limit defaults retuned.
+
+**Web UI**
+
+- Clear button (`POST /api/transcripts/clear`) to wipe transcript history.
+- rx/tx freshness labels clarified, legends consolidated into their own
+  static bar — the kiosk has no mouse, so nothing may rely on hover.
+
+**Audio sources / ops**
+
+- `mic_source.py` now genuinely captures and publishes over MQTT (it was a
+  stub print since Milestone 1), capturing at the device's native rate and
+  resampling to the target.
+- `edge-voice --mic` spawns it as a subprocess for convenience — still a
+  separate process over MQTT, not in-process capture.
+- `make install` now installs `mosquitto` + `mosquitto-clients` +
+  `libportaudio2` via apt; `make install-service` deploys/restarts the
+  systemd unit.
+- systemd **crash-loop protection** (`StartLimitIntervalSec=300s`,
+  `StartLimitBurst=5`): one detect-restart cycle already exceeds systemd's
+  10s default window, so without widening it the default burst limit could
+  never trip and a deterministic hang would restart forever.
+
+---
+
+## Parked — scoped, not started
+
+Both have their own design docs. Neither is blocked on anything in the
+milestones above.
+
+- **`docs/CALL_LIFECYCLE_PLAN.md`** — call-start/call-end signals over MQTT
+  (reset the pipeline, clear the UI per call) and JSON-wrapped audio payloads.
+  The hard part is already identified: a race where in-flight audio from the
+  old call drains through the queues *after* the UI clears. Also resolves the
+  deferred `VADWorker.reset_channel()` question — plain reset on call-start,
+  flush-then-reset on call-end — and the re-packetizer's silent timestamp
+  drift across a discontinuity. Note the wire format is currently split:
+  `wav_source.py` publishes a JSON envelope, while `wav_source_raw.py` and
+  `mic_source.py` publish raw PCM, which is all `MqttAudioIngest` consumes
+  today.
+- **`docs/STREAMING_STT_PLAN.md`** — **blocked upstream, not by us.**
+  Moonshine publishes streaming archs for English but only `TINY` for Korean,
+  so while the deployment language is Korean this is unreachable; partial
+  transcripts are the workaround. `STTWorker` already drives the streaming
+  session API, so the delta is small if the language ever changes. Do not
+  start this without a language decision and English test audio.
 
 ---
 
