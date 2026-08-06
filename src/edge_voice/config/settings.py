@@ -118,12 +118,22 @@ class STTSettings(BaseModel):
     language + model_arch together select the model -- there's no separate
     model-name field, because moonshine resolves downloaded models only via
     get_model_for_language(language, arch). Not every arch exists for every
-    language (en has all of them, ko has "tiny" and "base"); an unavailable
-    combination raises at startup with the list of what is available.
+    language; an unavailable combination raises at startup with the list of
+    what is available. What actually exists on moonshine's CDN today:
 
-    ko + "base" works via _MODEL_REGISTRY_OVERRIDES in stt_worker.py -- the
-    model is published but missing from moonshine's registry; see the comment
-    there.
+        en              tiny, base, tiny/small/medium-streaming
+        ar, uk, vi, zh  tiny*, base
+        ja              tiny, base
+        ko              tiny, base*
+        es              base only -- the one language with no tiny
+
+        * published but absent from moonshine's registry; reachable only
+          via _MODEL_REGISTRY_OVERRIDES in stt_worker.py, and only ko/base
+          has actually been run here. See that comment before relying on one.
+
+    No streaming arch exists for any language but en, which is what blocks
+    docs/STREAMING_STT_PLAN.md. Re-check with
+    scratch/probe_moonshine_models.py after upgrading moonshine-voice.
     """
 
     language: str = "ko"

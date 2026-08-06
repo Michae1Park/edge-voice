@@ -88,8 +88,30 @@ QUEUE_GET_TIMEOUT_S = 0.2
 # (~2.2x tiny's decode time, slightly better punctuation). Checked 0.0.73 and
 # 0.1.0: same entry, and 0.1.0 moved the table into libmoonshine.so, so an
 # upgrade doesn't fix it. Drop an entry here once upstream lists it.
+#
+# ko/base is not a one-off. Probing the CDN key space directly
+# (scratch/probe_moonshine_models.py) found 18 models published against 13
+# listed; the five below are the difference. All five carry the same component
+# set (encoder_model.ort + decoder_model_merged.ort + tokenizer.bin), and none
+# appears in upstream's own README model table either -- so unlike the listed
+# models, they ship with no published WER/CER and no support commitment, and
+# could be withdrawn without a version bump. Re-run that script after
+# upgrading moonshine-voice to see whether any row here can be deleted.
+#
+# VERIFIED: only ("ko", "base"), which is the one this project has actually
+# run. The other four resolve and download, but have never been loaded or
+# measured here -- treat a first run on one as unproven, not as a config
+# change.
 _MODEL_REGISTRY_OVERRIDES: dict[tuple[str, str], str] = {
     ("ko", "base"): "https://download.moonshine.ai/model/base-ko/quantized/base-ko",
+    # Unverified (see above). Each language's *other* arch is listed normally:
+    # upstream documents ar/uk/vi/zh as base-only, so these tiny variants are
+    # the lighter option it never advertised -- 26M params against base's 58M,
+    # which is the tradeoff that matters on a Pi.
+    ("ar", "tiny"): "https://download.moonshine.ai/model/tiny-ar/quantized/tiny-ar",
+    ("uk", "tiny"): "https://download.moonshine.ai/model/tiny-uk/quantized/tiny-uk",
+    ("vi", "tiny"): "https://download.moonshine.ai/model/tiny-vi/quantized/tiny-vi",
+    ("zh", "tiny"): "https://download.moonshine.ai/model/tiny-zh/quantized/tiny-zh",
 }
 
 

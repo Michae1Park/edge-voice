@@ -92,10 +92,13 @@ stt:
   # language + model_arch select the model together.
   #   language:   ar | en | es | ja | ko | uk | vi | zh
   #   model_arch: tiny | base | tiny-streaming | small-streaming | medium-streaming
-  # en publishes every arch; ko publishes "tiny" and "base". An unavailable
-  # combination fails at startup listing what that language does have.
-  # ko/base needs the _MODEL_REGISTRY_OVERRIDES entry in stt_worker.py --
-  # moonshine ships the model but not the registry row pointing at it.
+  # en publishes every arch; es publishes "base" only; every other language
+  # publishes "tiny" and "base". An unavailable combination fails at startup
+  # listing what that language does have.
+  # Five combinations ship on moonshine's CDN without a registry row pointing
+  # at them, and work only through _MODEL_REGISTRY_OVERRIDES in stt_worker.py:
+  # ko/base, plus ar|uk|vi|zh + tiny. 
+  # Re-check with scratch/probe_moonshine_models.py after upgrading moonshine.
   language: "ko"
   model_arch: "tiny"
   # Decoder token budget. Too low truncates mid-sentence: Korean at 13.0
