@@ -541,13 +541,13 @@ validation — performance is still verified manually, on target hardware.
   `make install-service` — containerization itself remains a non-goal (§2),
   but packaging/distribution beyond "clone the repo, apt the broker, install a
   unit file" is still open.
-- **Streaming STT** (`STREAMING_STT_PLAN.md`) — scoped, not started, and
-  blocked upstream rather than by us: Moonshine publishes streaming archs for
-  English but only `TINY` for Korean. While the deployment language is Korean
-  this is unreachable, and the partial transcripts in §3 are the standing
-  workaround. `STTWorker` already drives the streaming session API
-  (`start()`/`add_audio()`/`stop()` with line listeners), so the code delta if
-  the language ever changes is small.
+- **Streaming STT** (`STREAMING_STT_PLAN.md`) — scoped, not started. Moonshine
+  publishes streaming archs for English only, so `(language, arch)` becomes a
+  validated pair rather than a free choice; that validation layer is the first
+  piece of work in the plan. Measured finding worth carrying here: streaming is
+  **3.3×–10.7× more compute**, not less — it buys latency-to-first-text and
+  replaces the partial transcripts in §3, rather than making STT faster. Whether
+  two streaming channels fit on a Pi is the open risk that decides the plan.
 - **Call lifecycle + JSON audio payloads** (`CALL_LIFECYCLE_PLAN.md`) —
   scoped, not started. Call-start/call-end signals over MQTT, resetting the
   pipeline and clearing the UI per call, with audio moving from raw PCM to a
