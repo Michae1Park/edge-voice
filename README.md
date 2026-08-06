@@ -1,6 +1,6 @@
 # edge-voice
 
-Real-time, dual-channel (Rx/Tx) transcription for edge devices (Raspberry Pi 5, Jetson), using Silero VAD for speech segmentation and Moonshine for streaming STT. Built for any two-party audio source, where each party's audio arrives as its own MQTT stream and is transcribed independently, in order, with channel attribution preserved throughout.
+Real-time, dual-channel (Rx/Tx) transcription for edge devices using Silero VAD for speech segmentation and Moonshine for streaming STT. Built for any two-party audio source, where each party's audio arrives as its own MQTT stream and is transcribed independently, in order, with channel attribution preserved throughout.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design doc and [`docs/BUILDPLAN.md`](docs/BUILDPLAN.md) for current status and what's next.
 

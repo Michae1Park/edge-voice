@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "edge-voice"
 version = "0.1.0"
-description = "Multi-channel streaming voice transcription for edge devices (RPi5 / Jetson) using Silero VAD and Moonshine STT"
+description = "Multi-channel streaming voice transcription for edge devices using Silero VAD and Moonshine STT"
 readme = "README.md"
 requires-python = ">=3.12"
 

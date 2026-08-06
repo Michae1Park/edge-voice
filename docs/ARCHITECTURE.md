@@ -1,13 +1,11 @@
-# edge-voice Architecture (v0.3)
+# edge-voice Architecture
 
-**Status:** Reflects the implementation through Milestone 7 (Observability +
-Health). Everything §5/§6/§7 describes is built and wired; the remaining
-planned work is Milestone 8 (test/CI gaps), plus two scoped-but-unstarted
-features with their own design docs — `STREAMING_STT_PLAN.md` (blocked
-upstream, see §10) and `CALL_LIFECYCLE_PLAN.md`. **§8 Web UI is a deliberate
-exception**: it describes the target feature set the UI is meant to grow into,
-not only what's built today (see the note at the top of that section for the
-split).
+| | |
+|---|---|
+| **Version** | v0.3 |
+| **Owner** | Michae1Park |
+| **Last updated** | 2026-08-06 |
+| **Status** | Describes the system as built. Anything not built says so inline, and §11 lists what's deferred. |
 
 ## System Overview
 
@@ -40,7 +38,7 @@ MQTT audio channels
 
 ## 1. Problem Statement
 
-`edge-voice` transcribes two-party audio in near real time on resource-constrained edge devices such as Raspberry Pi 5 and Jetson. Phone calls are the reference workload, but nothing in the design is phone-specific — any two-party source where each party's audio arrives as its own stream fits (walkie-talkie/PTT links, radio bridges, two-mic meeting capture). Korean is the default language; Moonshine also supports Arabic, English, Spanish, Japanese, Ukrainian, Vietnamese, and Chinese, selected via configuration.
+`edge-voice` transcribes two-party audio in near real time on a resource-constrained edge device. Phone calls are the reference workload, but nothing in the design is phone-specific — any two-party source where each party's audio arrives as its own stream fits (walkie-talkie/PTT links, radio bridges, two-mic meeting capture). Korean is the default language; Moonshine also supports Arabic, English, Spanish, Japanese, Ukrainian, Vietnamese, and Chinese, selected via configuration.
 
 Each party's audio arrives as a separate MQTT stream ("call leg" below, for the reference workload). The system must:
 
@@ -49,6 +47,24 @@ Each party's audio arrives as a separate MQTT stream ("call leg" below, for the 
 - Provide enough observability to diagnose issues without direct shell access.
 - Run efficiently on limited CPU and memory resources.
 
+### Performance Budget
+
+Nearly every design decision below — the partial cadence, the RMS gate, one
+`add_audio()` call per segment, shedding optional work under backlog — is a
+latency or CPU optimization. Those can only be judged against stated targets,
+so they belong here rather than implied. **The `TBD` rows are not yet
+committed**: they need a measurement pass on the target board, and until then
+this table records what's known and what isn't, rather than implying a budget
+that was never set.
+
+| Dimension | Target | Status |
+|---|---|---|
+| End-to-end latency, speech end → final transcript | TBD | Not yet measured as a single number; per-stage latency *is* collected (§7), so the pieces exist to sum |
+| Time to first visible text on a turn | TBD | Measured for the partial-cadence tuning only: first text lands ~1.1s earlier than the final at the shipped defaults (see `configs/default.yaml`) |
+| Sustained real-time factor (audio consumed ÷ wall clock, per channel) | ≥ 1.0 sustained across both channels | Not directly measured; queue depth (§7) is the current proxy — a growing routed or segment queue means the target is being missed |
+| Concurrent channels | 2 (one per party) | Design point, not a measured ceiling. Where a single shared STT worker saturates is unmeasured — see §3 Tradeoffs |
+| Memory | TBD ceiling | Known components: ~175MB shared Moonshine `Transcriber`, ~4MB per channel for Silero, plus bounded queues |
+| CPU headroom | TBD | The RMS gate removes ~52% of Silero forward passes on duplex call audio, ~74% on a mostly-idle channel |
 
 
 ## 2. Non-Goals
@@ -65,7 +81,47 @@ The following remain intentionally out of scope:
 
 ## 3. Architecture
 
+### Module Map
 
+What each module is responsible for, in rough data-flow order. Paths are
+relative to `src/edge_voice/` unless noted. `BUILDPLAN.md` maps these same
+packages onto the milestones that built them.
+
+| Module | Responsibility |
+|---|---|
+| **Entry point & configuration** | |
+| `cli.py` | Parses args, loads `Settings`, configures logging, then either runs headless for a fixed duration or starts the pipeline and blocks serving the kiosk UI. `--mic` additionally spawns a mic-capture subprocess. |
+| `config/settings.py` | The single typed (pydantic) settings model and its layered load: defaults → `configs/default.yaml` → `configs/local.yaml` → env vars, validated on load (§6). |
+| **Pipeline stages** (the four supervised worker threads) | |
+| `audio_ingest/mqtt_client.py` | Subscribes to per-channel MQTT topics, wraps each payload as an `AudioPacket`, pushes to the ingest queue. Owns its own reconnect backoff and exposes `connected` for health (§5). |
+| `channel/router.py` | Validates `channel_id`, tracks per-channel last-seen wall-clock time (the freshness signal in §7), re-packetizes to the fixed frame size VAD expects, forwards to the routed queue. |
+| `vad/vad_worker.py` | Per-channel Silero segmentation: own model instance and state machine per channel, preroll, idle flush, soft/hard length cuts, `segment_id` minted at segment *start*, and the optional in-progress partials (§3). |
+| `stt/stt_worker.py` | Transcribes segments against the one shared Moonshine `Transcriber` — one `add_audio()` call per segment, repetitive-output guard, per-call and per-channel latency, partial handling and shedding. |
+| **Composition & lifecycle** | |
+| `pipeline/orchestrator.py` | Builds every queue and worker from `Settings` and owns start/stop ordering; the single seam exposing `get_status()`, `queue_depths()`, `channel_freshness()`, and `health()`. |
+| `pipeline/models.py` | The shared vocabulary — `AudioPacket`, `SpeechSegment`, `TranscriptEvent` — so stages import one common type set rather than each other. |
+| `pipeline/queues.py` | Factories for the bounded queues connecting stages; sizes come from `Settings.queues`. |
+| `pipeline/fanout.py` | Puts one item onto a main destination plus an optional debug-dump queue, dropping and logging rather than blocking when either is full. |
+| `pipeline/transcript_hub.py` | N-subscriber pub/sub for `TranscriptEvent`s with per-connection queues and backlog replay, so a kiosk reload isn't blank. Separate from `fanout.py` because the subscriber set changes per browser connect. |
+| **Reliability** (§5) | |
+| `pipeline/supervisor.py` | Generic thread-watchdog: detects crashes and stalls, restarts, tracks a windowed restart budget, flips to degraded. Knows nothing about VAD/STT/MQTT — it operates on `SupervisedTarget` callables the orchestrator wires up. |
+| `pipeline/systemd_watchdog.py` | Dependency-free `sd_notify` client driven from the supervisor's tick; a complete no-op when `$NOTIFY_SOCKET` is unset (dev, CI, any off-device run). |
+| `audio_ingest/atomic_write.py` | Temp-file-then-`os.replace()` helper, so a power cut mid-write leaves the previous file intact rather than a torn one. |
+| **Observability & health** (§7) | |
+| `observability/logging.py` | JSON formatter, the stage-tagging logger adapter that merges `channel_id`/`segment_id` from call sites, and the console/rotating-file sink setup. |
+| `observability/metrics.py` | `MetricsCollector` thread: aggregates queue depths, per-stage latency, restart budget, and MQTT state into one log line plus an in-memory `MetricsSnapshot` per tick. |
+| `health/reporting.py` | Assembles the `/api/status` object per request from live pipeline state, the last metrics snapshot, and router freshness — labelling which fields came from which clock. |
+| **Web UI** (§8) | |
+| `webui/app.py` | FastAPI app: `/api/status`, start/stop, the SSE transcript stream, and transcript clear. Runs in-process with the orchestrator; no MQTT anywhere in it. |
+| `webui/templates/console.html` | The kiosk console page — transcript feed, status pill and strip, per-module chips, static legend bar. |
+| **Dev/test tooling** (separate processes, never imported by the pipeline) | |
+| `utils/audio_generation/wav_source_raw.py` | Replays `.wav` files at real-time pace as raw PCM over MQTT — the wire format ingest actually consumes; used by the integration fixture. |
+| `utils/audio_generation/wav_source.py` | Same replay, but publishing a JSON envelope — the shape `CALL_LIFECYCLE_PLAN.md` would standardize on (§11). |
+| `utils/audio_generation/mic_source.py` | Captures a live mic at the device's native rate, resamples, publishes raw PCM over MQTT exactly like a real call leg. |
+| `utils/audio_generation/fake_source.py` | Synthetic packet generator that skips MQTT entirely, from the pre-MQTT skeleton; kept for exercising the worker graph without audio. |
+| `audio_ingest/audio_dump.py`, `audio_ingest/segment_audio_dump.py` | Optional debug workers writing raw and post-VAD audio to WAV, for inspecting VAD boundaries against the original recording. Off by default. |
+| **Deployment** | |
+| `deploy/edge-voice.service`, `Makefile` | systemd unit (watchdog, restart policy, crash-loop breaker) plus `make install` / `make install-service` for the apt and unit-file steps. |
 
 ### Core Decision: Per-Channel VAD, Shared STT
 
@@ -76,17 +132,6 @@ This differs from earlier prototypes that ran fully independent pipelines per au
 **VAD is per-channel, not shared.** A single shared model was tried first and reverted: `VADIterator` only holds the segmentation state machine, the LSTM hidden state used for inference lives inside the model instance itself. Two channels interleaving packets against one shared model corrupted each other's hidden state — measured as doubled, garbage segment counts against recorded call fixtures. Each channel therefore gets its own model instance (one `VADIterator` + one Silero model per `channel_id`), which also removes any need for cross-channel locking since a channel's state is only ever touched by that channel's packets. The extra cost (~4MB, ~0.06s load) per channel is negligible next to correctness.
 
 **STT remains shared.** Unlike VAD, Moonshine's `Transcriber.start()`/`stop()` fully resets its decoder state between segments (verified byte-for-byte against a fresh instance per segment), and the STT worker only ever processes one finalized segment at a time regardless of which channel it came from — there is no concurrent access to isolate. Sharing one instance also fits the turn-taking nature of phone conversations: the previous speaker's context shouldn't bleed into the next line regardless of channel, and it avoids holding a second copy of the model in memory (~175MB saved).
-
-Reasons this split still favors resource efficiency and conversation semantics over one independent pipeline per audio source:
-
-1. **Resource efficiency**
-  - A full independent VAD+STT pipeline per channel would duplicate CPU and memory usage well beyond the per-channel VAD model's small footprint.
-  - Phone conversations are typically turn-based, making parallel STT instances unnecessary.
-2. **Conversation semantics**
-  - Separate call legs represent one conversation rather than unrelated audio streams.
-  - A shared STT stage preserves conversation ordering and simplifies downstream processing.
-
-
 
 ### Routing Model
 
@@ -126,10 +171,17 @@ The properties that keep this from corrupting anything downstream:
 - A partial is marked (`SpeechSegment.is_partial` / `TranscriptEvent.is_final=False`)
   and consumers replace in place, keyed on `segment_id`. Exactly one
   `is_final=True` event ever closes a given segment.
-- **Partials are droppable, finals are never dropped.** STT skips a partial
-  when the segment queue is already at `stt.partial_max_queue_depth`, and VAD
-  drops rather than blocks if the queue is full. On a constrained board the
-  correct response to a backlog is to stop doing optional work.
+- **Partials are shed first; finals are shed only as a last resort.** STT
+  skips a partial when the segment queue is already at
+  `stt.partial_max_queue_depth`, and VAD drops a partial rather than blocking
+  when the queue is full. On a constrained board the correct response to a
+  backlog is to stop doing optional work.
+  **This is a scheduling policy, not a durability guarantee:** no policy
+  deliberately discards a final, but a final is still enqueued with a bounded
+  timeout, so if the segment queue stays full for that long the final is
+  dropped too — logged at WARNING with its `channel_id` and `segment_id`, so
+  the loss is attributable rather than silent. A backlog deep enough to reach
+  that point means the pipeline is already failing its real-time budget (§1).
 - Partials are excluded from STT latency metrics and from the segment-audio
   dump — a partial transcribes a prefix, so mixing the two would make latency
   meaningless and the dumps redundant.
@@ -137,7 +189,7 @@ The properties that keep this from corrupting anything downstream:
 The cost is real and paid per partial: with no streaming model, each one
 re-transcribes the whole prefix from scratch. The measured gain/cost tradeoff
 behind the shipped defaults is recorded in `configs/default.yaml`. A genuine
-streaming arch would remove the re-transcription entirely — see §10.
+streaming arch would remove the re-transcription entirely — see §11.
 
 ### Tradeoffs
 
@@ -151,61 +203,40 @@ Each finalized segment is fed to Moonshine in **one** `add_audio()` call rather 
 
 ## 4. Concurrency Model
 
-The pipeline consists of four long-lived worker threads connected by bounded
-queues, plus two observer threads (a supervisor and a metrics collector) that
-watch those four, plus up to two optional debug dump workers.
+Four long-lived worker threads connected by bounded queues, plus two observer
+threads watching those four, plus up to two optional debug dump workers. What
+each one *does* is in the Module Map (§3); this section is about thread
+ownership and the queue boundaries between them.
 
-### MQTT Ingest
+| Thread | Consumes | Produces | Supervised? |
+|---|---|---|---|
+| MQTT Ingest | (MQTT topics) | ingest queue | Yes — crash only |
+| Channel Router | ingest queue | routed queue, + optional dump queue | Yes |
+| VAD Worker | routed queue | segment queue, + optional segment-dump queue | Yes |
+| STT Worker | segment queue | transcript events (callback) | Yes |
+| Supervisor | — (polls the four above) | restart actions, watchdog pings | No — nothing supervises it |
+| Metrics Collector | — (samples the four above) | log line + in-memory snapshot | No |
+| Dump workers (×2, optional) | dump queues | WAV files | No |
 
-- Subscribes to per-channel MQTT topics; receives audio packets.
-- Tags packets with channel metadata.
-- Pushes packets onto the ingest queue.
-- Performs no expensive processing. Reconnects on its own (§5) — this is invisible to the supervisor, which only acts on a worker thread dying outright, not on a connection blip.
+The producer/consumer split is what keeps transcription latency from blocking
+audio ingestion: a slow STT call backs up the segment queue without ever
+stalling the MQTT callback thread.
 
+Four points about the observer threads that the table can't carry:
 
-
-### Channel Router
-
-- Consumes packets from the ingest queue.
-- Validates `channel_id`, tracks per-channel last-seen timestamps.
-- Re-packetizes to the fixed outgoing frame size VAD expects (see Routing Model above).
-- Pushes re-packetized packets onto the routed queue; optionally mirrors raw packets to a debug dump queue.
-
-
-
-### VAD Worker
-
-- Consumes packets from the routed queue.
-- Maintains per-channel VAD state (own model instance, own segmentation state machine, own preroll buffer, own `segment_id`).
-- Mints a `segment_id` when a segment *starts*, not when it finalizes, so every event from VAD trigger onward can be traced by it (§7).
-- Produces finalized speech segments onto the segment queue, plus optional in-progress prefixes; optionally mirrors finalized segments (never partials) to a debug dump queue.
-
-
-
-### STT Worker
-
-- Consumes finalized segments — and in-progress prefixes — from the segment queue.
-- Runs Moonshine inference against the one shared `Transcriber`.
-- Emits transcript events, and records per-call inference latency (overall and per channel) for §7.
-
-
-
-### Supervisor
-
-- Watches all four workers above (not the optional debug dump workers, and not the metrics collector).
-- Restarts a worker that crashes or wedges; see §5 for the detection rules and the OS-level layer underneath it.
-- Runs as its own thread with the same start/stop lifecycle as every other worker, so it works identically whether the process is running headless or hosting the web UI.
-- Its own liveness is reported alongside the workers it watches — nothing supervises the supervisor, so if its thread dies, restart/degraded state would otherwise silently freeze at its last tick rather than reporting the loss.
-
-
-
-### Metrics Collector
-
-- Samples queue depths, STT/VAD/router latency, restart budget, and MQTT connectivity on its own interval (§7).
-- Deliberately **not** folded into the supervisor's tick: the supervisor is generic ("a thread died, restart it") and has no business knowing about STT latency or MQTT.
-- Starts after the supervisor and stops before it, so it never observes a pipeline mid-teardown.
-
-This producer/consumer architecture prevents transcription latency from blocking audio ingestion.
+- **MQTT Ingest is stall-exempt.** It has no input queue, and its run loop just
+  blocks on the stop event while paho owns reconnect — "hasn't consumed
+  anything lately" isn't a liveness signal for it, so only outright thread
+  death counts (§5).
+- **The supervisor has the same start/stop lifecycle as any worker**, so it
+  behaves identically whether the process runs headless or hosts the web UI.
+- **Its own liveness is reported alongside the workers it watches.** Nothing
+  supervises the supervisor; if its thread died, restart and degraded state
+  would silently freeze at its last tick instead of reporting the loss.
+- **Metrics is separate from the supervisor's tick on purpose.** The
+  supervisor is generic ("a thread died, restart it") and has no business
+  knowing about STT latency or MQTT. Metrics starts after it and stops before
+  it, so it never observes a pipeline mid-teardown.
 
 For how these threads actually start, stop, and get joined (the `stop_event` pattern, shutdown ordering, and why a wedged worker can't be force-killed), see `THREADS.md`.
 
@@ -233,7 +264,7 @@ Restarting a crashed worker means constructing a fresh instance on the same
 queues, since a Python thread cannot be restarted once it has exited. A
 genuinely wedged (not crashed) worker cannot be force-killed at all — the
 supervisor signals it and moves on, and any thread that stays stuck lingers
-until a full process restart clears it (see the OS watchdog below). If the
+until the OS watchdog's full-process restart clears it. If the
 worker was a VAD worker with an in-progress segment, that in-progress audio is
 lost on restart; this is logged as its own distinct event before the instance
 is discarded, rather than folded silently into the generic restart log line.
@@ -248,15 +279,14 @@ see §8 for the current UI treatment.
 ### OS-Level Watchdog
 
 The app periodically pings systemd (`sd_notify WATCHDOG=1`) from the same
-supervisor thread that does the in-process checks above. If those pings stop
-— because the process hung, deadlocked, or was OOM-killed, none of which
-in-process supervision can detect from inside the same wedged process —
+supervisor thread that does the in-process checks above; if those pings stop,
 systemd restarts the whole unit. This is a no-op unless the process was
-actually launched under a systemd unit with `NotifyAccess=` configured (i.e.
-it's always safe and inert in dev, CI, or any off-device run), and the ping
-must never share a code path with the (slower) worker-rebuild work above, so a
-slow rebuild can't delay the heartbeat and trigger a spurious restart on top
-of an already-in-progress one.
+actually launched under a systemd unit with `NotifyAccess=` configured — it is
+always safe and inert in dev, CI, or any off-device run.
+
+The ping must never share a code path with the (slower) worker-rebuild work
+above, so a slow rebuild can't delay the heartbeat and trigger a spurious
+restart on top of an already-in-progress one.
 
 The unit also carries a **crash-loop breaker**
 (`StartLimitIntervalSec=300s` / `StartLimitBurst=5`). One
@@ -336,14 +366,13 @@ overridable per-deployment the same way as anything else:
 | `vad` / `stt` | segmentation thresholds, the RMS gate, partial cadence and backlog allowance (§3) |
 
 There are no longer any settings stubs that nothing reads — `logging.json` and
-`health.stale_segment_warning_s`, which sat unwired through Milestone 6, are
-both consumed now.
+`health.stale_segment_warning_s` — both of which were defined before anything
+read them — are consumed now.
 
 ## 7. Observability
 
-Built (Milestone 7). Three pieces with deliberately different shapes: logging
-is per-event, metrics is tick-driven aggregation, health is query-driven
-assembly.
+Three pieces with deliberately different shapes: logging is per-event,
+metrics is tick-driven aggregation, health is query-driven assembly.
 
 ### Structured Logging
 
@@ -430,51 +459,33 @@ read the kiosk's status rows, see `HEALTH.md`.
 
 ## 8. Web UI
 
-> **Note:** by design, this section describes the target feature set, not only
-> what's built today.
->
-> **Shipped:** a live transcript stream over **Server-Sent Events** (the
-> closing line below says WebSockets — that's superseded; SSE was chosen
-> since the data only flows one way and needs no channel for the browser to
-> push back on), with partial transcripts replacing in place on `segment_id`;
-> a clear button that wipes transcript history (`POST /api/transcripts/clear`);
-> a status pill with three states (live / degraded / stopped); a status strip
-> showing MQTT state, queue depths, per-channel freshness, and how old the
-> metrics reading is; a module row giving each pipeline stage its own state
-> chip plus its worst-channel latency, with the supervisor listed alongside;
-> and a static legend bar (the kiosk has no mouse, so nothing may depend on
-> hover to be legible). Start/stop exist as API endpoints only — still no page
-> controls.
->
-> **Not built:** restarting individual workers, viewing/editing configuration,
-> and any dashboard beyond the strip above. Keeping those written down is
-> deliberate — it's the intended direction for this UI, not stale scope.
-
-The web interface provides:
-
-### Control
-
-- Start pipeline
-- Stop pipeline
-- Restart workers
-
-
-
-### Configuration
-
-- View effective configuration
-- Edit local configuration
-- Validate changes before applying
-
-
+The only client is a kiosk-mode browser on the device's own attached display,
+so the UI runs in-process with the pipeline, serves server-rendered pages, and
+binds to loopback (see §10). There is no MQTT anywhere in it — all UI ↔
+pipeline data flow is in-process.
 
 ### Live Monitoring
 
-- Real-time transcript stream
-- Health dashboard
-- Metrics dashboard
+- **Transcript feed over Server-Sent Events.** One-directional (server →
+  browser), so SSE avoids WebSocket's handshake and framing for a channel
+  nothing pushes back on. Each connection gets its own subscriber queue,
+  pre-seeded with recent backlog so a kiosk reload isn't blank.
+- **Partials replace in place**, keyed on `segment_id`, until the one
+  `is_final=True` event closes that segment (§3).
+- **Status pill** with three states: live / degraded / stopped.
+- **Status strip**: MQTT state, queue depths, per-channel freshness, and the
+  age of the metrics reading behind those numbers (§7).
+- **Per-module chips**: each pipeline stage's state plus its worst-channel
+  latency, with the supervisor listed alongside the workers it watches.
+- **Static legend bar.** The kiosk has no mouse, so nothing may depend on
+  hover to be legible.
 
-The initial implementation uses server-rendered pages and WebSockets to minimize complexity and resource usage.
+### Control
+
+- Start and stop the pipeline — **API endpoints only** (`POST /api/start`,
+  `POST /api/stop`); no page controls are wired to them yet.
+- Clear transcript history (`POST /api/transcripts/clear`), which the page
+  does expose as a button.
 
 ## 9. Testing
 
@@ -526,7 +537,6 @@ validation — performance is still verified manually, on target hardware.
 
 ## 10. Deferred Decisions
 
-- Transcript persistence backend.
 - Deployment/installation tooling beyond the systemd unit + `make install` /
   `make install-service` — containerization itself remains a non-goal (§2),
   but packaging/distribution beyond "clone the repo, apt the broker, install a
