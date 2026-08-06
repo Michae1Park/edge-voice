@@ -70,7 +70,7 @@ import soundfile as sf
 from moonshine_voice import Transcriber, get_model_for_language, string_to_model_arch
 
 SR = 16000
-CLIP_S = 120.0  # transcribe the first 8 seconds
+CLIP_S = 8.0  # transcribe the first 8 seconds
 CHUNK_S = 0.25  # 250ms audio chunks, as a live feed would deliver
 UPDATE_INTERVAL_S = 1.0  # decode once per 500ms of audio (the Transcriber default)
 DECODE_MS = 1.0  # above this, a row did real work rather than just buffering
@@ -156,7 +156,10 @@ print(f"   decodes: {len(decodes)}  first={decodes[0]:.0f}ms  last={decodes[-1]:
 
 path, arch = get_model_for_language("en", string_to_model_arch("tiny-streaming"))
 tr_s = Transcriber(
-    path, arch, update_interval=UPDATE_INTERVAL_S, options={"max_tokens_per_second": "18.0"}
+    path,
+    arch,
+    update_interval=UPDATE_INTERVAL_S,
+    options={"max_tokens_per_second": "18.0", "vad_threshold": "0"},
 )
 tr_s.add_listener(on_event)
 
