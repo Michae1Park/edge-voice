@@ -563,6 +563,16 @@ validation — performance is still verified manually, on target hardware.
   is currently split — `wav_source.py` publishes a JSON envelope while
   `wav_source_raw.py` and `mic_source.py` publish raw PCM, and only raw PCM is
   what ingest actually consumes today.
+- **STT multiprocessing** (`STT_MULTIPROCESS_PLAN.md`) — scoped, not started.
+  The per-channel `STTWorker` *threads* (this section, above) fixed unbounded
+  queue growth but not genuine parallelism: confirmed on the RPi5, both on
+  the real pipeline (decode calls alternate in lockstep between channels)
+  and in isolation (`scratch/probe_gil_release.py`: two threads, two
+  independent `Transcriber` instances, 1.02x speedup — no benefit). The GIL
+  serializes decode compute regardless of thread/core count. The current fix
+  works by keeping total demand under budget (~65% measured), which is a
+  margin, not a capacity guarantee. The plan is to move each channel's
+  `STTWorker` to its own OS process instead of a thread.
 
 Resolved since the last revision of this document:
 

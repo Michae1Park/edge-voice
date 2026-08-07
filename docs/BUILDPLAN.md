@@ -849,6 +849,17 @@ milestones above.
   and would decide whether the rest proceeds. English test audio is no longer
   missing (`wav/obama_2012.wav`), though it's a studio-quality monologue, not
   two-party telephone audio.
+- **`docs/STT_MULTIPROCESS_PLAN.md`** — scoped, not started. Per-channel
+  `STTWorker` threads (shipped) fixed unbounded queue growth but not genuine
+  parallelism: confirmed on the RPi5 both on the real pipeline (decode calls
+  alternate in lockstep between channels) and in isolation
+  (`scratch/probe_gil_release.py`: 1.02x speedup from two threads — no
+  benefit). The GIL serializes decode compute regardless of thread/core
+  count. Current fix works by keeping total demand under budget (~65%
+  measured), a margin not a guarantee. Plan: move each channel's STT worker
+  to its own OS process (no shared GIL). Verification step before touching
+  the orchestrator: adapt `probe_gil_release.py` to use
+  `multiprocessing.Process` and confirm ~2x speedup in isolation first.
 
 ---
 
