@@ -92,6 +92,24 @@ localhost:1883 by default -- `make install` sets this up via mosquitto on
 Debian/RPi) and loads the real VAD/STT models, same as running `edge-voice`
 directly. This is deliberately the real pipeline, not a mock.
 
+Optional CPU pinning (--stt-cores / --other-cores)
+---------------------------------------------------
+`threading.Thread.native_id` (the real OS thread ID) is available once a
+thread has started, and `orch._stt` etc. are the actual Thread objects
+(same reach-in pattern demo_supervisor.py already uses) -- so this script
+can set OS-level CPU affinity per worker thread with no changes to src/.
+--stt-cores confines STTWorker to specific cores; --other-cores (optional)
+confines every other worker (ingest/router/VAD/supervisor/metrics) plus
+this script's own main thread to a disjoint set, for a true dedication test
+rather than just a preference. Linux-only (os.sched_setaffinity).
+
+This only pins the STT *worker* thread -- it does NOT by itself stop ONNX
+Runtime from spawning its own internal threads for one inference call
+(intra-op parallelism), which wouldn't inherit this affinity automatically.
+See scratch/bench_ort_threads.py (already in this repo) for the separate
+MOONSHINE_ORT_SINGLE_THREAD lever that controls THAT -- the two are meant
+to be used together, not as alternatives to each other.
+
 Looping the same clip means segments near each loop boundary can be cut
 oddly (abrupt silence->speech at the splice) -- a small fraction of samples,
 not corrected for here.
@@ -101,6 +119,15 @@ Usage:
     python scratch/bench_pipeline_load.py --duration-s 300 --rss-interval-s 0.1
     python scratch/bench_pipeline_load.py --wav wav/rx_recorded_2.wav wav/tx_recorded_2.wav
     python scratch/bench_pipeline_load.py --csv-out /tmp/segments.csv
+
+    # Single channel, to isolate whether the pipeline keeps up with ONE
+    # channel of speech before blaming dual-channel concurrency:
+    python scratch/bench_pipeline_load.py --channels rx --wav wav/rx_recorded_1.wav
+
+    # Dedicate cores 2-3 to STT, everything else confined to 0-1 (combine
+    # with MOONSHINE_ORT_SINGLE_THREAD=1, see scratch/bench_ort_threads.py):
+    MOONSHINE_ORT_SINGLE_THREAD=1 python scratch/bench_pipeline_load.py \\
+        --stt-cores 2,3 --other-cores 0,1
 """
 
 from __future__ import annotations
@@ -191,6 +218,32 @@ class ResourceSampler:
                 cpu_pct = 100.0 * ((ticks - last_cpu_ticks) / CLK_TCK) / dt if dt > 0 else 0.0
                 self.cpu_pct_samples.append(cpu_pct)
                 last_cpu_ticks, last_cpu_t = ticks, now
+
+
+def _parse_cores(spec: str) -> set[int]:
+    return {int(x) for x in spec.split(",") if x.strip()}
+
+
+def _pin_thread(thread: threading.Thread | None, cores: set[int], label: str) -> None:
+    if not hasattr(os, "sched_setaffinity"):
+        logger.warning("os.sched_setaffinity unavailable on this platform -- skipping (%s)", label)
+        return
+    if thread is None:
+        logger.warning("%s: no such worker in this build (reliability/metrics disabled?)", label)
+        return
+    native_id = thread.native_id
+    if native_id is None:
+        logger.warning("%s: thread has no native_id (not started yet?) -- skipping", label)
+        return
+    os.sched_setaffinity(native_id, cores)
+    logger.info("Pinned %s (tid=%d) to cores %s", label, native_id, sorted(cores))
+
+
+def _pin_main_thread(cores: set[int]) -> None:
+    if not hasattr(os, "sched_setaffinity"):
+        return
+    os.sched_setaffinity(0, cores)  # 0 = calling thread, not "the process"
+    logger.info("Pinned main thread to cores %s", sorted(cores))
 
 
 class _SttLatencyCapture(logging.Handler):
@@ -340,11 +393,34 @@ def main() -> None:
         help="CPU%% averaging window -- coarser on purpose, see docstring (default 1.0s)",
     )
     parser.add_argument(
+        "--stt-cores",
+        default=None,
+        metavar="C,C,...",
+        help="Pin STTWorker to these CPU cores, e.g. '2,3' (default: unpinned). "
+        "Combine with MOONSHINE_ORT_SINGLE_THREAD -- see docstring.",
+    )
+    parser.add_argument(
+        "--other-cores",
+        default=None,
+        metavar="C,C,...",
+        help="Pin every other worker + this script's main thread to these cores, "
+        "disjoint from --stt-cores, for true dedication rather than a mere "
+        "preference (default: unpinned, only meaningful alongside --stt-cores).",
+    )
+    parser.add_argument(
+        "--channels",
+        nargs="+",
+        default=["rx", "tx"],
+        help="Channels to publish to -- e.g. 'rx' alone to isolate single-channel "
+        "throughput from dual-channel concurrency (default: rx tx)",
+    )
+    parser.add_argument(
         "--wav",
-        nargs=2,
+        nargs="+",
         default=["wav/rx_recorded_1.wav", "wav/tx_recorded_1.wav"],
-        metavar=("RX_WAV", "TX_WAV"),
-        help="One WAV file per channel (default: the recorded call-leg pair in wav/)",
+        help="One WAV file per channel, in the same order as --channels (default: "
+        "the recorded call-leg pair in wav/, matching the default rx tx channels -- "
+        "override both together for single-channel, e.g. --channels rx --wav wav/rx_recorded_1.wav)",
     )
     parser.add_argument(
         "--grace-s",
@@ -416,16 +492,38 @@ def main() -> None:
     orch.start()
     drain_thread.start()
     sampler.start()
-    time.sleep(0.5)  # let workers actually come up before publishing
+    time.sleep(0.5)  # let workers actually come up before publishing / before native_id exists
+
+    if args.stt_cores:
+        _pin_thread(orch._stt, _parse_cores(args.stt_cores), "STTWorker")
+    if args.other_cores:
+        other_cores = _parse_cores(args.other_cores)
+        if args.stt_cores and _parse_cores(args.stt_cores) & other_cores:
+            logger.warning(
+                "--stt-cores and --other-cores overlap (%s) -- not a real dedication test",
+                _parse_cores(args.stt_cores) & other_cores,
+            )
+        for label, worker in (
+            ("MqttAudioIngest", orch._audio_source),
+            ("ChannelRouter", orch._router),
+            ("VADWorker", orch._vad),
+            ("Supervisor", orch._supervisor),
+            ("MetricsCollector", orch._metrics),
+        ):
+            _pin_thread(worker, other_cores, label)
+        _pin_main_thread(other_cores)
 
     logger.info(
-        "Replaying %s in a loop for %.0fs (Ctrl-C to stop early)", args.wav, args.duration_s
+        "Replaying %s on channels %s in a loop for %.0fs (Ctrl-C to stop early)",
+        args.wav,
+        args.channels,
+        args.duration_s,
     )
     started = time.monotonic()
     loops = 0
     try:
         while time.monotonic() - started < args.duration_s:
-            wav_source_raw.main(["--wav", *args.wav, "--channels", "rx", "tx"])
+            wav_source_raw.main(["--wav", *args.wav, "--channels", *args.channels])
             loops += 1
     except KeyboardInterrupt:
         logger.info("Interrupted -- wrapping up")
@@ -445,7 +543,10 @@ def main() -> None:
     logging.getLogger("edge_voice.pipeline.orchestrator").removeHandler(stt_capture)
 
     print("\n" + "=" * 96)
-    print(f"PER-SEGMENT -- {loops} loop(s) x {args.wav}, {len(records)} final transcripts")
+    print(
+        f"PER-SEGMENT -- {loops} loop(s) x {args.wav} on {args.channels}, "
+        f"{len(records)} final transcripts"
+    )
     print("=" * 96)
     print(
         f"{'elapsed_s':>9} {'ch':>3} {'dur_s':>6} {'cap':>4} {'chars':>6} "
