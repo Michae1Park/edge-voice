@@ -580,11 +580,21 @@
     // Pipeline order, with the short label shown on the kiosk and which
     // `latencies` key (if any) belongs to that module. MqttAudioIngest is a
     // source with nothing to time -- it has no latency entry by design.
+    //
+    // STTWorker is one row per channel, not one shared row -- there's a
+    // dedicated decoder per channel now (see orchestrator.py's per-channel
+    // _build_stt), each with its own worker name ("STTWorker-rx" etc.) and
+    // its own entry in latencies.stt. The `channel` field tells
+    // renderModules to read latencies[mod.latency][mod.channel] directly
+    // instead of worstLatency() across the whole dict -- without it, both
+    // rows would show the same worst-of-both-channels number, which would
+    // look like real per-channel data but actively mislead.
     var MODULES = [
       { worker: "MqttAudioIngest", label: "ingest", latency: null },
       { worker: "ChannelRouter", label: "router", latency: "router" },
       { worker: "VADWorker", label: "vad", latency: "vad_silero" },
-      { worker: "STTWorker", label: "stt", latency: "stt" },
+      { worker: "STTWorker-rx", label: "stt rx", latency: "stt", channel: "rx" },
+      { worker: "STTWorker-tx", label: "stt tx", latency: "stt", channel: "tx" },
       // Not a pipeline stage -- the thread that restarts the ones above.
       // Nothing restarts it in turn, so its state is only ever
       // running/stopped, never restarting/degraded.
@@ -811,9 +821,18 @@
         entry.chip.classList.toggle("stopped", state === "stopped");
         entry.chip.classList.toggle("dim", !state);
         // Latency is snapshot-derived, so it can be absent while state isn't.
-        entry.lat.textContent = mod.latency && latencies
-          ? " " + formatLatency(worstLatency(latencies[mod.latency]))
-          : "";
+        // mod.channel (STT rows) reads that one channel's own number
+        // directly -- NOT worstLatency(), which would fold every channel
+        // into one value and make two different-channel rows show the
+        // same (misleading) number. Modules without a channel still use
+        // worstLatency() across whatever channels report to that stage.
+        var latencyValue = null;
+        if (mod.latency && latencies && latencies[mod.latency]) {
+          latencyValue = mod.channel
+            ? latencies[mod.latency][mod.channel]
+            : worstLatency(latencies[mod.latency]);
+        }
+        entry.lat.textContent = latencyValue != null ? " " + formatLatency(latencyValue) : "";
       }
     }
 

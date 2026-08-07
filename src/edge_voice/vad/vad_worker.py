@@ -1,7 +1,9 @@
 """
 VADWorker: single thread consuming the mixed (both-channel) routed_queue,
 demultiplexing by AudioPacket.channel_id, and emitting finalized
-SpeechSegments to segment_queue.
+SpeechSegments to segment_queues[channel_id] -- one queue per channel, so
+each channel's STTWorker can decode independently instead of sharing a
+single downstream queue (and therefore a single decoder) across channels.
 
 Because this is one thread pulling packets in order, there's no need for
 the vad_lock from the two-thread version -- calls into the model are
@@ -20,6 +22,8 @@ Assumptions:
     w.stop() + join(timeout=10) pattern -- adjust if you use something else).
   - segment_id is generated here as f"{channel_id}-{start:.3f}"; swap for
     uuid4 or whatever convention SegmentAudioDumpWorker/STT expect.
+  - segment_queues must have exactly one entry per channel_id in channel_ids
+    -- constructed once, same shape as self._channels, never grown at runtime.
 """
 
 from __future__ import annotations
@@ -132,12 +136,12 @@ class _ChannelState:
 
 
 class VADWorker(threading.Thread):
-    """Drop-in replacement for FakeVADWorker(routed_queue, segment_queue)."""
+    """Drop-in replacement for FakeVADWorker(routed_queue, segment_queues)."""
 
     def __init__(
         self,
         routed_queue: "queue.Queue[AudioPacket]",
-        segment_queue: "queue.Queue[SpeechSegment]",
+        segment_queues: "dict[str, queue.Queue[SpeechSegment]]",
         channel_ids: list[str],
         config: VADWorkerConfig | None = None,
         model=None,
@@ -146,7 +150,9 @@ class VADWorker(threading.Thread):
     ) -> None:
         super().__init__(name=name, daemon=True)
         self.routed_queue = routed_queue
-        self.segment_queue = segment_queue
+        # One queue per channel_id -- see module docstring. Keyed the same
+        # way as self._channels below, built from the same channel_ids list.
+        self.segment_queues = segment_queues
         self.dump_queue = dump_queue
         self.config = config or VADWorkerConfig()
 
@@ -421,7 +427,7 @@ class VADWorker(threading.Thread):
     def _emit_partial(
         self, channel_id: str, state: _ChannelState, start_ts: float, seg_s: float
     ) -> None:
-        """Put a prefix on segment_queue only -- never dump_queue.
+        """Put a prefix on this channel's segment queue only -- never dump_queue.
 
         Uses put_nowait rather than fanout_put for two reasons: a dump of
         every prefix would bury the real segments in segment_audio_dump, and
@@ -440,10 +446,10 @@ class VADWorker(threading.Thread):
             is_partial=True,
         )
         try:
-            self.segment_queue.put_nowait(segment)
+            self.segment_queues[channel_id].put_nowait(segment)
         except queue.Full:
             logger.debug(
-                "VADWorker: segment_queue full -- dropping partial on channel=%s",
+                "VADWorker: segment queue full -- dropping partial on channel=%s",
                 channel_id,
                 extra={"channel_id": channel_id, "segment_id": segment.segment_id},
             )
@@ -544,7 +550,7 @@ class VADWorker(threading.Thread):
             audio=b"".join(state.segment_chunks),
             segment_id=segment_id,
         )
-        fanout_put(segment, self.segment_queue, self.dump_queue)
+        fanout_put(segment, self.segment_queues[channel_id], self.dump_queue)
         state.segment_chunks = []
         state.segment_start_ts = None
         state.segment_id = None

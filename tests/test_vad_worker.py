@@ -33,11 +33,12 @@ class _FakeSileroModel:
 
 
 def _make_worker(score: float, channel_ids: list[str] | None = None) -> VADWorker:
+    ids = channel_ids if channel_ids is not None else ["rx", "tx"]
     config = VADWorkerConfig(rms_gate_enabled=True, silence_rms_floor=0.01, sample_rate=SAMPLE_RATE)
     return VADWorker(
         routed_queue=queue.Queue(),
-        segment_queue=queue.Queue(),
-        channel_ids=channel_ids if channel_ids is not None else ["rx", "tx"],
+        segment_queues={cid: queue.Queue() for cid in ids},
+        channel_ids=ids,
         config=config,
         model=_FakeSileroModel(score),
     )
@@ -85,7 +86,7 @@ def test_rms_gate_disabled_always_reaches_silero():
     config = VADWorkerConfig(rms_gate_enabled=False, sample_rate=SAMPLE_RATE)
     worker = VADWorker(
         routed_queue=queue.Queue(),
-        segment_queue=queue.Queue(),
+        segment_queues={"rx": queue.Queue()},
         channel_ids=["rx"],
         config=config,
         model=_FakeSileroModel(score=0.01),

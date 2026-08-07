@@ -4,7 +4,7 @@ using the producer/consumer thread model described in docs/design.md.
 Owns startup, graceful shutdown for each stage.
 
 Pipeline:
-    MQTT subscriber -> ingest_queue -> ChannelRouter -> routed_queue -> VAD -> segment_queue -> STT
+    MQTT subscriber -> ingest_queue -> ChannelRouter -> routed_queue -> VAD -> segment_queues[channel] -> STT[channel]
                                                        -> dump_queue (optional, debug)
                                                                      -> segment_dump_queue (optional, debug)
 """
@@ -46,12 +46,19 @@ class PipelineOrchestrator:
         self._ingest_queue: queue.Queue | None = None
         self._routed_queue: queue.Queue | None = None
         self._dump_queue: queue.Queue | None = None
-        self._segment_queue: queue.Queue | None = None
+        # One segment queue per channel -- so each channel's STTWorker can
+        # decode independently instead of contending for one shared queue
+        # (and therefore one shared decoder). See docs/ARCHITECTURE.md.
+        self._segment_queues: dict[str, queue.Queue] | None = None
         self._segment_dump_queue: queue.Queue | None = None
         self._audio_source: threading.Thread | None = None
         self._router: threading.Thread | None = None
         self._vad: threading.Thread | None = None
-        self._stt: threading.Thread | None = None
+        # One dedicated STTWorker (own Transcriber, own thread) per channel,
+        # keyed by channel_id -- never replaced wholesale on restart, only
+        # mutated in place (workers[cid] = new), so no _w()-style attribute
+        # indirection is needed to observe a restart's replacement.
+        self._stt: dict[str, threading.Thread] = {}
         self._dump_worker: threading.Thread | None = None
         self._segment_dump_worker: threading.Thread | None = None
         # In-process worker supervision (Milestone 6). None when
@@ -90,7 +97,10 @@ class PipelineOrchestrator:
         # Queues
         self._ingest_queue = make_ingest_queue(maxsize=self._settings.queues.ingest)
         self._routed_queue = make_routed_queue(maxsize=self._settings.queues.routed)
-        self._segment_queue = make_segment_queue(maxsize=self._settings.queues.segment)
+        self._segment_queues = {
+            c.channel_id: make_segment_queue(maxsize=self._settings.queues.segment)
+            for c in self._settings.mqtt.channels
+        }
         self._dump_queue = None
         self._segment_dump_queue = None
 
@@ -105,7 +115,10 @@ class PipelineOrchestrator:
         self._audio_source = self._build_mqtt_subscriber()
         self._router = self._build_router()
         self._vad = self._build_vad()
-        self._stt = self._build_stt()
+        # One dedicated STTWorker per channel -- see docs/ARCHITECTURE.md.
+        self._stt = {
+            c.channel_id: self._build_stt(c.channel_id) for c in self._settings.mqtt.channels
+        }
 
         # Supervision layer (Milestone 6). Built here so its targets can close
         # over the worker attributes just assigned; started/stopped separately.
@@ -228,11 +241,13 @@ class PipelineOrchestrator:
         queues = {
             "ingest": self._ingest_queue,
             "routed": self._routed_queue,
-            "segment": self._segment_queue,
             "dump": self._dump_queue,
             "segment_dump": self._segment_dump_queue,
         }
-        return {name: q.qsize() for name, q in queues.items() if q is not None}
+        depths = {name: q.qsize() for name, q in queues.items() if q is not None}
+        if self._segment_queues is not None:
+            depths.update({f"segment_{cid}": q.qsize() for cid, q in self._segment_queues.items()})
+        return depths
 
     def metrics_snapshot(self) -> MetricsSnapshot | None:
         """Latest MetricsCollector snapshot, or None if there isn't one.
@@ -305,11 +320,11 @@ class PipelineOrchestrator:
         consumers. Keep producers ahead of anything reading their queues --
         router feeds dump_worker, vad feeds both stt and segment_dump_worker.
         """
-        workers = [
+        workers: list[threading.Thread | None] = [
             self._audio_source,
             self._router,
             self._vad,
-            self._stt,
+            *self._stt.values(),
             self._dump_worker,
             self._segment_dump_worker,
         ]
@@ -334,11 +349,11 @@ class PipelineOrchestrator:
         m = self._settings.metrics
         return MetricsCollector(
             queue_depths=self.queue_depths,
-            stt_latency_s=lambda: self._w("_stt").last_latency_s,
+            stt_latency_s=self._stt_latency_s,
             vad_silero_latencies_s=lambda: self._w("_vad").silero_latencies_s(),
             vad_rms_gate_latencies_s=lambda: self._w("_vad").rms_gate_latencies_s(),
             router_repacketize_latencies_s=lambda: self._w("_router").repacketize_latencies_s(),
-            stt_channel_latencies_s=lambda: self._w("_stt").channel_latencies_s(),
+            stt_channel_latencies_s=self._stt_channel_latencies_s,
             # self._supervisor is built once in build() and never swapped
             # (unlike the workers), so a direct closure over it is enough --
             # no need to route through _w().
@@ -347,6 +362,40 @@ class PipelineOrchestrator:
             emit_interval_s=m.emit_interval_s,
             latency_log_decimals=m.latency_log_decimals,
         )
+
+    def _stt_latency_s(self) -> float | None:
+        """Worst (not "most recent") STT decode time across every channel.
+
+        With one worker per channel there's no single well-defined "most
+        recent call across all channels" the way there was with one shared
+        worker (that needs a per-worker timestamp to answer honestly, and
+        nothing downstream needs that precision -- see health/reporting.py,
+        which already omits this aggregate from the UI/health payload
+        entirely and explains why: two channels' numbers in one field is
+        misleading regardless of how it's aggregated). max() is the more
+        useful single number for the one place this is still surfaced (an
+        ops log line): the channel closest to breaching its real-time budget.
+        """
+        # Ignored attr-defined below: STTWorker's interface isn't visible
+        # through its threading.Thread base, same reasoning as _w()'s
+        # docstring.
+        values: list[float] = []
+        for w in self._stt.values():
+            latency = w.last_latency_s  # type: ignore[attr-defined]
+            if latency is not None:
+                values.append(latency)
+        return max(values) if values else None
+
+    def _stt_channel_latencies_s(self) -> dict[str, float]:
+        """Per-channel STT latency, merged across every channel's worker.
+
+        No key collisions possible: each worker only ever populates its own
+        channel's entry in its own channel_latencies_s() dict.
+        """
+        merged: dict[str, float] = {}
+        for w in self._stt.values():
+            merged.update(w.channel_latencies_s())  # type: ignore[attr-defined]
+        return merged
 
     def _mqtt_connected(self) -> bool | None:
         """None when the configured audio source isn't MQTT-based (e.g. a
@@ -403,15 +452,59 @@ class PipelineOrchestrator:
                 input_pending=lambda: self._queue_pending(self._routed_queue),
                 pending_loss=lambda: self._w("_vad").pending_loss(),
             ),
-            SupervisedTarget(
-                name="STTWorker",
-                is_alive=lambda: self._w("_stt").is_alive(),
-                is_stopping=lambda: self._w("_stt").stopping,
-                last_activity=lambda: self._w("_stt").last_activity,
-                restart=lambda: self._restart("_stt", self._build_stt),
-                input_pending=lambda: self._queue_pending(self._segment_queue),
-            ),
-        ]
+        ] + self._build_stt_supervisor_targets()
+
+    def _build_stt_supervisor_targets(self) -> list[SupervisedTarget]:
+        """One SupervisedTarget per channel's STTWorker.
+
+        Split out from _build_supervisor_targets() because it needs a loop,
+        not a fixed list of blocks -- every lambda below binds `cid=cid` as a
+        default argument on purpose: without it, all targets built by this
+        loop would close over the same loop variable and every restart
+        callback would act on whichever channel the loop landed on last.
+        """
+        if self._segment_queues is None:
+            raise RuntimeError("Segment queues not initialized")
+        segment_queues = self._segment_queues  # narrowed for the closures below
+
+        targets: list[SupervisedTarget] = []
+        for cid in self._stt:
+            targets.append(self._build_one_stt_supervisor_target(cid, segment_queues))
+        return targets
+
+    def _build_one_stt_supervisor_target(
+        self, cid: str, segment_queues: dict[str, queue.Queue]
+    ) -> SupervisedTarget:
+        """One channel's SupervisedTarget, split out from the loop above so
+        `cid` is a real parameter (not a default-arg-bound loop variable) --
+        avoids the late-binding trap without needing `lambda cid=cid: ...`
+        on every callback, and keeps each closure's body a single expression.
+        """
+        stt = self._stt  # Any-typed access to STTWorker's interface below
+
+        def is_alive() -> bool:
+            return stt[cid].is_alive()
+
+        def is_stopping() -> bool:
+            return stt[cid].stopping  # type: ignore[attr-defined]
+
+        def last_activity() -> float:
+            return stt[cid].last_activity  # type: ignore[attr-defined]
+
+        def restart() -> None:
+            self._restart_dict_worker(stt, cid, lambda: self._build_stt(cid))
+
+        def input_pending() -> bool:
+            return self._queue_pending(segment_queues[cid])
+
+        return SupervisedTarget(
+            name=f"STTWorker-{cid}",
+            is_alive=is_alive,
+            is_stopping=is_stopping,
+            last_activity=last_activity,
+            restart=restart,
+            input_pending=input_pending,
+        )
 
     def _restart(self, attr: str, build_fn: Callable[[], threading.Thread]) -> None:
         """Replace worker `attr` with a fresh instance on the same queues.
@@ -440,6 +533,33 @@ class PipelineOrchestrator:
         if self._running and not self._stop_event.is_set():
             new.start()
 
+    def _restart_dict_worker(
+        self,
+        workers: dict[str, threading.Thread],
+        key: str,
+        build_fn: Callable[[], threading.Thread],
+    ) -> None:
+        """Same as _restart(), for a worker held in a dict (workers[key]=new)
+        rather than a bare attribute (setattr(self, attr, new)).
+
+        A sibling method, not a generalization of _restart() itself -- that
+        one is exercised by four other stable supervised targets and there's
+        no reason to risk it for what's otherwise a two-line difference.
+        """
+        old = workers[key]
+        self._signal(old)
+        self._join(old)
+        if old.is_alive():
+            logger.warning(
+                "Orchestrator: %s did not exit after signal -- a zombie thread may "
+                "linger on its input queue until a full process restart",
+                getattr(old, "name", key),
+            )
+        new = build_fn()
+        workers[key] = new
+        if self._running and not self._stop_event.is_set():
+            new.start()
+
     # ── Worker builders ────────────────────────────────────────
 
     def _build_mqtt_subscriber(self) -> threading.Thread:
@@ -465,13 +585,13 @@ class PipelineOrchestrator:
         )
 
     def _build_vad(self) -> threading.Thread:
-        if self._routed_queue is None or self._segment_queue is None:
+        if self._routed_queue is None or self._segment_queues is None:
             raise RuntimeError("Queues not initialized")
         channels = [c.channel_id for c in self._settings.mqtt.channels]
 
         return VADWorker(
             self._routed_queue,
-            self._segment_queue,
+            self._segment_queues,
             channels,
             dump_queue=self._segment_dump_queue,
             config=VADWorkerConfig(
@@ -493,9 +613,15 @@ class PipelineOrchestrator:
             ),
         )
 
-    def _build_stt(self) -> threading.Thread:
-        if self._segment_queue is None:
-            raise RuntimeError("Segment queue not initialized")
+    def _build_stt(self, channel_id: str) -> threading.Thread:
+        """One dedicated STTWorker (own Transcriber, own thread) for
+        `channel_id`. Called once per configured channel from build() --
+        see docs/ARCHITECTURE.md for why this replaced a single shared
+        worker: one sequential decoder can't sustain real-time dual-channel
+        transcription, proven on the RPi5 target hardware.
+        """
+        if self._segment_queues is None:
+            raise RuntimeError("Segment queues not initialized")
 
         def _on_transcript(event) -> None:
             if not event.is_final:
@@ -525,10 +651,14 @@ class PipelineOrchestrator:
             # vad -> stt -> transcript): the only orchestrator-level log line
             # carrying stage/channel_id/segment_id, since it's the segment's
             # final event even though this callback lives here, not in stt/.
-            # last_latency_s is read through _w() rather than captured, but
-            # is always this exact segment's value: _handle_segment sets it
-            # immediately before calling _on_transcript, on the same thread.
-            latency_s = self._w("_stt").last_latency_s
+            # last_latency_s is read through self._stt[channel_id] rather
+            # than captured, but is always this exact segment's value:
+            # _handle_segment sets it immediately before calling
+            # _on_transcript, on the same thread -- and self._stt is never
+            # replaced wholesale on restart (only mutated in place), so this
+            # lookup observes a restart's replacement worker for free, same
+            # guarantee _w() gives the attribute-based workers.
+            latency_s = self._stt[channel_id].last_latency_s  # type: ignore[attr-defined]
             logger.info(
                 "TRANSCRIPT channel=%s segment=%s [%.2f-%.2f] latency=%.3fs %r",
                 event.channel_id,
@@ -548,7 +678,7 @@ class PipelineOrchestrator:
 
         stt = self._settings.stt
         return STTWorker(
-            self._segment_queue,
+            self._segment_queues[channel_id],
             _on_transcript,
             config=STTWorkerConfig(
                 language=stt.language,
@@ -564,6 +694,10 @@ class PipelineOrchestrator:
                 },
                 partial_max_queue_depth=stt.partial_max_queue_depth,
             ),
+            # Must exactly match the SupervisedTarget.name built for this
+            # channel in _build_stt_supervisor_targets() -- get_status()
+            # merges supervisor state into workers[name] by this name.
+            name=f"STTWorker-{channel_id}",
         )
 
     def _build_segment_dump(self) -> threading.Thread:

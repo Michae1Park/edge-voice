@@ -45,7 +45,7 @@ def _vad_worker(
 ) -> VADWorker:
     return VADWorker(
         routed_queue=queue.Queue(),
-        segment_queue=queue.Queue(),
+        segment_queues={"rx": queue.Queue()},
         channel_ids=["rx"],
         config=VADWorkerConfig(
             sample_rate=SAMPLE_RATE,
@@ -89,14 +89,14 @@ def test_disabled_by_default_emits_no_partials():
     worker = _vad_worker(partial_interval_s=0.0)
     _feed_mid_speech(worker, n_chunks=200)  # 6.4s of speech
 
-    assert _drain(worker.segment_queue) == []
+    assert _drain(worker.segment_queues["rx"]) == []
 
 
 def test_partials_emitted_on_cadence_once_past_minimum():
     worker = _vad_worker(partial_interval_s=1.0, partial_min_segment_s=1.5)
     _feed_mid_speech(worker, n_chunks=157)  # ~5.0s
 
-    partials = _drain(worker.segment_queue)
+    partials = _drain(worker.segment_queues["rx"])
     assert partials, "expected at least one partial past the 1.5s minimum"
     assert all(p.is_partial for p in partials)
     # First lands at the minimum, not before it.
@@ -111,7 +111,7 @@ def test_partial_shorter_than_minimum_is_never_emitted():
     worker = _vad_worker(partial_interval_s=0.5, partial_min_segment_s=1.5)
     _feed_mid_speech(worker, n_chunks=30)  # ~0.96s, under the minimum
 
-    assert _drain(worker.segment_queue) == []
+    assert _drain(worker.segment_queues["rx"]) == []
 
 
 def test_partials_carry_the_in_progress_segment_id():
@@ -119,7 +119,7 @@ def test_partials_carry_the_in_progress_segment_id():
     worker = _vad_worker(partial_interval_s=1.0)
     _feed_mid_speech(worker, n_chunks=157)
 
-    partials = _drain(worker.segment_queue)
+    partials = _drain(worker.segment_queues["rx"])
     assert {p.segment_id for p in partials} == {"rx-0.000-1"}
 
 
@@ -129,7 +129,7 @@ def test_partials_never_reach_the_dump_queue():
     worker = _vad_worker(partial_interval_s=1.0, dump_queue=dump)
     _feed_mid_speech(worker, n_chunks=157)
 
-    assert _drain(worker.segment_queue), "sanity: partials were emitted"
+    assert _drain(worker.segment_queues["rx"]), "sanity: partials were emitted"
     assert _drain(dump) == []
 
 

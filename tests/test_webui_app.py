@@ -139,7 +139,7 @@ def test_status_metrics_disabled(make_client):
 def test_status_reports_queue_depths_even_when_metrics_disabled(make_client):
     # Queue depths are read live, not from the metrics snapshot.
     body = make_client(metrics_enabled=False).get("/api/status").json()
-    assert set(body["queue_depths"]) == {"ingest", "routed", "segment"}
+    assert set(body["queue_depths"]) == {"ingest", "routed", "segment_rx", "segment_tx"}
 
 
 def test_status_surfaces_snapshot_fields_after_a_tick(make_client):
@@ -178,7 +178,8 @@ def test_status_reports_worker_state_even_while_metrics_pending(client):
         "MqttAudioIngest",
         "ChannelRouter",
         "VADWorker",
-        "STTWorker",
+        "STTWorker-rx",
+        "STTWorker-tx",
         "Supervisor",
     }
 

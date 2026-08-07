@@ -1,4 +1,6 @@
-"""STTWorker: single thread consuming segment_queue and emitting TranscriptEvents.
+"""STTWorker: single thread consuming one channel's segment_queue and
+emitting TranscriptEvents. One dedicated instance per channel -- see
+"One Transcriber per channel" below.
 
 Drop-in replacement for FakeSTTWorker(segment_queue, on_transcript).
 
@@ -27,25 +29,43 @@ inside an otherwise-fine line. moonshine_voice's own mic_transcriber.py
 agrees: it coalesces queued audio into as few add_audio() calls as possible
 specifically because that "lowers latency and avoids redundant work."
 
-One shared Transcriber, not one per channel
-────────────────────────────────────────────
-The scratch script gives each channel its own Transcriber because it runs
-two threads concurrently -- Moonshine's decoder is stateful, so concurrent
-sessions can't share one instance. STTWorker has only one thread pulling
-from a single mixed segment_queue, so segments are always handled one at a
-time regardless of channel; there is no concurrency to isolate.
+One Transcriber per channel, not one shared across channels
+──────────────────────────────────────────────────────────
+This used to be one shared STTWorker/Transcriber handling every channel's
+segments sequentially off a single mixed segment_queue, on the reasoning
+that there was "no concurrency to isolate" and that a second Transcriber
+would cost too much memory (~175MB estimated). Both turned out to be wrong
+in practice, measured on the actual RPi5 target hardware, not assumed:
 
-Sharing one Transcriber across channels is safe because start()/stop()
-fully resets its decoder state -- verified empirically by alternating
-channels on one shared instance and diffing the output against a fresh
-Transcriber per segment; they matched byte-for-byte. It also fits this
-application better: turn-taking dialogue, where the previous speaker's
-context genuinely shouldn't bleed into the next line regardless of which
-channel it's on, and halves the memory footprint (~175MB saved per
-extra channel we're not holding open).
+  - Throughput: one sequential decoder cannot sustain real-time dual-channel
+    transcription. Total STT decode demand for two concurrent channels sums
+    to ~95%+ of the real-time wall-clock budget on a single decoder, so its
+    input queue backs up without bound (bench_pipeline_load.py's queue-depth
+    trend goes GROWING within seconds). A single channel alone, given its
+    own dedicated decoder, comfortably uses only ~65% of budget with real
+    margin -- the fix has to be genuine parallelism, not a faster shared
+    decoder. Giving one decoder more CPU cores doesn't help either:
+    multi-threading a single Transcriber across cores was measured *slower*
+    than single-threaded (bench_ort_threads.py) -- thread-sync overhead on
+    a model this small outweighs the benefit, so the only lever left is a
+    second independent decoder instance.
+  - Memory: a second tiny-ko Transcriber costs ~56MB marginal RSS, measured
+    directly (scratch/probe_decoder_memory.py), not the ~175MB assumed --
+    trivial against the RPi5's ~2.6GB available at genuine idle.
 
-The shared Transcriber is resolved eagerly, in __init__, off the real-time
-path -- not lazily on the first segment. `import edge_voice.stt.stt_worker`
+So each channel now gets its own STTWorker instance (own thread, own
+Transcriber, own segment_queue -- see orchestrator.py's per-channel
+_build_stt(channel_id)) and channels are decoded in true parallel. Moonshine's
+decoder being stateful is why this needs a distinct Transcriber per worker
+at all (concurrent sessions can't share one instance) -- but it's also *why
+this is safe*: start()/stop() fully resets decoder state between segments
+(verified empirically, byte-for-byte, against a fresh Transcriber per
+segment), so nothing about per-channel context correctness changes from the
+old design -- a channel's own segments were always processed strictly in
+order by whichever worker(s) touch that channel, and still are.
+
+Each instance's Transcriber is resolved eagerly, in __init__, off the
+real-time path -- not lazily on the first segment. `import edge_voice.stt.stt_worker`
 stays safe either way (nothing above module level touches moonshine_voice),
 but *constructing* an STTWorker now requires it to be importable, unless
 `transcriber_factory` bypasses that entirely (tests, benchmarks). In
@@ -367,7 +387,11 @@ class STTWorker(threading.Thread):
         }
 
     def run(self) -> None:
-        logger.info("STTWorker started")
+        # self.name, not a hardcoded "STTWorker" -- with one dedicated
+        # worker per channel (see orchestrator.py's _build_stt), two threads
+        # would otherwise log identical, indistinguishable start/stop/error
+        # lines. self.name is e.g. "STTWorker-rx".
+        logger.info("%s started", self.name)
         while not self._stop_event.is_set():
             try:
                 segment = self._segment_queue.get(timeout=QUEUE_GET_TIMEOUT_S)
@@ -383,12 +407,13 @@ class STTWorker(threading.Thread):
                 self._handle_segment(segment)
             except Exception:
                 logger.exception(
-                    "STTWorker failed on segment=%s channel=%s",
+                    "%s failed on segment=%s channel=%s",
+                    self.name,
                     segment.segment_id,
                     segment.channel_id,
                     extra={"segment_id": segment.segment_id, "channel_id": segment.channel_id},
                 )
-        logger.info("STTWorker stopped")
+        logger.info("%s stopped", self.name)
 
     # ── Per-segment handling ────────────────────────────────────
 
@@ -487,7 +512,7 @@ class STTWorker(threading.Thread):
         collector = _make_collector(self.config.repetitive_ratio, segment.segment_id)
 
         # remove_all_listeners() first: the transcriber is reused across
-        # every segment (all channels), so a stale collector would keep
+        # every segment on this channel, so a stale collector would keep
         # receiving events.
         transcriber.remove_all_listeners()
         transcriber.add_listener(collector)
@@ -499,7 +524,7 @@ class STTWorker(threading.Thread):
         finally:
             # stop() flushes the decoder and resets its state (verified in
             # the module docstring); skipping it on error would leave the
-            # session open and corrupt the next segment, on any channel.
+            # session open and corrupt this worker's next segment.
             transcriber.stop()
 
         return str(collector.text())

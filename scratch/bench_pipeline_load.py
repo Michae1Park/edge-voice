@@ -482,7 +482,11 @@ def main() -> None:
                     else None,
                     q_ingest=depths.get("ingest", -1),
                     q_routed=depths.get("routed", -1),
-                    q_segment=depths.get("segment", -1),
+                    # Per-channel since orchestrator.queue_depths() moved to
+                    # one segment queue per channel (each channel now has its
+                    # own dedicated STTWorker) -- this row's own channel's
+                    # queue is the relevant one, not some other channel's.
+                    q_segment=depths.get(f"segment_{ev.channel_id}", -1),
                 )
             )
 
@@ -495,7 +499,12 @@ def main() -> None:
     time.sleep(0.5)  # let workers actually come up before publishing / before native_id exists
 
     if args.stt_cores:
-        _pin_thread(orch._stt, _parse_cores(args.stt_cores), "STTWorker")
+        # orch._stt is now one dedicated worker per channel (dict), not a
+        # single attribute -- pin every channel's STT worker to the same
+        # core set, since "dedicate cores to STT" means all of them, not
+        # just one channel's.
+        for cid, stt_thread in orch._stt.items():
+            _pin_thread(stt_thread, _parse_cores(args.stt_cores), f"STTWorker-{cid}")
     if args.other_cores:
         other_cores = _parse_cores(args.other_cores)
         if args.stt_cores and _parse_cores(args.stt_cores) & other_cores:

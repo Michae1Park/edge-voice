@@ -49,7 +49,7 @@ def test_init_default_state():
     orch = PipelineOrchestrator(s)
     assert orch._ingest_queue is None
     assert orch._routed_queue is None
-    assert orch._segment_queue is None
+    assert orch._segment_queues is None
     assert orch._dump_queue is None
     assert orch._segment_dump_queue is None
     assert orch._stop_event.is_set() is False
@@ -89,7 +89,7 @@ def test_build_creates_correct_workers():
     assert orch._audio_source is not None
     assert orch._router is not None
     assert orch._vad is not None
-    assert orch._stt is not None
+    assert set(orch._stt) == {"rx", "tx"}  # one dedicated STTWorker per channel
 
 
 def test_build_gives_vad_a_channel_per_configured_channel():
@@ -109,13 +109,13 @@ def test_build_gives_vad_a_channel_per_configured_channel():
 
 
 def test_build_warms_up_stt_transcriber():
-    """_build_stt() -> STTWorker.__init__() resolves the shared Transcriber
-    eagerly -- see the module docstring. No packet, no segment, no start()
-    needed; build() alone is enough."""
+    """_build_stt() -> STTWorker.__init__() resolves each channel's own
+    Transcriber eagerly -- see the module docstring. No packet, no segment,
+    no start() needed; build() alone is enough, for every channel."""
     s = _minimal_settings()
     orch = PipelineOrchestrator(s)
     orch.build()
-    assert orch._stt._transcriber is not None
+    assert all(w._transcriber is not None for w in orch._stt.values())
 
 
 def test_build_with_dump_enabled():
@@ -143,7 +143,8 @@ def test_build_creates_queues():
     orch.build()
     assert isinstance(orch._ingest_queue, queue.Queue)
     assert isinstance(orch._routed_queue, queue.Queue)
-    assert isinstance(orch._segment_queue, queue.Queue)
+    assert set(orch._segment_queues) == {"rx", "tx"}
+    assert all(isinstance(q, queue.Queue) for q in orch._segment_queues.values())
 
 
 def test_ingest_queue_maxsize_from_settings():
@@ -164,7 +165,7 @@ def test_segment_queue_maxsize_from_settings():
     s = _minimal_settings(queues=QueuesSettings(segment=128))
     orch = PipelineOrchestrator(s)
     orch.build()
-    assert orch._segment_queue.maxsize == 128
+    assert all(q.maxsize == 128 for q in orch._segment_queues.values())
 
 
 # -- status / get_status -------------------
@@ -181,7 +182,8 @@ def test_worker_status_after_build():
     assert "MqttAudioIngest" in workers
     assert "ChannelRouter" in workers
     assert "VADWorker" in workers
-    assert "STTWorker" in workers
+    assert "STTWorker-rx" in workers
+    assert "STTWorker-tx" in workers
 
 
 def test_get_status_after_start():
@@ -258,18 +260,19 @@ def test_supervisor_thread_stops_with_pipeline():
 
 def test_restart_swaps_in_fresh_running_worker():
     # Exercises the real restart mechanics the supervisor drives: rebuild the
-    # worker via its actual builder, on the same queues, and start it.
+    # worker via its actual builder, on the same queue, and start it.
     s = _minimal_settings()
     orch = PipelineOrchestrator(s)
     orch.build()
     orch.start()
     try:
-        old_stt = orch._stt
-        old_queue = orch._segment_queue
-        orch._restart("_stt", orch._build_stt)
-        assert orch._stt is not old_stt  # a genuinely new instance
-        assert orch._stt.is_alive()
-        assert orch._segment_queue is old_queue  # same queue, not rebuilt
+        old_stt = orch._stt["rx"]
+        old_queue = orch._segment_queues["rx"]
+        orch._restart_dict_worker(orch._stt, "rx", lambda: orch._build_stt("rx"))
+        assert orch._stt["rx"] is not old_stt  # a genuinely new instance
+        assert orch._stt["rx"].is_alive()
+        assert orch._segment_queues["rx"] is old_queue  # same queue, not rebuilt
+        assert orch._stt["tx"] is not None  # the other channel's worker untouched
     finally:
         orch.stop()
         orch.wait()
@@ -284,10 +287,10 @@ def test_restart_does_not_start_worker_after_shutdown():
     orch.start()
     orch.stop()
     orch.wait()
-    old_stt = orch._stt
-    orch._restart("_stt", orch._build_stt)
-    assert orch._stt is not old_stt
-    assert not orch._stt.is_alive()  # rebuilt but not started
+    old_stt = orch._stt["rx"]
+    orch._restart_dict_worker(orch._stt, "rx", lambda: orch._build_stt("rx"))
+    assert orch._stt["rx"] is not old_stt
+    assert not orch._stt["rx"].is_alive()  # rebuilt but not started
 
 
 # -- ingest_queue property ---------
@@ -399,10 +402,16 @@ def test_health_is_a_superset_of_get_status():
 
 
 def _built_orchestrator_and_callback():
-    """The _on_transcript closure _build_stt hands to STTWorker."""
+    """The _on_transcript closure _build_stt hands to the "rx" STTWorker.
+
+    Every test using this passes channel_id="rx" events, so pointing at
+    that one worker keeps them exercising the same closure as before --
+    each channel's STTWorker gets its own _on_transcript now, but the
+    logic being tested here doesn't depend on which channel it's for.
+    """
     orch = PipelineOrchestrator(_minimal_settings())
     orch.build()
-    return orch, orch._stt._on_transcript
+    return orch, orch._stt["rx"]._on_transcript
 
 
 def test_partial_transcript_does_not_emit_the_segment_closing_log_line(caplog):
@@ -464,7 +473,7 @@ def test_final_transcript_still_emits_the_closing_log_line(caplog):
     # _handle_segment always sets this immediately before publishing a final
     # (see _on_transcript's comment); the log line formats it as %.3f, so
     # standing in for that write is what makes this callable in isolation.
-    orch._stt._last_latency_s = 0.42
+    orch._stt["rx"]._last_latency_s = 0.42
     with caplog.at_level("INFO"):
         on_transcript(
             TranscriptEvent(
@@ -473,3 +482,31 @@ def test_final_transcript_still_emits_the_closing_log_line(caplog):
         )
 
     assert any("TRANSCRIPT" in r.message for r in caplog.records)
+
+
+# -- per-channel STT latency aggregation -----------------------------
+
+
+def test_stt_latency_s_is_max_across_channels():
+    """No single "most recent across channels" exists anymore with one
+    worker per channel (each has its own last_latency_s) -- see
+    _stt_latency_s's docstring. max() is what's actually computed."""
+    orch = PipelineOrchestrator(_minimal_settings())
+    orch.build()
+    orch._stt["rx"]._last_latency_s = 0.10
+    orch._stt["tx"]._last_latency_s = 0.42
+    assert orch._stt_latency_s() == 0.42
+
+
+def test_stt_latency_s_is_none_when_no_worker_has_decoded_yet():
+    orch = PipelineOrchestrator(_minimal_settings())
+    orch.build()
+    assert orch._stt_latency_s() is None
+
+
+def test_stt_channel_latencies_s_merges_without_collision():
+    orch = PipelineOrchestrator(_minimal_settings())
+    orch.build()
+    orch._stt["rx"]._channel_latency_s["rx"] = 0.10
+    orch._stt["tx"]._channel_latency_s["tx"] = 0.42
+    assert orch._stt_channel_latencies_s() == {"rx": 0.10, "tx": 0.42}

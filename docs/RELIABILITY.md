@@ -72,7 +72,7 @@ Per-worker wiring summary:
 | `MqttAudioIngest` | *(default `False`)* | *(default `None`)* | `False` | `_build_mqtt_subscriber` |
 | `ChannelRouter` | `self._ingest_queue` | *(default)* | `True` | `_build_router` |
 | `VADWorker` | `self._routed_queue` | `self._w("_vad").pending_loss()` | `True` | `_build_vad` |
-| `STTWorker` | `self._segment_queue` | *(default)* | `True` | `_build_stt` |
+| `STTWorker-{cid}` (one target per channel — see `_build_stt_supervisor_targets`) | `self._segment_queues[cid]` | *(default)* | `True` | `_build_stt(cid)` |
 
 ### `_TargetState` — the mutable bookkeeping (`supervisor.py:84-90`)
 
@@ -212,20 +212,26 @@ if self._running and not self._stop_event.is_set():
 | If unresponsive after 10s | n/a (already dead) | **Zombie** — still running, unreachable, un-killable. Logged, then abandoned |
 | Does the pipeline recover anyway? | Yes | Yes — a fresh worker is built and started regardless |
 
-### Worked example: `STTWorker` stalls
+### Worked example: `STTWorker-rx` stalls
+
+STT has one dedicated worker per channel (`self._stt: dict[str, threading.Thread]`,
+see `docs/ARCHITECTURE.md`'s per-channel STT decision) — restarting one
+doesn't touch the other channel's worker at all. Since it's a dict entry,
+not a bare attribute, this goes through `_restart_dict_worker` rather than
+`_restart` (same shape, `workers[key] = new` instead of `setattr`):
 
 ```
-_restart("_stt", self._build_stt)
-  old = self._stt                              # the stalled STTWorker
+_restart_dict_worker(self._stt, "rx", lambda: self._build_stt("rx"))
+  old = self._stt["rx"]                        # the stalled STTWorker-rx
   self._signal(old) → old.stop()
   self._join(old)   → waits ≤10s
     (if it never responds → zombie, warning logged, continue anyway)
-  new = self._build_stt()                      # wired to the SAME self._segment_queue
-  self._stt = new
-  new.start()                                  # new.run() begins pulling from segment_queue
+  new = self._build_stt("rx")                  # wired to the SAME self._segment_queues["rx"]
+  self._stt["rx"] = new
+  new.start()                                  # new.run() begins pulling from segment_queues["rx"]
 ```
 
-The reason this actually fixes the stall: `self._segment_queue` is never recreated. Whatever segments piled up (the very thing `input_pending()` detected) are still sitting there, untouched — the new worker's `run()` loop starts consuming them the moment it starts. The "restart" only ever changes *who's reading the queue*, never the queue itself.
+The reason this actually fixes the stall: `self._segment_queues["rx"]` is never recreated. Whatever segments piled up (the very thing `input_pending()` detected) are still sitting there, untouched — the new worker's `run()` loop starts consuming them the moment it starts. The "restart" only ever changes *who's reading that channel's queue*, never the queue itself, and never touches `self._stt["tx"]`.
 
 ### The shutdown-race guard
 
