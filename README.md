@@ -8,20 +8,9 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design doc and [
 
 Two logically separate pieces talk only over MQTT; everything after ingestion runs in-process on worker threads connected by bounded queues:
 
-```
- Audio source              MQTT broker              Pipeline (in-process)
- (live audio feed, or      ┌──────────┐    ┌──────────────────────────────────┐
-  wav_source.py for dev)   │          │    │  MqttAudioIngest                 │
-        │  publish PCM     │          │    │        │                        │
-        │  per channel  ─▶ │          │ ─▶ │  ChannelRouter                   │
-        └──────────────────┘          │    │        │                        │
-                            └──────────┘    │  VADWorker  (Silero, per-channel)│
-                                             │        │                        │
-                                             │  STTWorker  (Moonshine)          │
-                                             │        │                        │
-                                             │  TranscriptEvent → logs / UI    │
-                                             └──────────────────────────────────┘
-```
+<p align="center">
+  <img src="docs/img/architecture.svg" alt="edge-voice architecture: audio sources publish per-channel PCM to an MQTT broker; inside the edge-voice process MqttAudioIngest, ChannelRouter, VADWorker and STTWorker run as worker threads joined by bounded queues, ending at TranscriptHub which fans out to the web UI and structured logs" width="100%">
+</p>
 
 `MqttAudioIngest → ChannelRouter → VADWorker → STTWorker` communicate via in-memory `queue.Queue`s — no MQTT between pipeline stages, only at the boundary.
 

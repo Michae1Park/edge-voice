@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="800" viewBox="0 0 1040 800" role="img" aria-labelledby="svgtitle svgdesc"
+     font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+  <title id="svgtitle">edge-voice architecture</title>
+  <desc id="svgdesc">Audio sources publish per-channel PCM to an MQTT broker. Inside the edge-voice process, MqttAudioIngest, ChannelRouter, VADWorker and STTWorker run as worker threads joined by bounded queues, ending at TranscriptHub, which fans out to the web UI and structured logs. A supervisor and metrics collector watch the workers.</desc>
+
+  <!--
+    Light theme lives in inline presentation attributes, NOT in the stylesheet
+    below: if a host (GitHub sanitizes SVG in markdown) drops the <style>
+    element, presentation attributes survive and the diagram still renders
+    correctly in light colours. The stylesheet carries only the dark-mode
+    override, so losing it degrades to "always light" rather than to unstyled
+    black boxes. CSS beats presentation attributes on specificity, so the
+    override wins wherever <style> is honoured.
+  -->
+  <style>
+    @media (prefers-color-scheme: dark) {
+      .bg    { fill: #0f1419; stroke: #2b3540; }
+      .panel { fill: #151c24; stroke: #3a4753; }
+      .ext   { fill: #16283c; stroke: #6f9dc8; }
+      .work  { fill: #16301f; stroke: #63ab77; }
+      .queue { fill: #33280f; stroke: #d3a751; }
+      .sink  { fill: #241b33; stroke: #a186c4; }
+      .ops   { fill: #331a1a; stroke: #c88080; }
+      .name  { fill: #e6edf3; }
+      .sub   { fill: #9fb0c0; }
+      .qname { fill: #f3e6c8; }
+      .qsub  { fill: #cdb583; }
+      .ptitle{ fill: #93a4b4; }
+      .edge  { stroke: #8496a6; }
+      .elabel{ fill: #93a4b4; }
+      .edge-d{ stroke: #c88080; }
+      #arrow > path   { fill: #8496a6; }
+      #arrow-d > path { fill: #c88080; }
+    }
+  </style>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a6b7a"/>
+    </marker>
+    <marker id="arrow-d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#a85f5f"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0.5" y="0.5" width="1039" height="799" rx="10" fill="#ffffff" stroke="#e3e9ef"/>
+
+  <!-- ══ right column: the pipeline ══ -->
+  <rect class="panel" x="545" y="30" width="470" height="730" rx="10" fill="#f7f9fb" stroke="#c7d3de" stroke-width="1.5"/>
+  <text class="ptitle" x="780" y="56" text-anchor="middle" font-size="14" font-weight="600" fill="#46586a">edge-voice process — worker threads</text>
+
+  <rect class="work" x="590" y="78" width="380" height="64" rx="7" fill="#e7f3ea" stroke="#4f8f61" stroke-width="1.5"/>
+  <text class="name" x="780" y="103" text-anchor="middle" font-size="16" font-weight="600" fill="#132030">MqttAudioIngest</text>
+  <text class="sub" x="780" y="124" text-anchor="middle" font-size="13.5" fill="#4a5a68">MQTT subscribe · decode PCM</text>
+
+  <rect class="queue" x="640" y="166" width="280" height="52" rx="7" fill="#fbf1de" stroke="#bf8f33" stroke-width="1.5"/>
+  <text class="qname" x="780" y="188" text-anchor="middle" font-size="15" font-weight="600" fill="#2b2109">ingest_queue</text>
+  <text class="qsub" x="780" y="207" text-anchor="middle" font-size="13" fill="#6b5a2e">maxsize 256</text>
+
+  <rect class="work" x="590" y="242" width="380" height="64" rx="7" fill="#e7f3ea" stroke="#4f8f61" stroke-width="1.5"/>
+  <text class="name" x="780" y="267" text-anchor="middle" font-size="16" font-weight="600" fill="#132030">ChannelRouter</text>
+  <text class="sub" x="780" y="288" text-anchor="middle" font-size="13.5" fill="#4a5a68">repacketize 20ms → 32ms</text>
+
+  <rect class="queue" x="640" y="330" width="280" height="52" rx="7" fill="#fbf1de" stroke="#bf8f33" stroke-width="1.5"/>
+  <text class="qname" x="780" y="352" text-anchor="middle" font-size="15" font-weight="600" fill="#2b2109">routed_queue</text>
+  <text class="qsub" x="780" y="371" text-anchor="middle" font-size="13" fill="#6b5a2e">maxsize 128</text>
+
+  <rect class="work" x="590" y="406" width="380" height="64" rx="7" fill="#e7f3ea" stroke="#4f8f61" stroke-width="1.5"/>
+  <text class="name" x="780" y="431" text-anchor="middle" font-size="16" font-weight="600" fill="#132030">VADWorker</text>
+  <text class="sub" x="780" y="452" text-anchor="middle" font-size="13.5" fill="#4a5a68">Silero · per-channel state</text>
+
+  <rect class="queue" x="640" y="494" width="280" height="52" rx="7" fill="#fbf1de" stroke="#bf8f33" stroke-width="1.5"/>
+  <text class="qname" x="780" y="516" text-anchor="middle" font-size="15" font-weight="600" fill="#2b2109">segment_queue</text>
+  <text class="qsub" x="780" y="535" text-anchor="middle" font-size="13" fill="#6b5a2e">maxsize 64</text>
+
+  <rect class="work" x="590" y="570" width="380" height="64" rx="7" fill="#e7f3ea" stroke="#4f8f61" stroke-width="1.5"/>
+  <text class="name" x="780" y="595" text-anchor="middle" font-size="16" font-weight="600" fill="#132030">STTWorker</text>
+  <text class="sub" x="780" y="616" text-anchor="middle" font-size="13.5" fill="#4a5a68">Moonshine · per-segment pass</text>
+
+  <rect class="work" x="590" y="658" width="380" height="64" rx="7" fill="#e7f3ea" stroke="#4f8f61" stroke-width="1.5"/>
+  <text class="name" x="780" y="683" text-anchor="middle" font-size="16" font-weight="600" fill="#132030">TranscriptHub</text>
+  <text class="sub" x="780" y="704" text-anchor="middle" font-size="13.5" fill="#4a5a68">fan-out to UI + log sinks</text>
+
+  <!-- pipeline internal arrows -->
+  <path class="edge" d="M 780 142 V 160" fill="none" stroke="#5a6b7a" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <path class="edge" d="M 780 218 V 236" fill="none" stroke="#5a6b7a" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <path class="edge" d="M 780 306 V 324" fill="none" stroke="#5a6b7a" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <path class="edge" d="M 780 382 V 400" fill="none" stroke="#5a6b7a" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <path class="edge" d="M 780 470 V 488" fill="none" stroke="#5a6b7a" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <path class="edge" d="M 780 546 V 564" fill="none" stroke="#5a6b7a" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <path class="edge" d="M 780 634 V 652" fill="none" stroke="#5a6b7a" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text class="elabel" x="790" y="648" font-size="13" fill="#46586a">TranscriptEvent</text>
+
+  <!-- ══ left column: everything outside the pipeline ══ -->
+  <rect class="ext" x="40" y="60" width="400" height="72" rx="7" fill="#e6eef8" stroke="#4a7bab" stroke-width="1.5"/>
+  <text class="name" x="240" y="89" text-anchor="middle" font-size="16" font-weight="600" fill="#132030">Audio sources — any MQTT publisher</text>
+  <text class="sub" x="240" y="111" text-anchor="middle" font-size="13.5" fill="#4a5a68">live feed · wav_source.py · mic_source.py</text>
+
+  <rect class="ext" x="40" y="200" width="400" height="72" rx="30" fill="#e6eef8" stroke="#4a7bab" stroke-width="1.5"/>
+  <text class="name" x="240" y="229" text-anchor="middle" font-size="16" font-weight="600" fill="#132030">MQTT broker</text>
+  <text class="sub" x="240" y="251" text-anchor="middle" font-size="13.5" fill="#4a5a68">stt/audio_chunks_rx · stt/audio_chunks_tx</text>
+
+  <rect class="ops" x="40" y="390" width="400" height="72" rx="7" fill="#f7eaea" stroke="#a85f5f" stroke-width="1.5"/>
+  <text class="name" x="240" y="419" text-anchor="middle" font-size="16" font-weight="600" fill="#132030">Supervisor · MetricsCollector</text>
+  <text class="sub" x="240" y="441" text-anchor="middle" font-size="13.5" fill="#4a5a68">restart wedged workers · sample depths</text>
+
+  <rect class="sink" x="40" y="560" width="400" height="64" rx="7" fill="#f0eaf7" stroke="#7c62a0" stroke-width="1.5"/>
+  <text class="name" x="240" y="585" text-anchor="middle" font-size="16" font-weight="600" fill="#132030">Web UI</text>
+  <text class="sub" x="240" y="606" text-anchor="middle" font-size="13.5" fill="#4a5a68">FastAPI + WebSocket</text>
+
+  <rect class="sink" x="40" y="658" width="400" height="64" rx="7" fill="#f0eaf7" stroke="#7c62a0" stroke-width="1.5"/>
+  <text class="name" x="240" y="683" text-anchor="middle" font-size="16" font-weight="600" fill="#132030">Structured logs</text>
+  <text class="sub" x="240" y="704" text-anchor="middle" font-size="13.5" fill="#4a5a68">JSON + metrics</text>
+
+  <!-- source -> broker -->
+  <path class="edge" d="M 240 132 V 194" fill="none" stroke="#5a6b7a" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text class="elabel" x="252" y="169" font-size="13" fill="#46586a">PCM per channel</text>
+
+  <!-- broker -> ingest: left column up into the top of the pipeline -->
+  <path class="edge" d="M 440 236 H 500 Q 520 236 520 216 V 130 Q 520 110 540 110 H 584" fill="none" stroke="#5a6b7a" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- hub -> structured logs (same y, straight) and hub -> web ui -->
+  <path class="edge" d="M 590 690 H 446" fill="none" stroke="#5a6b7a" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <path class="edge" d="M 590 674 H 520 Q 500 674 500 654 V 612 Q 500 592 480 592 H 446" fill="none" stroke="#5a6b7a" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- supervisor/metrics -> pipeline -->
+  <path class="edge-d" d="M 440 426 H 539" fill="none" stroke="#a85f5f" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow-d)"/>
+</svg>
