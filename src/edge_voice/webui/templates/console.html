@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Edge Voice — Live Session</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%230b0d10'/%3E%3Ccircle cx='5.5' cy='8' r='2.6' fill='%234dd8c4'/%3E%3Ccircle cx='11' cy='8' r='2.6' fill='%23ffb454'/%3E%3C/svg%3E" />
 <style>
   :root {
     --bg: #0b0d10;
@@ -21,9 +22,14 @@
     --live: #4ade80;
     --stopped: #6b7280;
     --degraded: #f5a623;
-    --radius: 5px;
+    --radius: 7px;
     --mono: "Berkeley Mono", "JetBrains Mono", "IBM Plex Mono", ui-monospace,
       "SF Mono", "Cascadia Code", Consolas, monospace;
+    /* Chrome (chips, labels, timestamps) stays mono -- it's tabular, system
+       readout data. Transcript content uses this instead: spoken language is
+       prose, and mono italics (the partial-bubble style below) render badly. */
+    --sans: -apple-system, "SF Pro Text", "Segoe UI", "Helvetica Neue",
+      ui-sans-serif, system-ui, Arial, sans-serif;
   }
 
   html, body {
@@ -87,6 +93,19 @@
     gap: 10px;
     min-width: 0;
   }
+
+  /* Small wordmark, built from the same rx/tx dots used everywhere else in
+     the console rather than a separate asset -- the mark and the data use
+     one visual language. */
+  .logo-mark {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-right: 1px;
+    position: relative;
+    top: -1px;
+  }
+  .logo-mark .dot { width: 6px; height: 6px; }
 
   .ident-name {
     font-size: 14px;
@@ -350,16 +369,26 @@
   .bubble {
     background: var(--surface);
     border: 1px solid var(--line);
-    border-radius: var(--radius);
-    padding: 11px 14px;
-    font-size: 16.5px;
-    line-height: 1.55;
+    padding: 11px 15px;
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.5;
     color: var(--ink);
     white-space: pre-wrap;
     word-break: break-word;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
   }
-  .msg.rx .bubble { border-left: 2px solid var(--rx); }
-  .msg.tx .bubble { border-right: 2px solid var(--tx); }
+  /* Rounded on three corners, sharp on the fourth -- a tail that carries the
+     channel's accent color, so the shape itself (not just position) says
+     which side a bubble belongs to at a glance. */
+  .msg.rx .bubble {
+    border-radius: 3px var(--radius) var(--radius) var(--radius);
+    border-left: 3px solid var(--rx);
+  }
+  .msg.tx .bubble {
+    border-radius: var(--radius) 3px var(--radius) var(--radius);
+    border-right: 3px solid var(--tx);
+  }
 
   /* In-progress transcript: same bubble, rewritten in place until the final
      lands. Dimmed and italic so a revisable line is never mistaken for a
@@ -485,6 +514,7 @@
 <div class="console">
   <header class="bar">
     <div class="ident">
+      <span class="logo-mark"><span class="dot rx"></span><span class="dot tx"></span></span>
       <span class="ident-name">EDGE-VOICE</span>
       <span class="ident-sub">rpi5 · local session · no network</span>
     </div>
