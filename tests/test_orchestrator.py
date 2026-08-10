@@ -220,6 +220,91 @@ def test_worker_states_after_stop():
     assert not orch.get_status()["running"]
 
 
+# -- _join()'s kill-on-timeout fallback (the shutdown-hang guard) ----------
+#
+# Reproduces, at unit-test speed, why bench_pipeline_load.py could hang
+# indefinitely on the RPi5 (never on faster hardware) under sustained STT
+# backlog: a still-alive worker was previously just logged and left running
+# past WORKER_JOIN_TIMEOUT_S, with no attempt to reclaim it. A process-backed
+# worker (STTProcessHandle) is reclaimable even while wedged inside a long
+# native decode call (unlike a thread, which Python has no way to
+# force-stop) -- _join() must use that whenever it's available.
+
+
+class _FakeProcessWorker:
+    """Stands in for STTProcessHandle: exposes .kill(), like a real
+    process-backed worker, and never stops on its own -- simulates one still
+    mid-decode past the join timeout."""
+
+    def __init__(self, name: str = "FakeSTT", dies_on_kill: bool = True) -> None:
+        self.name = name
+        self.ident: int | None = 123
+        self._alive = True
+        self._dies_on_kill = dies_on_kill
+        self.kill_called = False
+        self.join_calls = 0
+
+    def join(self, timeout: float | None = None) -> None:
+        self.join_calls += 1
+
+    def is_alive(self) -> bool:
+        return self._alive
+
+    def kill(self) -> None:
+        self.kill_called = True
+        if self._dies_on_kill:
+            self._alive = False
+
+
+class _FakeThreadWorker:
+    """Stands in for a plain threading.Thread-based worker: no .kill at
+    all, since Python offers no way to force-stop a thread."""
+
+    def __init__(self, name: str = "FakeThread", alive: bool = True) -> None:
+        self.name = name
+        self.ident: int | None = 456
+        self._alive = alive
+
+    def join(self, timeout: float | None = None) -> None:
+        pass
+
+    def is_alive(self) -> bool:
+        return self._alive
+
+
+def test_join_kills_a_still_alive_worker_that_exposes_kill():
+    worker = _FakeProcessWorker()
+
+    PipelineOrchestrator._join(worker)
+
+    assert worker.kill_called is True
+    assert worker.is_alive() is False
+    assert worker.join_calls == 2  # once before the kill attempt, once after
+
+
+def test_join_does_not_call_kill_on_a_worker_that_already_stopped():
+    """The common case -- no unnecessary kill on a worker that simply
+    finished within the timeout."""
+    worker = _FakeProcessWorker(dies_on_kill=True)
+    worker._alive = False  # already stopped by the time join() returns
+
+    PipelineOrchestrator._join(worker)
+
+    assert worker.kill_called is False
+    assert worker.join_calls == 1
+
+
+def test_join_falls_back_to_a_warning_when_no_kill_is_available():
+    """A wedged thread has no .kill -- _join must not crash trying to call
+    a method that doesn't exist, and must leave it running (nothing else it
+    can do; the OS watchdog is the real remedy for a thread)."""
+    worker = _FakeThreadWorker(alive=True)
+
+    PipelineOrchestrator._join(worker)  # must not raise
+
+    assert worker.is_alive() is True
+
+
 # -- reliability / supervisor (Milestone 6) --
 
 

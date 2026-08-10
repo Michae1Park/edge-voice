@@ -307,8 +307,24 @@ class PipelineOrchestrator:
         if worker.ident is None:
             return
         worker.join(timeout=WORKER_JOIN_TIMEOUT_S)
-        if worker.is_alive():
-            logger.warning("Worker %s did not stop within %ss", worker.name, WORKER_JOIN_TIMEOUT_S)
+        if not worker.is_alive():
+            return
+        logger.warning("Worker %s did not stop within %ss", worker.name, WORKER_JOIN_TIMEOUT_S)
+        # A process-backed worker (STTProcessHandle) is reclaimable even while
+        # wedged -- unlike a thread, which Python has no way to force-stop, so
+        # only a process exposes `.kill`. Applies here (not just on a
+        # supervisor-triggered restart, see _restart_dict_worker) because
+        # under sustained load a single STT decode can legitimately run
+        # longer than WORKER_JOIN_TIMEOUT_S -- routine with vad.max_segment_s
+        # set high enough that a backlog can inflate one segment's decode
+        # past it (reproduced on the RPi5 under bench_pipeline_load.py's
+        # continuous-speech stress test) -- and without this, shutdown simply
+        # waits on it forever instead of reclaiming it.
+        killer = getattr(worker, "kill", None)
+        if callable(killer):
+            logger.warning("Worker %s did not exit after signal -- killing it", worker.name)
+            killer()
+            worker.join(timeout=WORKER_JOIN_TIMEOUT_S)
 
     def get_status(self) -> dict:
         running = self._running
@@ -718,25 +734,19 @@ class PipelineOrchestrator:
         never could: if it will not exit, kill it. A wedged thread is a
         permanent zombie holding its input queue until the OS watchdog
         restarts everything; a wedged process is reclaimable here and now.
+        _join() already does the killing (any worker exposing `.kill`, not
+        just this dict-held kind) -- this only handles what's left if that
+        somehow still didn't work, i.e. a thread with no `.kill` at all.
         """
         old = workers[key]
         self._signal(old)
         self._join(old)
         if old.is_alive():
-            killer = getattr(old, "kill", None)
-            if callable(killer):
-                logger.warning(
-                    "Orchestrator: %s did not exit after signal -- killing it",
-                    getattr(old, "name", key),
-                )
-                killer()
-                self._join(old)
-            else:
-                logger.warning(
-                    "Orchestrator: %s did not exit after signal -- a zombie thread may "
-                    "linger on its input queue until a full process restart",
-                    getattr(old, "name", key),
-                )
+            logger.warning(
+                "Orchestrator: %s did not exit after signal -- a zombie thread may "
+                "linger on its input queue until a full process restart",
+                getattr(old, "name", key),
+            )
         exitcode = getattr(old, "exitcode", None)
         if exitcode is not None and exitcode != 0:
             # Threads can never report this. A segfault in the native decoder
