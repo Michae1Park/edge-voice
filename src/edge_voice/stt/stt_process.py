@@ -57,6 +57,23 @@ HEARTBEAT_INTERVAL_S = 0.5
 RESULT_PUT_TIMEOUT_S = 5.0
 
 
+def _read_self_cpu_ticks() -> int | None:
+    """Cumulative (utime+stime) CPU ticks for this process, from /proc/self/stat.
+
+    Same fields as bench_pipeline_load.py's _read_proc (utime=14, stime=15,
+    1-indexed in proc(5); comm split off by its last ')' since comm itself
+    can contain spaces/parens). None on any read failure -- the caller must
+    treat that as "no signal this tick", not crash the bridge thread, since
+    a dead bridge thread means stop_event is never observed either.
+    """
+    try:
+        with open("/proc/self/stat") as f:
+            after_comm = f.read().rsplit(")", 1)[1].split()
+        return int(after_comm[11]) + int(after_comm[12])
+    except Exception:
+        return None
+
+
 @dataclass(slots=True)
 class SttResult:
     """One transcript, on its way back from a child process.
@@ -97,21 +114,53 @@ def _bridge(
 ) -> None:
     """Translate parent-owned process primitives to the worker's thread ones.
 
-    Runs alongside `worker.run()`: publishes the worker's activity clock to
-    the shared heartbeat so the supervisor's stall check can see it, and
-    converts the parent's mp stop signal into the threading stop the run
-    loop already understands.
+    Runs alongside `worker.run()`: publishes a liveness clock to the shared
+    heartbeat so the supervisor's stall check can see it, and converts the
+    parent's mp stop signal into the threading stop the run loop already
+    understands.
 
-    `worker.last_activity` only advances when a segment is dequeued, so an
-    idle worker's heartbeat legitimately goes stale -- exactly as in the
-    thread version, where the supervisor only stall-restarts a worker that
-    also has `input_pending()`.
+    Liveness = CPU progress, not just "a segment was dequeued"
+    ─────────────────────────────────────────────────────────
+    `worker.last_activity` (stt_worker.py) is stamped once, when a segment is
+    dequeued, and not touched again until the next one -- because the actual
+    decode is a single opaque, blocking `_transcribe()` call with no
+    mid-call hook to update it from. That's indistinguishable from a real
+    hang for as long as that one call runs. Segments are only bounded by
+    `vad.max_segment_s` when `vad.segment_limits_enabled` is on (it defaults
+    off); with it off, or with any segment slow enough on the deployed
+    hardware, a single legitimate decode can run past stall_timeout_s (10s
+    default) and get killed mid-work -- reproduced on the RPi5 with a
+    near-continuous-speech clip (no pauses for VAD to cut on): STTWorker-rx/
+    tx stalled and were SIGKILLed while still genuinely decoding, and kept
+    re-stalling on the next long segment until the supervisor gave up and
+    marked them DEGRADED.
+
+    This thread is never blocked by that call (it's a separate thread in the
+    same child process), so instead of just relaying `worker.last_activity`
+    it independently checks whether the process is still burning CPU
+    (/proc/self/stat, same technique as bench_pipeline_load.py's sampler)
+    each tick, and republishes "now" for as long as ticks keep advancing --
+    true regardless of segment length or decode speed. A worker actually
+    wedged (blocked on a lock or syscall -- the real failure mode this
+    exists to catch) burns no CPU, so its heartbeat still goes stale and
+    still gets caught. `worker.last_activity` is kept as the value on a
+    flat-CPU tick (rather than freezing the last heartbeat outright), so a
+    freshly dequeued segment still reads as active immediately, and a
+    genuinely idle worker's heartbeat still goes stale as before -- harmless
+    either way since the supervisor only stall-restarts a worker that also
+    has `input_pending()`.
     """
+    last_ticks = _read_self_cpu_ticks()
     while True:
         if stop_event.wait(HEARTBEAT_INTERVAL_S):
             worker.stop()
             return
-        heartbeat.value = worker.last_activity
+        ticks = _read_self_cpu_ticks()
+        if ticks is not None and last_ticks is not None and ticks > last_ticks:
+            heartbeat.value = time.monotonic()
+        else:
+            heartbeat.value = worker.last_activity
+        last_ticks = ticks
 
 
 def stt_child_main(
@@ -276,7 +325,11 @@ class STTProcessHandle:
 
     @property
     def last_activity(self) -> float:
-        """Monotonic clock of the child's last dequeued segment.
+        """Monotonic clock of the child's last known-live moment, per _bridge().
+
+        Not just "last dequeued segment" -- see _bridge()'s docstring for why
+        that alone would misread a long-but-genuine decode as a hang. This is
+        that CPU-progress-aware heartbeat, republished into shared memory.
 
         Cross-process safe: on Linux `time.monotonic()` is CLOCK_MONOTONIC,
         which is system-wide, so the child's value is directly comparable to

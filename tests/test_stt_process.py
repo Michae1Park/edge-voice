@@ -8,7 +8,9 @@ model load. The one real spawn is marked `integration`.
 
 import pickle
 import queue
+import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -16,6 +18,8 @@ from edge_voice.pipeline.models import SpeechSegment, TranscriptEvent
 from edge_voice.stt.stt_process import (
     STTProcessHandle,
     SttResult,
+    _bridge,
+    _read_self_cpu_ticks,
     new_mp_context,
 )
 from edge_voice.stt.stt_worker import STTWorkerConfig
@@ -132,6 +136,76 @@ def test_last_activity_ignores_an_unseeded_heartbeat_even_when_ready():
 
 def test_wait_ready_times_out_when_the_child_never_starts():
     assert _handle().wait_ready(timeout=0.05) is False
+
+
+# -- _bridge's CPU-progress heartbeat (the false-stall guard) --------------
+#
+# Reproduces, at unit-test speed, the bug found via bench_pipeline_load.py on
+# the RPi5: a near-continuous-speech WAV (no pauses for VAD to cut on) let a
+# single _transcribe() call run past stall_timeout_s, and worker.last_activity
+# -- stamped only at segment dequeue -- couldn't tell that apart from a real
+# hang, so the supervisor SIGKILLed STTWorker-rx/tx mid-decode and looped
+# into DEGRADED. See _bridge()'s docstring for the fix.
+
+
+def test_read_self_cpu_ticks_returns_a_nonnegative_int():
+    ticks = _read_self_cpu_ticks()
+    assert ticks is not None
+    assert ticks >= 0
+
+
+def _run_bridge_briefly(monkeypatch, cpu_ticks, worker_last_activity: float) -> float:
+    """Runs _bridge() for a couple of heartbeat ticks against a fake
+    CPU-tick source and a worker whose last_activity never itself advances
+    (standing in for one long-running _transcribe() call), then returns the
+    last heartbeat value published before shutdown.
+    """
+    import edge_voice.stt.stt_process as stt_process
+
+    monkeypatch.setattr(stt_process, "HEARTBEAT_INTERVAL_S", 0.02)
+    ticks = iter(cpu_ticks)
+    monkeypatch.setattr(stt_process, "_read_self_cpu_ticks", lambda: next(ticks))
+
+    worker = SimpleNamespace(last_activity=worker_last_activity, stop=lambda: None)
+    stop_event = threading.Event()
+    heartbeat = SimpleNamespace(value=0.0)
+
+    t = threading.Thread(target=_bridge, args=(worker, stop_event, heartbeat), daemon=True)
+    t.start()
+    time.sleep(0.02 * 5)  # several ticks' worth
+    stop_event.set()
+    t.join(timeout=1.0)
+    return heartbeat.value
+
+
+def test_bridge_keeps_heartbeat_fresh_while_cpu_keeps_advancing(monkeypatch):
+    """A worker still genuinely decoding (CPU ticks rising every tick) must
+    report as active *now*, not frozen at its stale dequeue timestamp --
+    otherwise a slow-but-real decode looks identical to a hang."""
+    frozen_dequeue_stamp = 12345.0
+    before = time.monotonic()
+
+    reported = _run_bridge_briefly(
+        monkeypatch, cpu_ticks=range(0, 10_000, 10), worker_last_activity=frozen_dequeue_stamp
+    )
+
+    after = time.monotonic()
+    assert before <= reported <= after
+    assert reported != frozen_dequeue_stamp
+
+
+def test_bridge_falls_back_to_worker_last_activity_when_cpu_is_flat(monkeypatch):
+    """A worker that stops burning CPU -- blocked on a lock or syscall, the
+    actual hang this exists to catch -- must NOT have its heartbeat
+    artificially kept fresh; it should read whatever worker.last_activity
+    already says, so the supervisor's stall check still fires."""
+    frozen_dequeue_stamp = 12345.0
+
+    reported = _run_bridge_briefly(
+        monkeypatch, cpu_ticks=[42] * 20, worker_last_activity=frozen_dequeue_stamp
+    )
+
+    assert reported == frozen_dequeue_stamp
 
 
 # -- one real spawn -----------------------------
