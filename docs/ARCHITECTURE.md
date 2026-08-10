@@ -563,16 +563,24 @@ validation — performance is still verified manually, on target hardware.
   is currently split — `wav_source.py` publishes a JSON envelope while
   `wav_source_raw.py` and `mic_source.py` publish raw PCM, and only raw PCM is
   what ingest actually consumes today.
-- **STT multiprocessing** (`STT_MULTIPROCESS_PLAN.md`) — scoped, not started.
-  The per-channel `STTWorker` *threads* (this section, above) fixed unbounded
-  queue growth but not genuine parallelism: confirmed on the RPi5, both on
-  the real pipeline (decode calls alternate in lockstep between channels)
-  and in isolation (`scratch/probe_gil_release.py`: two threads, two
-  independent `Transcriber` instances, 1.02x speedup — no benefit). The GIL
-  serializes decode compute regardless of thread/core count. The current fix
+- **STT multiprocessing** (`STT_MULTIPROCESS_PLAN.md`) — **approved for build
+  (2026-08-10), decisions settled, not yet started.** The per-channel
+  `STTWorker` *threads* (this section, above) fixed unbounded queue growth but
+  not genuine parallelism: confirmed on the RPi5, both on the real pipeline
+  (decode calls alternate in lockstep between channels) and in isolation
+  (`scratch/probe_gil_release.py`: two threads, two independent `Transcriber`
+  instances, 1.02x speedup — no benefit). The GIL serializes decode compute
+  regardless of thread/core count, and free-threaded Python is not yet a way
+  out (ONNX Runtime force re-enables the GIL on 3.13t builds). The current fix
   works by keeping total demand under budget (~65% measured), which is a
-  margin, not a capacity guarantee. The plan is to move each channel's
-  `STTWorker` to its own OS process instead of a thread.
+  margin, not a capacity guarantee. The plan moves each channel's `STTWorker`
+  to its own OS process — one per channel, cores 2 and 3, with ingest/router/
+  VAD staying as threads on cores 0-1. Recomputed per core, the same RPi5 run
+  would put the busiest STT core at ~40%, i.e. real headroom rather than a
+  margin. VAD deliberately stays a thread and gets re-measured afterwards: it
+  is currently GIL-blocked for the duration of every decode, so moving STT out
+  speeds VAD up for free, and measuring it beforehand would measure
+  contention that is about to disappear.
 
 Resolved since the last revision of this document:
 

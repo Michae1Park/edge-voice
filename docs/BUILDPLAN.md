@@ -849,17 +849,22 @@ milestones above.
   and would decide whether the rest proceeds. English test audio is no longer
   missing (`wav/obama_2012.wav`), though it's a studio-quality monologue, not
   two-party telephone audio.
-- **`docs/STT_MULTIPROCESS_PLAN.md`** — scoped, not started. Per-channel
-  `STTWorker` threads (shipped) fixed unbounded queue growth but not genuine
-  parallelism: confirmed on the RPi5 both on the real pipeline (decode calls
-  alternate in lockstep between channels) and in isolation
-  (`scratch/probe_gil_release.py`: 1.02x speedup from two threads — no
-  benefit). The GIL serializes decode compute regardless of thread/core
+- **`docs/STT_MULTIPROCESS_PLAN.md`** — **approved for build (2026-08-10),
+  decisions settled, not yet started.** The doc is written as an ordered,
+  step-by-step build plan with per-step acceptance criteria; start at its
+  Step 0. Per-channel `STTWorker` threads (shipped) fixed unbounded queue
+  growth but not genuine parallelism: confirmed on the RPi5 both on the real
+  pipeline (decode calls alternate in lockstep between channels) and in
+  isolation (`scratch/probe_gil_release.py`: 1.02x speedup from two threads —
+  no benefit). The GIL serializes decode compute regardless of thread/core
   count. Current fix works by keeping total demand under budget (~65%
-  measured), a margin not a guarantee. Plan: move each channel's STT worker
-  to its own OS process (no shared GIL). Verification step before touching
-  the orchestrator: adapt `probe_gil_release.py` to use
-  `multiprocessing.Process` and confirm ~2x speedup in isolation first.
+  measured), a margin not a guarantee. Plan: one OS process per channel's STT
+  worker (cores 2/3), ingest+router+VAD staying as threads (cores 0-1), mp
+  queues at the STT boundary only — `vad_worker.py` needs zero changes since
+  `mp.Queue` duck-types `queue.Queue`. **Step 0 is a hard gate:** adapt
+  `probe_gil_release.py` to `multiprocessing.Process` and confirm ≥1.7x
+  speedup in isolation before touching `src/`; if it comes back ~1.0x the
+  plan's premise is wrong and the build should stop.
 
 ---
 

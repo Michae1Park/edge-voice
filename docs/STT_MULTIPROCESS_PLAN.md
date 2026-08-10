@@ -1,198 +1,500 @@
-# STT Multiprocessing — Design Plan
+# STT Multiprocessing — Build Plan
 
-**Status:** Not started. Scoping only — no code written.
-**Companion to:** `ARCHITECTURE.md` (per-channel STT decision), `RELIABILITY.md`
-(supervisor/restart mechanics), `BENCHMARK.md` (the RPi5 numbers this plan is
-built on)
-
-## Goal
-
-Replace the two per-channel `STTWorker` **threads** with per-channel STT
-**processes**, so the two channels' decode calls genuinely run in parallel
-instead of taking turns on the GIL.
+**Status:** Approved for build (2026-08-10). Decisions below are settled; do not relitigate during implementation.
+**Goal:** Use all 4 RPi5 cores by running **one OS process per channel's STT worker**, so the two channels decode genuinely in parallel instead of taking turns on the GIL.
+**Companion docs:** `ARCHITECTURE.md` (per-channel STT decision), `RELIABILITY.md` (supervisor/restart), `BENCHMARK.md` (the RPi5 numbers this is built on), `THREADS.md` (thread inventory).
 
 ---
 
-## Why — confirmed, not assumed
+## 1. Settled decisions
 
-The per-channel-decoder change already shipped (one `STTWorker` thread +
-`Transcriber` per channel, see `ARCHITECTURE.md`) fixed the unbounded queue
-growth that one shared decoder caused. But it did **not** deliver genuine
-dual-channel throughput, and this is measured, not suspected:
-
-1. **On the real dual-channel RPi5 pipeline** (`scratch/bench_pipeline_load.py`),
-   decode calls alternate in lockstep: the next channel's decode starts the
-   instant the other channel's decode ends, even though each channel has its
-   own dedicated `Transcriber` and its own dedicated CPU cores
-   (`--stt-cores 2,3`). A concrete example from that run: an `rx` decode ran
-   ≈15.9s→19.8s; the very next `tx` segment (whose audio had already fully
-   finished being spoken by ≈18.26s — 1.5s *before* its decode started) didn't
-   start decoding until ≈19.75s, the moment `rx`'s decode finished. Since the
-   two channels' speech is half-duplex (never overlaps), that gap can't be
-   explained by audio timing — only by decode contention.
-
-2. **Isolated confirmation, no pipeline involved**
-   (`scratch/probe_gil_release.py`, run on the RPi5, 10 iterations/thread):
-   two independent `Transcriber` instances, two threads, same call shape as
-   production. Sequential (no threading at all): 24.98s for 20 calls.
-   Concurrent (2 threads): 24.45s for the same 20 calls. **Speedup: 1.02x —
-   no benefit.** (The script's own "overlap" metric read misleadingly high,
-   23.92s of the 24.45s run — that turned out to measure whether the two
-   threads' call *spans* overlap in wall-clock time, not whether they're
-   actually computing concurrently; frequent GIL handoffs at Python/native
-   boundaries during streaming decode make spans overlap even when the
-   underlying compute is fully serialized moment-to-moment. Speedup is the
-   number that answers the actual question.)
-
-Both point to the same conclusion: the GIL (or an equivalent lock inside
-`moonshine_voice`) serializes decode compute regardless of thread count, core
-count, or `Transcriber` instance count.
-
-**Why the current fix still works, and why it's not enough on its own:** it
-works because total STT demand dropped under 100% of the real-time budget —
-measured at ~65% (`200.4s` of decode work over a `310s` run) on the test
-clip, mostly from removing CPU contention between STT and VAD via core
-pinning. That's a margin win, not a capacity win. A denser conversation, or
-a longer/more talkative session, can push demand back over 100% and
-reproduce the exact same unbounded backlog, because two decoders taking
-turns is not meaningfully more capacity than one decoder doing the same
-total work.
+| # | Decision | Rationale |
+|---|---|---|
+| D1 | **STT only** moves to processes. Ingest, router, and VAD stay as threads in the main process. | Everything upstream of STT is far under budget; see §3. |
+| D2 | **One process per channel** (2 processes for rx/tx), each owning its own `Transcriber`. | Matches the already-shipped per-channel worker split; each process is a known-good single-channel workload. |
+| D3 | IPC is **`multiprocessing.Queue`**, one inbound + one outbound per channel. | Duck-types `queue.Queue`, so `vad_worker.py` needs **zero changes**. Measured cost: 0.039ms per 5s segment. |
+| D4 | Start method is **`spawn`**, set explicitly. | `fork()` after ONNX Runtime has loaded native state is unsafe. |
+| D5 | Transcript ordering is **not** enforced in the pipeline. The UI inserts by timestamp. | Buffering to enforce order would trade away the throughput this whole change buys. See §7. |
+| D6 | VAD **stays a thread for now**, re-measured after the STT move lands. | The STT move is expected to make VAD faster for free; measuring before it would measure the wrong thing. See §8. |
+| D7 | The existing thread-backed `STTWorker` class **stays**, behind a config toggle. | Keeps unit tests fast and synchronous, and gives a one-line rollback if the Pi surprises us. |
 
 ---
 
-## Design decisions (recommendations, not yet finalized)
+## 2. Why — confirmed by measurement, not assumed
 
-**1. How orchestrator/Supervisor keep working with process-backed workers.**
-`orchestrator.py` and `pipeline/supervisor.py` currently duck-type on
-`threading.Thread`-shaped objects (`is_alive()`, `.stop()`, `.stopping`,
-`.last_activity`, `_get_workers() -> list[threading.Thread]`). A
-`multiprocessing.Process` has a different, narrower API. Recommend a thin
-wrapper class (`STTProcessHandle` or similar) presenting the same
-Thread-shaped interface but backed by a `multiprocessing.Process` — keeps
-`orchestrator.py`'s existing `_w()`/`_get_workers()`/`SupervisedTarget`
-wiring almost unchanged, rather than teaching those generic mechanisms
-about two different worker shapes.
+The already-shipped per-channel **thread** split fixed unbounded queue growth but did **not** deliver parallelism:
 
-**2. IPC for segments (parent → child).** A `multiprocessing.Queue` per
-channel, replacing that channel's `queue.Queue` at the STT boundary only —
-VAD, router, and ingest stay exactly as they are (in-process threads,
-`queue.Queue`). `SpeechSegment`'s `audio` field is raw PCM bytes for a few
-seconds of speech at most; pickling cost is negligible next to
-multi-hundred-millisecond-to-multi-second decode times, so no need for
-shared memory.
+1. **On the real RPi5 pipeline** (`scratch/bench_pipeline_load.py`): decode calls alternate in lockstep. An `rx` decode ran ≈15.9s→19.8s; the next `tx` segment — whose audio finished being spoken at ≈18.26s, 1.5s *before* its decode began — didn't start decoding until ≈19.75s, the exact moment `rx` finished. The two channels are half-duplex (speech never overlaps), so that gap can only be decode contention.
 
-**3. IPC for transcripts (child → parent).** A second `multiprocessing.Queue`
-per channel, drained by a small receiver thread in the parent that
-republishes into `TranscriptHub` — mirrors the current `_on_transcript`
-callback, just fed by a queue-drain loop instead of a direct call.
+2. **Isolated confirmation** (`scratch/probe_gil_release.py`, on the RPi5, 10 iterations/thread): two independent `Transcriber` instances, two threads, production call shape.
 
-**4. Process start method: `spawn`, not `fork`.** Linux defaults to `fork`,
-which is cheap but unsafe here — `fork()`-ing a process that has already
-loaded ONNX Runtime/native library state can corrupt that state in the
-child. Use `multiprocessing.get_context("spawn")` explicitly. Costs more
-startup time (a fresh interpreter, full re-import) — worth measuring against
-the RPi5's boot/restart-time expectations (see `deploy/edge-voice.service`'s
-restart policy in `RELIABILITY.md`).
+   | | Wall clock, 20 calls |
+   |---|---|
+   | Sequential (no threads) | 24.98s |
+   | Concurrent (2 threads) | 24.45s |
+   | **Speedup** | **1.02x — no benefit** |
 
-**5. Model loading happens inside the child.** The `Transcriber`/ONNX
-session can't be pickled from the parent — the child process's own entry
-point must do its own model resolution and `Transcriber` construction at
-startup, same work `STTWorker.__init__`/`_new_transcriber` already do today,
-just triggered inside the subprocess instead of the parent.
+   *(That script's "overlap" metric reads misleadingly high — it measures whether call **spans** overlap in wall-clock time, not whether compute is concurrent. Frequent GIL handoffs at Python/native boundaries during streaming decode make spans overlap even when compute is fully serialized. Speedup is the number that answers the question.)*
 
-**6. Cross-process logging needs its own design.** Today everything logs
-in-process through one structured JSON logger (`observability/logging.py`).
-A child process needs either a `QueueHandler` forwarding log records back to
-the parent for formatting/output, or its own independent log
-stream/aggregation. Not solved by this plan — flagged as a real subtask.
+**Conclusion:** the GIL (or an equivalent lock inside `moonshine_voice`) serializes decode compute regardless of thread count, core count, or `Transcriber` instance count. Separate OS processes are the only mechanism that removes it. Free-threaded Python is not a viable alternative today — ONNX Runtime force re-enables the GIL on 3.13t builds (open upstream issue), and `moonshine-voice` ships no free-threaded wheel.
 
-**7. Keep a thread-backed option for tests.** `STTWorker`'s existing
-`transcriber_factory` injection point is what makes `tests/test_stt_worker.py`
-fast and synchronous (`worker._handle_segment(segment)` called directly, no
-thread, no process). That should keep working — recommend the process
-wrapper be an *additional* way to run an `STTWorker`, not a replacement, so
-unit tests keep testing the same pure `_handle_segment`/`_transcribe` logic
-directly, and only integration-level tests need to exercise the real
-process/IPC path.
+### What the current fix actually bought, and why it isn't enough
+
+It works by keeping total STT demand **under** the real-time budget — measured at 65% (200.4s of decode over a 310s run), mostly from removing STT/VAD CPU contention via core pinning. That is a **margin**, not capacity. A denser conversation pushes demand back over 100% and reproduces the same unbounded backlog, because two decoders taking turns is not more capacity than one.
+
+### The capacity this change unlocks (same RPi5 run, recomputed per core)
+
+| | Decode work | Utilization if truly parallel |
+|---|---:|---:|
+| rx (40 segments × 3091.7ms) | 123.7s | **40%** of its core |
+| tx (52 segments × 1475.0ms) | 76.7s | **25%** of its core |
+| Both, serialized (today) | 200.4s | 65% of the single shared budget |
+
+Post-split the busiest STT core sits near 40% — roughly **2.5x headroom** on the worst channel, versus the razor-thin margin today.
+
+### Target core allocation (4 cores)
+
+| Cores | Occupant |
+|---|---|
+| 0-1 | Main process: MQTT ingest, router, VAD, webui, supervisor, metrics |
+| 2 | STT process — channel `rx` |
+| 3 | STT process — channel `tx` |
+
+Set `MOONSHINE_ORT_SINGLE_THREAD=1` so each STT process stays on its one core rather than trying to spread across both (measured on the RPi5: multi-threading one decoder was *slower* than single-threaded — sync overhead exceeds the benefit at this model size).
 
 ---
 
-## What does NOT need to change
+## 3. Why not a fully separate pipeline per channel
 
-`STTWorker._handle_segment`/`_transcribe`/`_is_repetitive`/`_pcm_to_float32`
-— the actual decode logic — stays exactly as it is: pure, synchronous,
-already unit-tested in isolation (`tests/test_stt_worker.py`). This plan
-only changes *how* an `STTWorker` instance is driven (thread reading a
-`queue.Queue` vs. process reading a `multiprocessing.Queue`) and how its
-output gets back to the rest of the pipeline — not what happens once a
-segment is handed to it.
+Considered and rejected as the first move. Splitting *everything* per channel (own ingest + router + VAD + STT per process) would remove cross-channel serialization completely — but there is almost none left to remove outside STT:
 
----
+| Stage | Measured per-call cost (dev box) | Runs | Aggregate |
+|---|---:|---|---|
+| Router repacketize | ~6µs | per packet | negligible |
+| VAD (Silero) | ~293µs | per packet, ~52% skipped by the RMS gate | small fraction of a core |
+| **STT decode** | **64-125ms (dev) / 1475-3092ms (Pi)** | **per segment** | **the entire bottleneck** |
 
-## Likely blast radius
+Costs of the full split, against ~zero throughput gain:
 
-- New: a process wrapper/entry-point module (name TBD — maybe
-  `stt/stt_process.py`) owning the `spawn`, the child-side model load, and
-  the two `multiprocessing.Queue`s.
-- `pipeline/orchestrator.py`: `_build_stt` builds a process-backed worker
-  instead of (or alongside, if kept configurable) a thread-backed one; a
-  new receiver thread drains each channel's outbound transcript queue.
-  `_get_workers()`/`_build_stt_supervisor_targets()`/`_restart_dict_worker`
-  need to work with the wrapper's Thread-shaped interface (see decision 1)
-  — ideally little to no change if the wrapper is faithful enough.
-  `_stt_latency_s`/`_stt_channel_latencies_s` need their data to arrive via
-  IPC too (today they read worker attributes directly in-process).
-  `docs/ARCHITECTURE.md`/`docs/RELIABILITY.md` will need another rewrite
-  pass, same as the per-channel-decoder change needed.
-- `config/settings.py`: possibly a toggle (`stt.use_processes` or similar)
-  if decision 7's thread-backed test path stays configurable rather than
-  hardcoded to tests only.
-- Nothing in `vad/vad_worker.py`, `channel/router.py`, or
-  `audio_ingest/mqtt_client.py` — this is scoped to the STT boundary only.
+- **Memory roughly doubles.** An STT-only child needs `numpy` + `moonshine_voice` + ONNX Runtime — it imports **no torch** (verified: `stt_worker.py` imports only `numpy` and, lazily, `moonshine_voice`). A full-pipeline child would additionally load torch + torchaudio + Silero. Current whole-process RSS on the Pi is ~546MB with a ~484MB floor; two full pipelines land near 1GB, two STT-only children add far less.
+- Two MQTT connections, two routers, two of every failure mode, for no measured benefit.
+- Ordering is *not* the differentiator — cross-channel inversion is possible either way (§7).
+
+**Non-obvious bonus that makes STT-only the better boundary:** because moonshine's decode holds the GIL, `VADWorker` — a thread in the same process — is currently **blocked for the entire duration of every decode**. Moving STT out doesn't just parallelize STT; it hands the main process's GIL back to VAD/router/ingest. Splitting further buys little on top of that.
+
+**Keep the full split as a documented fallback** if the channel count ever grows past 2, or if §8's post-move VAD measurement shows VAD saturating.
 
 ---
 
-## Verification plan
+## 4. Scope
 
-1. **Isolated first, before touching the orchestrator.** Adapt
-   `scratch/probe_gil_release.py` to use `multiprocessing.Process` instead
-   of `threading.Thread` for the same two-`Transcriber` test. Confirm
-   speedup lands near 2x (genuine parallelism) before integrating —
-   cheap, fast feedback, same script shape already proven useful.
-2. **Then integrate**, and rerun `scratch/bench_pipeline_load.py` on the
-   RPi5 the same way as before. Two things to check, not just one:
-   queue depth trend should stay flat (already true today, so this is a
-   regression check, not a new result), **and** CPU utilization during
-   concurrent speech should show sustained >150-200% (real two-core work),
-   not the spiky-but-mostly-single-core pattern the current thread-based
-   version shows.
-3. Re-check memory: two full processes (not just two `Transcriber`
-   instances in one process) means duplicated Python interpreter + torch +
-   onnxruntime runtime overhead on top of the per-model cost already
-   measured (`scratch/probe_decoder_memory.py`, ~56MB marginal per
-   `Transcriber`). That per-process baseline overhead hasn't been measured
-   yet and matters more here than it did for the threaded version.
+### Changes
 
----
+| File | Change |
+|---|---|
+| `src/edge_voice/stt/stt_process.py` | **New.** Child entry point + `STTProcessHandle` + IPC message types. |
+| `src/edge_voice/pipeline/orchestrator.py` | Build mp queues, spawn handles, run per-channel receiver threads, source metrics from received results. |
+| `src/edge_voice/observability/logging.py` | Add child-side `QueueHandler` setup + parent-side `QueueListener`. |
+| `src/edge_voice/pipeline/transcript_hub.py` | Replay backlog sorted by `start` (§7). |
+| `src/edge_voice/config/settings.py` | `stt.use_processes: bool = True`. |
+| `src/edge_voice/webui/templates/console.html` | Insert by timestamp instead of always appending (§7). |
+| `docs/ARCHITECTURE.md`, `docs/RELIABILITY.md`, `docs/THREADS.md` | Rewrite the STT sections once built. |
 
-## A nice side-effect, not the goal
+### Explicitly unchanged
 
-`RELIABILITY.md` documents that Python threads can't be force-killed — a
-wedged `STTWorker` thread becomes a permanent zombie until a full process
-restart (the OS watchdog layer). A `multiprocessing.Process` *can* be
-force-killed (`SIGKILL`) if it stops responding, which would let the
-in-process supervisor actually clear a wedged STT worker instead of
-degrading and waiting on the OS watchdog. Worth calling out when this gets
-built, not a reason to build it on its own.
+- **`src/edge_voice/vad/vad_worker.py` — zero changes.** `multiprocessing.Queue` duck-types `queue.Queue` for `put`/`put_nowait`/`get`/`qsize` and raises the same `queue.Full`. The orchestrator simply hands it mp queues instead.
+- **`STTWorker._handle_segment` / `_transcribe` / `_is_repetitive` / `_pcm_to_float32`** — the decode logic itself. Pure, synchronous, already unit-tested. This plan changes only *how a worker is driven* and *how its output gets home*.
+- `channel/router.py`, `audio_ingest/mqtt_client.py`.
 
 ---
 
-## Open questions to resolve during implementation, not before
+## 5. Component specs
 
-- Exact wrapper class shape (decision 1) — design once the real
-  `SupervisedTarget`/`_w()` call sites are being touched, not speculatively
-  now.
-- Whether `spawn`'s startup cost is acceptable for the systemd restart
-  policy, or whether it needs a startup-time budget check first.
-- Logging design (decision 6) — genuinely unsolved, needs its own short
-  scoping pass.
+### 5.1 IPC contract (per channel)
+
+| Object | Type | Direction | Purpose |
+|---|---|---|---|
+| `segment_queue` | `mp.Queue[SpeechSegment]` | parent → child | Work in. Replaces this channel's `queue.Queue`. |
+| `transcript_queue` | `mp.Queue[SttResult]` | child → parent | Results out. |
+| `stop_event` | `mp.Event` | parent → child | Graceful stop signal. |
+| `heartbeat` | `mp.Value("d")` | child → parent | `time.monotonic()` of last loop iteration, for supervisor stall detection. |
+| `ready_event` | `mp.Event` | child → parent | **Set once the model is loaded and the consume loop is entered.** Load-bearing — see §5.6. |
+| `log_queue` | `mp.Queue[logging.LogRecord]` | child → parent | Shared by both children (§5.4). |
+
+Both payload types are already `@dataclass(slots=True)` and verified picklable. A 5s segment pickles to 160KB in **0.039ms** round-trip — ~0.001% of a 3s decode. No shared memory needed.
+
+```python
+@dataclass(slots=True)
+class SttResult:
+    event: TranscriptEvent
+    # None for partials, matching today's rule that _handle_partial never
+    # touches last_latency_s (see stt_worker.py). Finals always carry it.
+    stt_latency_s: float | None
+```
+
+### 5.2 `STTProcessHandle` — the Thread-shaped wrapper
+
+`orchestrator.py` and `supervisor.py` duck-type on `threading.Thread`. This wrapper presents that exact surface so `_get_workers()`, `_signal()`, `_join()`, `_restart_dict_worker()`, and `SupervisedTarget` keep working with minimal change.
+
+| Member | Backed by | Notes |
+|---|---|---|
+| `name` | `f"STTWorker-{channel_id}"` | Must match `SupervisedTarget.name`, or `get_status()` won't merge supervisor state. |
+| `ident` | `self._proc.pid` | `orchestrator._join()` checks `ident is None` to detect never-started — mapping to pid keeps that unchanged. |
+| `start()` | `Process.start()` | |
+| `join(timeout)` | `Process.join(timeout)` | |
+| `is_alive()` | `Process.is_alive()` | |
+| `stop()` | `stop_event.set()` | |
+| `stopping` | `stop_event.is_set()` | |
+| `last_activity` | `heartbeat.value`, **but see §5.6** | **Cross-process safe:** verified `time.monotonic()` is comparable across processes on Linux (CLOCK_MONOTONIC is system-wide). Linux-only, consistent with existing repo assumptions. |
+| `ready` | `ready_event.is_set()` | New. Gates stall detection during model load (§5.6). |
+| `kill()` | `Process.kill()` | **New capability** — see §10. |
+| `exitcode` | `Process.exitcode` | New. Log it on unexpected death — a segfault shows as `-11`, a diagnostic threads never gave us. |
+
+Widen `_get_workers() -> list[threading.Thread]` to a small `Protocol` (or `list[Any]`) covering `name`/`ident`/`start`/`join`/`is_alive`/`stop`.
+
+### 5.3 Child entry point
+
+Must be a **module-level function** — `spawn` pickles the target by qualified name. A closure, lambda, or bound method will fail at `Process.start()`. *(This is not hypothetical: it was hit while validating this plan — `spawn` could not resolve a target defined in a `python -c` `__main__`.)*
+
+```python
+def stt_child_main(
+    channel_id: str,
+    config: STTWorkerConfig,     # picklable dataclass of plain values
+    segment_queue,               # mp.Queue[SpeechSegment]
+    transcript_queue,            # mp.Queue[SttResult]
+    stop_event,                  # mp.Event
+    heartbeat,                   # mp.Value("d")
+    log_queue,                   # mp.Queue[logging.LogRecord]
+) -> None:
+```
+
+Child responsibilities, in order:
+1. Install the `QueueHandler` on the root logger (§5.4). Do this **first**, so model-load failures are visible.
+2. Construct an `STTWorker` locally — this resolves and loads the model in-process (`Transcriber`/ONNX sessions are not picklable, so the parent cannot pass one in). Same work `STTWorker.__init__`/`_new_transcriber` does today.
+3. Loop: `segment_queue.get(timeout=…)` → update `heartbeat.value` → `worker._handle_segment(segment)` → put `SttResult` on `transcript_queue`.
+4. Exit cleanly when `stop_event` is set or a `None` sentinel arrives.
+
+The module must have **no import-time side effects** — `spawn` re-imports it in the child.
+
+### 5.4 Cross-process logging
+
+Standard `logging.handlers` pattern, no invention required:
+
+- **Child:** root logger gets a single `QueueHandler(log_queue)`. Records are pickled to the parent unformatted.
+- **Parent:** one `QueueListener(log_queue, *existing_handlers)` started in `configure_logging()`, fanning records into the existing console/file/JSON handlers.
+
+This preserves `JsonFormatter`'s structured fields (`stage`, `channel_id`, `segment_id`, `stt_latency_s`) because formatting still happens in the parent, against the same handlers. One shared `log_queue` for both children is fine.
+
+**Keep the `TRANSCRIPT` log line in the parent**, emitted by the receiver thread (§5.5) — not the child. It is documented in `orchestrator.py` as the segment-lifecycle closing line, it must stay adjacent and in-order with the `TranscriptHub.publish()` call, and keeping it there preserves `test_final_transcript_still_emits_the_closing_log_line` unchanged.
+
+### 5.5 Receiver thread + metrics
+
+One thread per channel in the parent, draining `transcript_queue`:
+
+```
+result = transcript_queue.get(timeout=…)
+  ├─ if result.stt_latency_s is not None:
+  │     update parent-side _last_latency_s + _channel_latency_s[channel_id]
+  ├─ emit the TRANSCRIPT / PARTIAL log line (moved verbatim from _on_transcript)
+  └─ self._transcript_hub.publish(result.event)
+```
+
+This is why `SttResult` carries the latency: `_stt_latency_s()` and `_stt_channel_latencies_s()` currently read worker attributes in-process, which is impossible across a process boundary. Piggybacking on the result needs no extra IPC and keeps latency naturally paired with the segment it belongs to.
+
+`queue_depths()`: `mp.Queue.qsize()` works on Linux (verified) and is approximate; it raises `NotImplementedError` on macOS. Acceptable — already documented as context, not a precise reading.
+
+### 5.6 Startup readiness — prevents a supervisor crash-loop
+
+**This is a real bug if skipped, not a nicety.** The numbers collide:
+
+| Quantity | Value | Source |
+|---|---|---|
+| `reliability.stall_timeout_s` | **10.0s** | `config/settings.py` default |
+| Child `Transcriber` load, RPi5 | **3.6s / 7.3s** (1st / 2nd instance) | `scratch/probe_decoder_memory.py` output |
+| Plus `spawn`: fresh interpreter + import numpy + moonshine + ORT dlopen | **unmeasured, seconds on a Pi** | — |
+
+The supervisor stall-restarts a target when `is_alive() and not stopping and input_pending() and now - last_activity() > stall_timeout_s`. During a child's model load: it *is* alive, it is *not* stopping, segments *are* piling up in its queue (so `input_pending()` is True), and `heartbeat` has not advanced. If load + spawn overhead exceeds 10s, the supervisor kills it, the replacement takes just as long, and it trips again — **an infinite restart loop terminating in DEGRADED, on first boot.**
+
+**Required handling:**
+- Child sets `ready_event` immediately after its model is loaded and before entering the consume loop.
+- `STTProcessHandle.last_activity` returns `time.monotonic()` (i.e. "active right now") while `not ready_event.is_set()`, so stall detection cannot fire during load.
+- Add a separate, generous **startup timeout** so a child that never becomes ready is still caught rather than hidden forever. Log distinctly from a stall — "never became ready" and "stopped making progress" are different faults.
+- `orchestrator.start()` should wait for both children's `ready_event` (with that timeout) before returning, preserving today's invariant that models are loaded off the real-time path.
+
+**Knock-on:** `build()` no longer loads models eagerly (the child does, after `start()`). `tests/test_orchestrator.py::test_build_warms_up_stt_transcriber` asserts `w._transcriber is not None` after `build()` — it must be rewritten against `ready_event` after `start()` instead. The *intent* it protects (no model load on the real-time path) is preserved by the readiness wait; only the mechanism moves.
+
+### 5.7 Shutdown ordering — prevents a join deadlock
+
+**Empirically confirmed on this machine, not theoretical.** A child that has put items on an `mp.Queue` **will not exit until those items are flushed**, so `join()` on an undrained queue hangs:
+
+```
+3. join() HUNG 5.0s with 20 undrained items -> DEADLOCK CONFIRMED
+   after draining, join() returned
+```
+
+`orchestrator.stop()` signals and joins each worker in `_get_workers()` order with `WORKER_JOIN_TIMEOUT_S = 10`. If an STT child still has undrained transcripts, that join burns the full 10s and then falsely logs a zombie warning — per child.
+
+**Required handling:**
+- The per-channel **receiver thread must outlive its child.** It is the consumer of the child's output, so `stop()`'s existing "producers before their consumers" rule puts the child first and the receiver *after* it — the opposite of the intuitive "stop the reader first."
+- Drain `transcript_queue` until the child has exited, then stop the receiver thread.
+- Belt and braces: have the child call `transcript_queue.cancel_join_thread()` on its way out, so a hard teardown can't wedge on undelivered results. Finals matter; partials are droppable by design.
+- Do the same for `log_queue` — a child blocked flushing log records deadlocks identically.
+
+---
+
+## 6. Build steps
+
+Each step is independently verifiable. **Do not skip Step 0** — it is the cheap gate on the whole plan.
+
+### Step 0 — Prove it in isolation (no `src/` changes)
+Adapt `scratch/probe_gil_release.py` into `scratch/probe_mp_speedup.py`: same two-`Transcriber` test, `multiprocessing.Process` instead of `threading.Thread`.
+
+**Acceptance:** speedup ≥ 1.7x on the RPi5. If it comes back near 1.0x, **stop** — the contention is not the GIL and this plan's premise is wrong.
+
+### Step 1 — `stt/stt_process.py`: message types + child entry point
+`SttResult`, `stt_child_main`. Includes `ready_event` signalling (§5.6), `SIGINT` ignore (§12), and `cancel_join_thread()` on exit (§5.7). No orchestrator wiring yet.
+
+**Acceptance:** a standalone script spawns one child, pushes a `SpeechSegment`, receives a matching `SttResult` with non-empty text and a plausible `stt_latency_s`. Record the wall-clock time from `start()` to `ready_event` — that number sizes the readiness timeout in Step 4.
+
+### Step 2 — `STTProcessHandle`
+The Thread-shaped wrapper (§5.2).
+
+**Acceptance:** unit test asserting `start`/`is_alive`/`stop`/`join` lifecycle, that `ident` is `None` before start and a pid after, that `last_activity` advances while the child loops, and — specifically — that `last_activity` reports "just active" while `ready_event` is unset, so a slow model load cannot look like a stall (§5.6).
+
+### Step 3 — Cross-process logging
+`QueueHandler`/`QueueListener` (§5.4).
+
+**Acceptance:** a child-emitted log line reaches the parent's configured handlers with its structured fields intact under `JsonFormatter`.
+
+### Step 4 — Orchestrator wiring
+mp queues in `build()`, handles via `_build_stt(channel_id)`, per-channel receiver threads, metrics from `SttResult`, `stt.use_processes` toggle, readiness wait in `start()` (§5.6), and shutdown ordering in `stop()` (§5.7).
+
+Also in this step, not later:
+- **Fix `scratch/bench_pipeline_load.py`** — pin by `Process.pid` not `Thread.native_id`, and read `orch._stt` as handles. It is the tool that verifies everything downstream, and it broke the same way on the last STT refactor.
+- **Decide the production pinning path** — settings knob applied in `start()`, or systemd `CPUAffinity=`. The core allocation in §2 must exist somewhere other than a benchmark flag.
+
+**Acceptance:** full test suite green with `stt.use_processes` both `True` and `False`; `edge-voice` runs end to end against the wav pair; `/api/status` shows both `STTWorker-rx`/`STTWorker-tx` running with distinct per-channel latencies; Ctrl-C shuts down cleanly with no child tracebacks and no 10s join stalls.
+
+### Step 5 — Supervisor integration
+Wire `SupervisedTarget` to the handle. Add kill-escalation to `_restart_dict_worker`: after `join(timeout)` fails, call `kill()` instead of logging a zombie warning. Log `exitcode` on unexpected death.
+
+**Acceptance:** `scratch/demo_supervisor.py` still demonstrates stall → restart, and the wedged STT worker is now genuinely **reclaimed** rather than leaked (§10). Separately: start the pipeline with audio already flowing and confirm **no** stall-restart fires during the children's model load (§5.6) — this is the crash-loop regression test.
+
+### Step 6 — UI ordering
+Timestamp insertion + sorted backlog replay (§7). Preserve scroll position when inserting above the viewport: adjust `scrollTop` by the inserted element's height, or the view jumps.
+
+### Step 7 — Measure on the RPi5
+Run the full before/after protocol in §11, including the §11.5 lockstep check — not just the summary numbers.
+
+---
+
+## 7. Transcript ordering
+
+**Within a channel, order is guaranteed** — one worker, one FIFO queue, before and after this change. Only *cross-channel* order can invert.
+
+That is **already true today** with two independent thread workers; multiprocessing only makes inversions more likely, since decodes genuinely overlap. Concretely: a long `rx` utterance decoding for 3s can be overtaken by a short `tx` utterance decoding in 1s, landing the later-spoken line first.
+
+**Decision (D5): do not fix this in the pipeline.** Buffering to enforce global order reintroduces exactly the head-of-line waiting this change exists to remove — the UI would stall on the slowest channel, converting a throughput win back into latency.
+
+**Fix it in the UI instead — insert by timestamp, don't append.**
+
+- Every `TranscriptEvent` already carries `start`, `end`, and `created_at`. No new data needed.
+- `console.html`'s `appendMessage()` currently always does `inner.insertBefore(wrap, cursorRow)`. Change to: store `start` on the element, then walk back from `cursorRow` to find the first message with a smaller `start` and insert after it.
+- **Partials make this work better than it sounds.** A partial for a long utterance arrives ~1s in (`vad.partial_interval_s`) and claims its chronological slot early; the final then replaces it *in place* via the existing `segment_id` keying in `applyMessage()`. So the common case is resolved before an inversion can even become visible.
+- `transcript_hub.py`: replay the backlog sorted by `start` on `subscribe()`, so a reconnecting client sees the same order as a live one.
+
+**Honest limits** (worth knowing, not blockers):
+- A very late arrival inserts *above* content the reader may have already passed. Mitigate with a brief highlight on inserted-not-appended messages, and/or cap insertion depth — beyond N messages back, append instead.
+- Auto-scroll logic keys on "near bottom"; an insertion above the fold must not trigger a scroll jump.
+- Logs and any future persistence are unaffected — every event carries `channel_id` + timestamps, so any consumer can sort.
+
+---
+
+## 8. VAD: measure after, not before
+
+**Do not give VAD its own process in this change.** Two reasons, one of which is easy to miss:
+
+1. **Cost is small.** Per call VAD is ~293µs against STT's 64-125ms (dev box) — and the RMS gate already skips ~52% of Silero forward passes on duplex audio. Per *call* VAD is indeed the second-heaviest module, but core allocation should follow **aggregate CPU share**, and by that measure VAD is a small fraction of one core. Dedicating a core to it would leave that core mostly idle.
+
+2. **Measuring now would measure the wrong thing.** VAD is currently GIL-blocked for the whole duration of every STT decode (§3). Moving STT out raises VAD's effective throughput *without touching VAD*. Any pre-move measurement is contaminated by contention that is about to disappear.
+
+**Known gap, stated honestly:** there is no clean RPi5 measurement of VAD's aggregate CPU share. The 300s run showed 125.5% mean CPU against ~65% wall-clock STT decode, and the remainder is not cleanly attributed — that run did not set `MOONSHINE_ORT_SINGLE_THREAD`, so ORT intra-op threading could account for much of it. This is a measurement to take, not a number to assume.
+
+**After Step 7, decide with data.** If VAD shows sustained high utilization, the natural next step is **per-channel VAD processes** — VAD state is already fully per-channel (`_channels` dict keyed by `channel_id`, own Silero instance each), so that split is clean. Track it as a follow-up, not part of this build.
+
+---
+
+## 9. Testing
+
+| Test file | Change |
+|---|---|
+| `tests/test_stt_worker.py` | **None.** Keeps testing `_handle_segment` directly via `transcriber_factory` — the whole reason for D7. |
+| `tests/test_stt_process.py` | **New.** `SttResult` round-trip; `STTProcessHandle` lifecycle; one real spawn→segment→result integration test (mark `integration` — it loads a model). |
+| `tests/test_orchestrator.py` | Update for handles instead of threads. Add: receiver thread updates per-channel latency from `SttResult`. |
+| `tests/test_vad_worker.py`, `tests/test_partial_transcripts.py` | **None expected** — mp queues duck-type `queue.Queue`. Confirm rather than assume. |
+| `tests/test_webui_app.py` | Worker-name set unchanged (`STTWorker-rx`/`-tx`); check `queue_depths` keys still resolve. |
+
+Keep `stt.use_processes=False` for the default unit-test path so the suite stays fast and does not spawn interpreters.
+
+---
+
+## 10. Reliability upgrade (a real win, not just a side-effect)
+
+`RELIABILITY.md` documents that a wedged Python thread **cannot be force-killed** — it becomes a permanent zombie holding its input queue until the OS watchdog restarts the whole process. `scratch/demo_supervisor.py` demonstrates exactly this today.
+
+A `multiprocessing.Process` **can** be killed. Step 5 should escalate: `stop()` → `join(timeout)` → `kill()`. That converts the worst STT failure mode from "degrade and wait for a full process restart" into "reclaim the worker in-process," which is a genuine reliability improvement over the thread design and should be called out in `RELIABILITY.md` when built.
+
+---
+
+## 11. Verification — exact before/after protocol
+
+All runs on the **RPi5**, never a dev box. Reboot first (`sudo reboot`) so swap is clear and RSS baselines are honest — see `BENCHMARK.md` for why a dirty swap made an earlier "idle" reading meaningless.
+
+### 11.1 Capture the BEFORE baseline
+
+Run on the current thread-backed HEAD. Tag it first so returning is trivial:
+
+```bash
+cd ~/workspace/edge-voice
+git tag baseline-threads          # return anytime with: git checkout baseline-threads
+git rev-parse --short HEAD | tee /tmp/ev-before-sha.txt
+mkdir -p /tmp/ev
+
+# B0. Idle memory floor (after reboot, nothing running)
+free -h | tee /tmp/ev/before-mem-idle.txt
+
+# B1. Isolated: what do two THREADS buy? (known answer: ~1.02x)
+python scratch/probe_gil_release.py --iterations 10 2>&1 | tee /tmp/ev/before-probe.log
+
+# B2. Full pipeline, UNPINNED — the fair apples-to-apples baseline
+python scratch/bench_pipeline_load.py --duration-s 300 --grace-s 5 \
+    --csv-out /tmp/ev/before-unpinned.csv 2>&1 | tee /tmp/ev/before-unpinned.log
+
+# B3. Full pipeline, best-known thread config (pinned + single-thread ORT)
+MOONSHINE_ORT_SINGLE_THREAD=1 python scratch/bench_pipeline_load.py \
+    --stt-cores 2,3 --other-cores 0,1 --duration-s 300 --grace-s 5 \
+    --csv-out /tmp/ev/before-pinned.csv 2>&1 | tee /tmp/ev/before-pinned.log
+```
+
+Budget ~15 min. **Already-known baseline numbers** (from the 2026-08-10 pinned run, ORT *not* single-threaded) if a rerun isn't worth the time — but a fresh capture with logs on disk is better for diffing:
+
+| Metric | Value |
+|---|---|
+| Segments / p50 / p95 / max latency | 92 / 2379ms / 4316ms / 4504ms |
+| `stt_ms` mean | 2177.9ms |
+| `pre_ms` mean / p95 | 437.8ms / 1931.1ms |
+| CPU mean / max | 125.5% / 269.8% |
+| RSS mean / peak | 546MB / 548MB |
+| Queue trend | 0.52 → 0.72, peak 6 (flat) |
+
+### 11.2 Gate 0 — before writing any `src/` code
+
+```bash
+python scratch/probe_mp_speedup.py --iterations 10 2>&1 | tee /tmp/ev/after-probe.log
+```
+
+| Result | Action |
+|---|---|
+| **≥1.7x** | Proceed to Step 1. |
+| 1.2-1.7x | Investigate before building — partial release means something else contends too; the payoff will be smaller than modeled. |
+| **~1.0x** | **STOP.** The premise is wrong: the serialization is not the GIL. Re-scope. |
+
+### 11.3 Capture the AFTER runs
+
+```bash
+# A1. Full pipeline, UNPINNED — isolates the multiprocessing effect vs B2
+python scratch/bench_pipeline_load.py --duration-s 300 --grace-s 5 \
+    --csv-out /tmp/ev/after-unpinned.csv 2>&1 | tee /tmp/ev/after-unpinned.log
+
+# A2. Production config: pinned processes + single-thread ORT (vs B3)
+MOONSHINE_ORT_SINGLE_THREAD=1 python scratch/bench_pipeline_load.py \
+    --stt-cores 2,3 --other-cores 0,1 --duration-s 300 --grace-s 5 \
+    --csv-out /tmp/ev/after-pinned.csv 2>&1 | tee /tmp/ev/after-pinned.log
+
+# A3. Memory under load — parent + both children, not just this process
+free -h | tee /tmp/ev/after-mem-load.txt
+ps -o pid,rss,comm -p $(pgrep -d, -f edge.voice) | tee /tmp/ev/after-mem-procs.txt
+```
+
+> `bench_pipeline_load.py`'s `--stt-cores` currently pins **threads** via `native_id`. It must be updated to pin **processes** via `pid`, and to read `orch._stt` as handles — this is a required deliverable of Step 4, not an afterthought. The same script broke on the last STT refactor for the same reason.
+
+### 11.4 What to compare, and what each number means
+
+Compare B2↔A1 (unpinned, isolates multiprocessing) and B3↔A2 (production config).
+
+| Metric | Before | Pass | Why this number |
+|---|---|---|---|
+| **CPU mean** | 125.5% | **sustained >150%**, ideally ~200% during concurrent speech | **The number that proves parallelism.** Flat queues alone do not — the thread build already has flat queues. |
+| **`pre_ms` mean** | 437.8ms | large drop, → low hundreds | This *is* the lockstep wait. It is what the change targets. |
+| **`pre_ms` p95** | 1931.1ms | **< ~500ms** | The p95 is almost entirely "waiting for the other channel's decode." It should nearly vanish. |
+| `stt_ms` mean | 2177.9ms | ≈unchanged or better | Per-call decode shouldn't change. **If it gets worse, contention moved rather than disappeared** — investigate before declaring success. |
+| Full p50 / p95 | 2379 / 4316ms | both drop | Follows from `pre_ms`. |
+| Queue trend | flat | **still flat** | Regression check. |
+| RSS (all procs) | 546MB, 1 proc | measure; budget vs ~2.6GB idle-available | See 11.5. |
+| Segment count | 92 | ≈92 | Sanity: same audio, same VAD. A big change means something else moved. |
+
+### 11.5 The decisive check: is the lockstep pattern gone?
+
+Aggregate means can improve for boring reasons. This is the direct test that the *mechanism* changed.
+
+In `before-pinned.csv`, nearly every row with `pre_ms > 1000` is a `tx` segment landing while a long `rx` decode was still running — the §2 signature. Concretely, before:
+
+```
+elapsed_s  ch  dur_s  stt_ms   pre_ms
+     19.8  rx   4.80  3936.4     33.1     <- long rx decode running
+     21.2  tx   2.06  1454.4   1492.4     <- tx waits ~1.5s for it
+```
+
+**After, that correlation must be gone**: `tx` rows should show small `pre_ms` regardless of what `rx` is doing. Check by sorting each CSV on `pre_ms` descending and looking at the top ~10 rows:
+
+```bash
+for f in /tmp/ev/before-pinned.csv /tmp/ev/after-pinned.csv; do
+  echo "== $f"; head -1 "$f"
+  tail -n +2 "$f" | sort -t, -k9 -gr | head -10
+done
+```
+
+If the after-run's worst `pre_ms` rows are still one channel shadowing the other's decode, **the processes are not actually running in parallel** — check pinning, `MOONSHINE_ORT_SINGLE_THREAD`, and that both children really spawned (`ps` should show 3 Python processes, not 1).
+
+### 11.6 Memory
+
+Threads shared one address space; processes do not, and `spawn` gets no copy-on-write. Two competing effects, so **measure rather than predict**:
+
+- **Up:** each child pays a full interpreter + numpy + ONNX Runtime + its own model.
+- **Down:** the parent no longer loads Moonshine at all — it keeps only torch/torchaudio/Silero for VAD.
+
+Net could plausibly land near neutral. Sum RSS across all three processes (`after-mem-procs.txt`) and compare to the single-process 546MB before. Budget against ~2.6GB available at genuine idle. Flag if the total exceeds ~1.2GB.
+
+### 11.7 Also required to call it done
+
+1. Full test suite, `ruff`, `mypy` green — **with `stt.use_processes` both `True` and `False`**, since D7 keeps both paths live.
+2. `scratch/demo_supervisor.py` still demonstrates stall → restart, and now shows the wedged worker actually **reclaimed** via `kill()` rather than leaked (§10).
+3. Cold-start timing recorded: time from `edge-voice` launch to both `ready_event`s set. Must fit comfortably inside the readiness timeout (§5.6), and must not trip systemd (`WatchdogSec=10s` pings come from the parent's supervisor tick, which is unaffected by child loads — confirm this holds in practice).
+4. Ctrl-C produces a clean shutdown with no child `KeyboardInterrupt` tracebacks (§12).
+5. `docs/ARCHITECTURE.md`, `RELIABILITY.md`, `THREADS.md` updated.
+
+---
+
+## 12. Known hazards
+
+| Hazard | Severity | Handling |
+|---|---|---|
+| **Supervisor crash-loop during child model load** | **High** | `stall_timeout_s=10s` vs 3.6-7.3s load + spawn overhead. `ready_event` gating — see §5.6. |
+| **`join()` deadlock on undrained queues** | **High** | Confirmed empirically. Receiver thread must outlive its child; `cancel_join_thread()` — see §5.7. |
+| `spawn` target must be importable by qualified name | Medium | Module-level `stt_child_main`; no closures/lambdas/bound methods. *Hit for real while validating this plan.* |
+| **SIGINT reaches children directly** | Medium | Ctrl-C goes to the whole process group, so children raise `KeyboardInterrupt` mid-decode and spew tracebacks. Child should `signal.signal(SIGINT, SIG_IGN)` and exit only via `stop_event`, letting the parent (which already catches `KeyboardInterrupt` in `cli.py`) orchestrate shutdown. |
+| **`bench_pipeline_load.py` will break** | Medium | `_pin_thread` uses `Thread.native_id`; processes need `Process.pid`, and `orch._stt` values become handles. Fix as part of Step 4 — this is the tool that verifies the change, and it broke the same way on the last STT refactor. |
+| **Core pinning has no production path** | Medium | The plan pins cores 2/3, but only `bench_pipeline_load.py` can pin today. Decide at Step 4: a settings knob applied in `start()`, or systemd `CPUAffinity=` in `deploy/edge-voice.service`. Don't ship a plan whose core allocation only exists in a benchmark script. |
+| `MOONSHINE_ORT_SINGLE_THREAD` must reach the children | Low | `spawn` inherits the parent env, so systemd `Environment=` works. State it explicitly in the unit file rather than relying on the operator's shell. |
+| Module re-imported in child | Low | No import-time side effects in `stt_process.py`. |
+| `mp.Queue.qsize()` approximate; unavailable on macOS | Low | Verified working on Linux; already documented as context, not precise. |
+| Queues must be passed at `Process` construction | Low | Cannot be pickled arbitrarily later; pass via `args=`. |
+| Orphaned children if the parent dies hard | Low | `daemon=True`, and/or verify systemd's `KillMode` reaps the whole cgroup. |
+| Restart now costs a model reload | Low | Already true today (`STTWorker.__init__` builds its `Transcriber` eagerly), plus spawn overhead. Slightly worse, not new. |
+
+**Checked and explicitly *not* problems** — recorded so they aren't rediscovered mid-build:
+
+- **`partial_stats()` needs no IPC.** Grep confirms it is referenced only by `tests/test_partial_transcripts.py`, never surfaced in metrics or health. The thread-backed `STTWorker` those tests use is unchanged (D7).
+- **`/api/stop` → `/api/start` was already broken.** `Process` cannot be restarted after termination — but neither can a `Thread` (`RuntimeError: threads can only be started once`, verified). No test does stop-then-start. This is a pre-existing limitation, not a multiprocessing regression; don't let it get misattributed later.
+- **`vad_worker.py` genuinely needs zero changes.** Verified `mp.Queue` raises the stdlib `queue.Full` that `_emit_partial` already catches, and duck-types `put`/`put_nowait`/`qsize`.
+- **`partial_max_queue_depth` backpressure still works.** It reads `self._segment_queue.qsize()` from inside the child; `qsize()` is available on Linux.
