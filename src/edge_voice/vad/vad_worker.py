@@ -70,6 +70,19 @@ class VADWorkerConfig:
     # turn-taking never reaches soft_cut_s and pays nothing for this.
     segment_limits_enabled: bool = False
     max_segment_s: float = 7.0  # hard cap: cut here regardless of audio
+    # A soft cut backdates the emitted segment's `.end` to the chosen pause,
+    # up to soft_cut_lookahead_s in the past -- so any measurement of
+    # mic-to-transcript latency taken against `.end` (e.g.
+    # bench_pipeline_load.py) partly reflects "how far back the pause was,"
+    # not real pipeline lag, and the queued tail then waits behind the
+    # head's own decode on top of that (confirmed on the RPi5: an ordinary
+    # ~3.3s utterance that soft_cut_s=3.0 split in two measured ~700-1750ms
+    # of this per piece, vs ~17ms as one segment with soft-cut off -- see
+    # docs/BENCHMARK.md). Toggle this off to keep only the hard cap (which
+    # is what actually bounds worst-case backlog) when segments long enough
+    # to need it are rare enough that a mid-word chop on the rare overrun is
+    # an acceptable trade for zero cost on every ordinary long utterance.
+    soft_cut_enabled: bool = True
     soft_cut_s: float = 5.0  # past this, start looking for a natural pause
     soft_cut_lookahead_s: float = 1.0  # how far back to scan for that pause
     soft_cut_min_dip: float = 0.10  # dip must be this far below current score
@@ -463,6 +476,12 @@ class VADWorker(threading.Thread):
         scan the lookahead window for the deepest dip in VAD confidence and cut
         just after it, so the boundary lands in a pause rather than mid-word.
         If no dip qualifies before max_segment_s, cut anyway.
+
+        The hard cap below is unconditional -- it's the only thing that
+        actually bounds worst-case backlog, so `soft_cut_enabled` never
+        touches it. Only the pause-seeking search (and its latency cost on
+        every segment that runs past soft_cut_s, see VADWorkerConfig) is
+        skippable.
         """
         cfg = self.config
         samples_per_chunk = len(packet.samples) // 2  # int16
@@ -474,6 +493,9 @@ class VADWorker(threading.Thread):
 
         if seg_s >= cfg.max_segment_s:
             self._cut_segment(channel_id, state, n_chunks, chunk_s, "hard cap")
+            return
+
+        if not cfg.soft_cut_enabled:
             return
 
         # Only start recording scores once a cut is plausibly near, so normal

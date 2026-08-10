@@ -60,6 +60,20 @@ vad:
   # length, so an uncapped run snowballs into unbounded queue growth and the
   # ingest/routed queues eventually drop live audio packets outright.
   segment_limits_enabled: true
+  # Off: a soft cut backdates the emitted segment's end to the chosen pause
+  # (up to soft_cut_lookahead_s in the past), and the queued tail then waits
+  # behind the head's own decode on top of that. Measured on the RPi5: an
+  # ordinary ~3.3s utterance that soft_cut_s below would otherwise have
+  # split in two cost ~700-1750ms of this per piece, vs ~17ms as one
+  # segment with this off (see docs/BENCHMARK.md). The hard cap
+  # (max_segment_s) is unaffected by this flag and is what actually bounds
+  # worst-case backlog -- soft-cut only improves *where* the rare overrun
+  # gets chopped, at a real latency cost paid by every ordinary segment
+  # that runs past soft_cut_s. Long stretches without a pause long enough
+  # to reach max_segment_s are rare enough on real call turns that this
+  # trade isn't worth it here; re-enable if mid-word chops on those rare
+  # overruns turn out to matter more than this latency does.
+  soft_cut_enabled: false
   soft_cut_s: 3.0            # past this, look for a natural pause to cut at
   soft_cut_lookahead_s: 1.0  # how far back to scan for that pause
   soft_cut_min_dip: 0.10     # dip must be this far below the current score

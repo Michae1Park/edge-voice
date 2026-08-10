@@ -85,6 +85,11 @@ class VADSettings(BaseModel):
     idle_flush_s: float = 2.0
     segment_limits_enabled: bool = False
     max_segment_s: float = 7.0
+    # See VADWorkerConfig.soft_cut_enabled -- the hard cap alone bounds
+    # worst-case backlog; this only controls whether VAD spends effort (and
+    # some real latency on every segment that runs past soft_cut_s) trying
+    # to land the cut on a pause instead of chopping mid-word.
+    soft_cut_enabled: bool = True
     soft_cut_s: float = 5.0
     soft_cut_lookahead_s: float = 1.0
     soft_cut_min_dip: float = 0.10
@@ -102,8 +107,17 @@ class VADSettings(BaseModel):
     @model_validator(mode="after")
     def _check_soft_cut_below_hard_cap(self) -> "VADSettings":
         """soft_cut_s must leave room before max_segment_s, or the hard cap
-        always fires first and the natural-pause search never runs."""
-        if self.segment_limits_enabled and self.soft_cut_s >= self.max_segment_s:
+        always fires first and the natural-pause search never runs.
+
+        Only checked when the search can actually run at all -- irrelevant
+        once soft_cut_enabled is off, same as it's irrelevant with
+        segment_limits_enabled off.
+        """
+        if (
+            self.segment_limits_enabled
+            and self.soft_cut_enabled
+            and self.soft_cut_s >= self.max_segment_s
+        ):
             raise ValueError(
                 f"vad.soft_cut_s ({self.soft_cut_s}s) must be less than "
                 f"vad.max_segment_s ({self.max_segment_s}s), otherwise the hard "

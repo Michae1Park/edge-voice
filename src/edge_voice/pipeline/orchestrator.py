@@ -847,6 +847,7 @@ class PipelineOrchestrator:
                 idle_flush_s=self._settings.vad.idle_flush_s,
                 segment_limits_enabled=self._settings.vad.segment_limits_enabled,
                 max_segment_s=self._settings.vad.max_segment_s,
+                soft_cut_enabled=self._settings.vad.soft_cut_enabled,
                 soft_cut_s=self._settings.vad.soft_cut_s,
                 soft_cut_lookahead_s=self._settings.vad.soft_cut_lookahead_s,
                 soft_cut_min_dip=self._settings.vad.soft_cut_min_dip,
