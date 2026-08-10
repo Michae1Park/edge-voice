@@ -16,9 +16,12 @@ piece of data actually lives, and what runs on which thread.
   instance on the *same* queues and abandons the old one — Python threads
   can't be repaired, and a crashed/stalled thread's internal state can't be
   trusted anyway.
-- **Python threads can't be force-killed.** A worker that won't respond to a
-  stop signal becomes a permanent zombie; only a full process restart
-  (layer 2) actually removes it.
+- **Python threads can't be force-killed.** A thread-backed worker that won't
+  respond to a stop signal becomes a permanent zombie; only a full process
+  restart (layer 2) actually removes it. **The STT workers are the exception**:
+  in the deployed configuration they are child *processes*, so an unresponsive
+  one is escalated to `kill()` and reclaimed in place — see the worked example
+  below.
 - A single stalled worker almost never reaches layer 2 — that's the whole
   point of having layer 1. Layer 2 only matters when the *Supervisor's own
   thread* stops running.
@@ -214,22 +217,39 @@ if self._running and not self._stop_event.is_set():
 
 ### Worked example: `STTWorker-rx` stalls
 
-STT has one dedicated worker per channel (`self._stt: dict[str, threading.Thread]`,
-see `docs/ARCHITECTURE.md`'s per-channel STT decision) — restarting one
-doesn't touch the other channel's worker at all. Since it's a dict entry,
-not a bare attribute, this goes through `_restart_dict_worker` rather than
-`_restart` (same shape, `workers[key] = new` instead of `setattr`):
+STT has one dedicated worker per channel (`self._stt`, keyed by
+`channel_id` — see `docs/ARCHITECTURE.md`'s per-channel STT decision), so
+restarting one doesn't touch the other channel's worker at all. Since it's a
+dict entry rather than a bare attribute, this goes through
+`_restart_dict_worker` instead of `_restart` (same shape, `workers[key] = new`
+in place of `setattr`):
 
 ```
 _restart_dict_worker(self._stt, "rx", lambda: self._build_stt("rx"))
   old = self._stt["rx"]                        # the stalled STTWorker-rx
   self._signal(old) → old.stop()
   self._join(old)   → waits ≤10s
-    (if it never responds → zombie, warning logged, continue anyway)
+    (if it never responds → kill() it; see below)
   new = self._build_stt("rx")                  # wired to the SAME self._segment_queues["rx"]
   self._stt["rx"] = new
-  new.start()                                  # new.run() begins pulling from segment_queues["rx"]
+  new.start()
+  new.wait_ready(...)                          # process mode: let the model load
+                                               # before the supervisor watches it
 ```
+
+**This is the one place a wedged worker is genuinely recoverable.** In the
+deployed configuration (`stt.use_processes`, the default) an STT worker is a
+child *process*, not a thread — so when it ignores the graceful stop,
+`_restart_dict_worker` escalates to `kill()` and the OS reclaims it.
+Verified against a `SIGSTOP`-ped child: graceful stop times out, `kill()`
+returns it with `exitcode=-9`. Every other supervised target in this
+document is a thread and still degrades to the zombie case below, because
+Python cannot kill a thread.
+
+`new.wait_ready(...)` is not optional politeness: a replacement child has to
+load its model (3.6-7.3s on the RPi5, plus spawn), and the supervisor's
+`stall_timeout_s` is 10s. Without gating on readiness, the load itself looks
+like a stall, and the restart loops. See `STT_MULTIPROCESS_PLAN.md` §5.6.
 
 The reason this actually fixes the stall: `self._segment_queues["rx"]` is never recreated. Whatever segments piled up (the very thing `input_pending()` detected) are still sitting there, untouched — the new worker's `run()` loop starts consuming them the moment it starts. The "restart" only ever changes *who's reading that channel's queue*, never the queue itself, and never touches `self._stt["tx"]`.
 

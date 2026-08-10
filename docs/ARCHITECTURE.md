@@ -22,7 +22,10 @@ MQTT audio channels
  Per-channel Silero VAD ──── in-progress prefixes ──┐
         │                    (revisable partials)   │
         ▼                                           ▼
- Shared Moonshine STT ─────────────────────▶ Transcript Events
+ Per-channel Moonshine STT ─────────────────▶ Transcript Events
+ (one dedicated OS process
+  per channel, decoding in
+  parallel — see §3)
                                                     │
         ├─ Structured logs (JSON console + rotating file)
         ├─ Live transcript stream (SSE)
@@ -563,8 +566,8 @@ validation — performance is still verified manually, on target hardware.
   is currently split — `wav_source.py` publishes a JSON envelope while
   `wav_source_raw.py` and `mic_source.py` publish raw PCM, and only raw PCM is
   what ingest actually consumes today.
-- **STT multiprocessing** (`STT_MULTIPROCESS_PLAN.md`) — **approved for build
-  (2026-08-10), decisions settled, not yet started.** The per-channel
+- **STT multiprocessing** (`STT_MULTIPROCESS_PLAN.md`) — **BUILT (2026-08-10);
+  the RPi5 before/after measurement is the one piece still outstanding.** The per-channel
   `STTWorker` *threads* (this section, above) fixed unbounded queue growth but
   not genuine parallelism: confirmed on the RPi5, both on the real pipeline
   (decode calls alternate in lockstep between channels) and in isolation

@@ -134,3 +134,27 @@ def test_partials_are_kept_out_of_the_replay_backlog():
         texts.append(replayed.get_nowait().text)
 
     assert texts == ["settled"]
+
+
+def test_backlog_replays_in_spoken_order_not_publish_order():
+    """Each channel decodes independently (its own process in the deployed
+    config), so a short utterance can be published ahead of a longer one
+    spoken earlier on the other channel. A reconnecting client must still
+    see the conversation in the order it happened -- matching what the live
+    view shows, which orders by timestamp too."""
+    hub = TranscriptHub()
+
+    spoken_first = TranscriptEvent(
+        channel_id="rx", segment_id="rx-1", text="spoken first", start=10.0, end=15.0
+    )
+    spoken_second = TranscriptEvent(
+        channel_id="tx", segment_id="tx-1", text="spoken second", start=16.0, end=17.0
+    )
+    # The later utterance finishes decoding first and is published first.
+    hub.publish(spoken_second)
+    hub.publish(spoken_first)
+
+    sub = hub.subscribe()
+    replayed = [sub.get_nowait().text for _ in range(2)]
+
+    assert replayed == ["spoken first", "spoken second"]

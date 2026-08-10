@@ -1,6 +1,14 @@
 # STT Multiprocessing — Build Plan
 
-**Status:** Approved for build (2026-08-10). Decisions below are settled; do not relitigate during implementation.
+**Status: BUILT (2026-08-10).** Implemented in `src/edge_voice/stt/stt_process.py` plus the orchestrator/logging/UI changes below; `settings.stt.use_processes` defaults to `True`. Steps 0-6 are done and verified on the dev box. **Step 7 — the RPi5 before/after measurement in §11 — has NOT been run and is the remaining work.**
+
+Dev-box results so far, for reference (x86, 32 cores — validates the mechanism, does not predict the Pi):
+- Gate 0: **84% compute overlap, 1.70x** speedup with processes, vs 1.02x with threads on the RPi5.
+- End to end: two children spawn, transcribe correctly, per-channel latencies flow back over IPC, child logs reach the parent's JSON handler, Ctrl-C shuts down in **2.5s** with no child tracebacks and no join stalls.
+- A SIGSTOPped (wedged) child is **reclaimed** by `kill()` — the reliability upgrade over threads, which could only ever abandon a wedged worker.
+- RSS rose from **~699MB (threads) to ~1215MB (processes)** — two extra interpreters plus duplicated ONNX Runtime. Fits the RPi5's ~2.6GB idle headroom, but is a real cost to re-measure there (§11.6).
+
+Everything below is the plan as approved; decisions are settled, not to be relitigated.
 **Goal:** Use all 4 RPi5 cores by running **one OS process per channel's STT worker**, so the two channels decode genuinely in parallel instead of taking turns on the GIL.
 **Companion docs:** `ARCHITECTURE.md` (per-channel STT decision), `RELIABILITY.md` (supervisor/restart), `BENCHMARK.md` (the RPi5 numbers this is built on), `THREADS.md` (thread inventory).
 
@@ -237,8 +245,8 @@ The supervisor stall-restarts a target when `is_alive() and not stopping and inp
 **Required handling:**
 - The per-channel **receiver thread must outlive its child.** It is the consumer of the child's output, so `stop()`'s existing "producers before their consumers" rule puts the child first and the receiver *after* it — the opposite of the intuitive "stop the reader first."
 - Drain `transcript_queue` until the child has exited, then stop the receiver thread.
-- Belt and braces: have the child call `transcript_queue.cancel_join_thread()` on its way out, so a hard teardown can't wedge on undelivered results. Finals matter; partials are droppable by design.
-- Do the same for `log_queue` — a child blocked flushing log records deadlocks identically.
+- **Do NOT call `cancel_join_thread()` on the transcript queue.** An earlier draft of this plan recommended it as belt-and-braces; building Step 0 proved that wrong. It lets the process exit *without flushing*, which silently **discards** queued results and hangs the parent's `get()` — it cost a 300s timeout to diagnose in `scratch/probe_mp_speedup.py`. Draining before joining is the correct and sufficient fix. Reserve `cancel_join_thread()` for emergency teardown paths where losing data is already accepted.
+- `log_queue` deadlocks identically. Same fix: keep the `QueueListener` running until the children have exited.
 
 ---
 
@@ -390,14 +398,30 @@ Budget ~15 min. **Already-known baseline numbers** (from the 2026-08-10 pinned r
 ### 11.2 Gate 0 — before writing any `src/` code
 
 ```bash
-python scratch/probe_mp_speedup.py --iterations 10 2>&1 | tee /tmp/ev/after-probe.log
+python scratch/probe_mp_speedup.py --iterations 30 2>&1 | tee /tmp/ev/after-probe.log
 ```
+
+The probe sets `MOONSHINE_ORT_SINGLE_THREAD=1` itself, matching the deployed
+config. **This is load-bearing, not tidiness:** without it each process spawns
+its own full ORT thread pool and they oversubscribe the machine — measured
+**0.73x** (worse than sequential) on a 32-core dev box versus **1.69x** with
+it. Running the gate without the env var produces a false FAIL. `--no-single-thread`
+reproduces that if you want to see it.
+
+Judge on **two** signals, because they answer different questions:
+
+| Signal | Question | Threshold |
+|---|---|---|
+| **Overlap %** | *Did* the two processes compute simultaneously? Direct evidence the GIL is gone. | ≥80% |
+| **Speedup** | How much throughput did that buy? | ≥1.4x |
 
 | Result | Action |
 |---|---|
-| **≥1.7x** | Proceed to Step 1. |
-| 1.2-1.7x | Investigate before building — partial release means something else contends too; the payoff will be smaller than modeled. |
-| **~1.0x** | **STOP.** The premise is wrong: the serialization is not the GIL. Re-scope. |
+| Overlap ≥80% **and** speedup ≥1.4x | **Proceed to Step 1.** |
+| Overlap ≥80%, speedup <1.4x | Parallelism works but something below the CPU (memory bandwidth, shared cache) is the real limit. Investigate; payoff will be small. |
+| Overlap <80% | **STOP.** Still serializing. Check `MOONSHINE_ORT_SINGLE_THREAD` first, then re-scope. |
+
+**Dev-box result, 2026-08-10** (x86, 32 cores — *not* the target, but it validates the mechanism and the script): **84% overlap, 1.70x**, versus 1.02x for two threads. Note it plateaus near 1.6-1.7x rather than 2x even at high overlap: each call runs ~24% slower when concurrent, consistent with memory-bandwidth/shared-cache contention on a small memory-bound model. **Expect real-world gains to track ~1.6-1.7x, not 2x** — still a large win over 1.02x, but the §2 capacity table's "perfect parallelism" numbers should be read as an optimistic bound. The RPi5 (4 cores, far less memory bandwidth) may show this more strongly; its number is the one that counts.
 
 ### 11.3 Capture the AFTER runs
 

@@ -20,7 +20,7 @@ from edge_voice.webui.app import _sse_events, create_app
 
 
 def _minimal_settings() -> Settings:
-    return Settings(
+    settings = Settings(
         mqtt=MQTTSettings(
             broker_host="localhost",
             broker_port=1883,
@@ -32,6 +32,10 @@ def _minimal_settings() -> Settings:
         audio=AudioSettings(sample_rate=16000, chunk_samples=320),
         queues=QueuesSettings(),
     )
+    # Thread-backed STT: the webui reads the same status/health surface
+    # either way, and spawning interpreters per test buys nothing here.
+    settings.stt.use_processes = False
+    return settings
 
 
 @pytest.fixture

@@ -27,7 +27,9 @@ from edge_voice.pipeline.queues import (
 from edge_voice.audio_ingest.mqtt_client import MqttAudioIngest
 from edge_voice.channel.router import ChannelRouter, RepacketizerConfig
 from edge_voice.pipeline.transcript_hub import TranscriptHub
+from edge_voice.observability.logging import current_log_level, start_log_queue_listener
 from edge_voice.vad.vad_worker import VADWorker, VADWorkerConfig
+from edge_voice.stt.stt_process import STTProcessHandle, new_mp_context
 from edge_voice.stt.stt_worker import STTWorker, STTWorkerConfig
 from edge_voice.pipeline.supervisor import Supervisor, SupervisedTarget
 from edge_voice.observability.metrics import MetricsCollector, MetricsSnapshot
@@ -36,6 +38,11 @@ from edge_voice.health.reporting import build_health_report
 logger = logging.getLogger(__name__)
 
 WORKER_JOIN_TIMEOUT_S = 10
+
+# How long a receiver thread blocks on its child's transcript queue before
+# looping to re-check the stop flag. Not a latency floor: a result arriving
+# wakes the get() immediately.
+RECEIVER_POLL_TIMEOUT_S = 0.2
 
 
 class PipelineOrchestrator:
@@ -49,7 +56,15 @@ class PipelineOrchestrator:
         # One segment queue per channel -- so each channel's STTWorker can
         # decode independently instead of contending for one shared queue
         # (and therefore one shared decoder). See docs/ARCHITECTURE.md.
-        self._segment_queues: dict[str, queue.Queue] | None = None
+        #
+        # Typed Any because the concrete class depends on the STT mode: a
+        # multiprocessing.Queue when stt.use_processes (the child reads it
+        # from another process), otherwise a plain queue.Queue. The two are
+        # unrelated types to mypy but interchangeable for every operation
+        # used here -- put/put_nowait/get/qsize, and both raise the stdlib
+        # queue.Full/queue.Empty. That equivalence is exactly why
+        # vad_worker.py needs no changes to write into either.
+        self._segment_queues: dict[str, Any] | None = None
         self._segment_dump_queue: queue.Queue | None = None
         self._audio_source: threading.Thread | None = None
         self._router: threading.Thread | None = None
@@ -58,9 +73,24 @@ class PipelineOrchestrator:
         # keyed by channel_id -- never replaced wholesale on restart, only
         # mutated in place (workers[cid] = new), so no _w()-style attribute
         # indirection is needed to observe a restart's replacement.
-        self._stt: dict[str, threading.Thread] = {}
+        self._stt: dict[str, Any] = {}
         self._dump_worker: threading.Thread | None = None
         self._segment_dump_worker: threading.Thread | None = None
+        # Process-mode only (settings.stt.use_processes). None in thread mode.
+        # The mp context, the shared child->parent log queue and its listener,
+        # and one receiver thread per channel draining that channel's
+        # transcript queue. See docs/STT_MULTIPROCESS_PLAN.md.
+        self._mp_ctx: Any = None
+        self._log_queue: Any = None
+        self._log_listener: Any = None
+        self._stt_receivers: dict[str, threading.Thread] = {}
+        self._receivers_stop = threading.Event()
+        # Latency, mirrored into the parent as results arrive. In thread mode
+        # these stay empty and the values are read off the workers directly;
+        # across a process boundary that is impossible, so SttResult carries
+        # the number and the receiver thread records it here.
+        self._stt_latency_lock = threading.Lock()
+        self._stt_last_latency_s: dict[str, float] = {}
         # In-process worker supervision (Milestone 6). None when
         # reliability.enabled is False -- the pipeline then behaves exactly as
         # it did before Milestone 6, with no supervisor thread at all.
@@ -97,10 +127,22 @@ class PipelineOrchestrator:
         # Queues
         self._ingest_queue = make_ingest_queue(maxsize=self._settings.queues.ingest)
         self._routed_queue = make_routed_queue(maxsize=self._settings.queues.routed)
-        self._segment_queues = {
-            c.channel_id: make_segment_queue(maxsize=self._settings.queues.segment)
-            for c in self._settings.mqtt.channels
-        }
+        # In process mode the segment queues must be multiprocessing queues:
+        # VADWorker (a thread here) writes, the STT child process reads.
+        # mp.Queue duck-types queue.Queue for put/put_nowait/qsize and raises
+        # the same queue.Full, which is why vad_worker.py needs no changes.
+        if self._settings.stt.use_processes:
+            self._mp_ctx = new_mp_context()
+            self._log_queue = self._mp_ctx.Queue()
+            self._segment_queues = {
+                c.channel_id: self._mp_ctx.Queue(maxsize=self._settings.queues.segment)
+                for c in self._settings.mqtt.channels
+            }
+        else:
+            self._segment_queues = {
+                c.channel_id: make_segment_queue(maxsize=self._settings.queues.segment)
+                for c in self._settings.mqtt.channels
+            }
         self._dump_queue = None
         self._segment_dump_queue = None
 
@@ -138,11 +180,25 @@ class PipelineOrchestrator:
         if self._running:
             return
         self._running = True
+        # Before any child starts, so a child's very first log record (a model
+        # download, or a load failure) has somewhere to go. Also the thing
+        # that keeps the log queue drained -- an unread queue eventually
+        # blocks the child writing to it.
+        if self._settings.stt.use_processes and self._log_queue is not None:
+            self._log_listener = start_log_queue_listener(self._log_queue)
+
         for w in self._get_workers():
             w.start()
+
+        if self._settings.stt.use_processes:
+            self._start_stt_receivers()
+            self._await_stt_ready()
+
         # Supervisor starts LAST, once the workers it watches are already up --
         # otherwise its first scan could see a not-yet-started worker as a
-        # crash. Stopped FIRST in stop(), symmetrically.
+        # crash. Stopped FIRST in stop(), symmetrically. In process mode this
+        # is also *after* _await_stt_ready(), so the supervisor never observes
+        # a child that is still loading its model.
         if self._supervisor is not None:
             self._supervisor.start()
         # Metrics starts even later -- it reads the supervisor too. Stopped
@@ -150,6 +206,34 @@ class PipelineOrchestrator:
         if self._metrics is not None:
             self._metrics.start()
         logger.info("Pipeline started")
+
+    def _await_stt_ready(self) -> None:
+        """Block until every STT child has loaded its model.
+
+        Preserves the invariant the thread version got for free by building
+        its Transcriber eagerly in __init__: no model load ever lands on the
+        real-time path. It is also what makes the supervisor safe to start --
+        a child still loading has not begun updating its heartbeat, and
+        segments may already be queueing behind it.
+
+        A child that never reports ready is logged as a startup failure and
+        left running: the supervisor will pick it up as a normal fault rather
+        than this method deciding the pipeline's fate. Distinct from a stall,
+        which means "was working, then stopped".
+        """
+        timeout = self._settings.stt.process_start_timeout_s
+        deadline = time.monotonic() + timeout
+        for channel_id, handle in self._stt.items():
+            remaining = max(0.0, deadline - time.monotonic())
+            if handle.wait_ready(remaining):
+                continue
+            logger.error(
+                "STTWorker-%s did not become ready within %.0fs (model still loading, or it "
+                "failed to start) -- leaving it to the supervisor",
+                channel_id,
+                timeout,
+                extra={"channel_id": channel_id},
+            )
 
     def stop(self) -> None:
         """Stop workers upstream-first, draining each stage before the next.
@@ -187,6 +271,21 @@ class PipelineOrchestrator:
             # alive forever -- signal them all before propagating.
             for w in workers:
                 self._signal(w)
+            # Receivers come down LAST, only once the STT children above have
+            # been joined. They are those children's consumers: a child still
+            # holding undelivered transcripts cannot exit, so stopping the
+            # drain first would make the joins above block for their full
+            # timeout and then falsely report zombies. Confirmed behaviour,
+            # not caution -- see docs/STT_MULTIPROCESS_PLAN.md section 5.7.
+            if self._settings.stt.use_processes:
+                self._stop_stt_receivers()
+                self._stop_log_listener()
+
+    def _stop_log_listener(self) -> None:
+        """After the children are gone, so their final records still land."""
+        if self._log_listener is not None:
+            self._log_listener.stop()
+            self._log_listener = None
 
     def wait(self) -> None:
         # stop() already joins each worker in order; this is a backstop for
@@ -376,26 +475,95 @@ class PipelineOrchestrator:
         useful single number for the one place this is still surfaced (an
         ops log line): the channel closest to breaching its real-time budget.
         """
-        # Ignored attr-defined below: STTWorker's interface isn't visible
-        # through its threading.Thread base, same reasoning as _w()'s
-        # docstring.
-        values: list[float] = []
-        for w in self._stt.values():
-            latency = w.last_latency_s  # type: ignore[attr-defined]
-            if latency is not None:
-                values.append(latency)
+        values = list(self._stt_channel_latencies_s().values())
         return max(values) if values else None
 
     def _stt_channel_latencies_s(self) -> dict[str, float]:
-        """Per-channel STT latency, merged across every channel's worker.
+        """Per-channel STT latency.
 
-        No key collisions possible: each worker only ever populates its own
-        channel's entry in its own channel_latencies_s() dict.
+        In process mode the workers live in other processes, so their
+        attributes are unreachable: the receiver threads mirror each
+        SttResult's latency into `_stt_last_latency_s` as it arrives, and
+        that mirror is the source of truth here.
+
+        In thread mode it is merged straight off the workers. No key
+        collisions either way: each worker only ever reports its own channel.
         """
+        if self._settings.stt.use_processes:
+            with self._stt_latency_lock:
+                return dict(self._stt_last_latency_s)
+
+        # Ignored attr-defined below: STTWorker's interface isn't visible
+        # through its threading.Thread base, same reasoning as _w()'s
+        # docstring.
         merged: dict[str, float] = {}
         for w in self._stt.values():
             merged.update(w.channel_latencies_s())  # type: ignore[attr-defined]
         return merged
+
+    # ── STT process mode: receiver threads ──────────────────────
+
+    def _start_stt_receivers(self) -> None:
+        """One thread per channel, draining that child's transcript queue.
+
+        These are the in-process consumers of the STT children's output, so
+        they must OUTLIVE the children on shutdown -- a child holding
+        undelivered queue items will not exit, and joining it would then
+        block for the full timeout. See stop() and the plan's section 5.7.
+        """
+        self._receivers_stop.clear()
+        for channel_id in self._stt:
+            thread = threading.Thread(
+                target=self._stt_receiver_loop,
+                args=(channel_id,),
+                name=f"STTReceiver-{channel_id}",
+                daemon=True,
+            )
+            thread.start()
+            self._stt_receivers[channel_id] = thread
+
+    def _stt_receiver_loop(self, channel_id: str) -> None:
+        while not self._receivers_stop.is_set():
+            # Re-read the handle every poll rather than capturing it: a
+            # restart swaps in a NEW handle owning a NEW transcript queue, and
+            # a captured one would leave the replacement child's output
+            # undrained forever (it would then block, and this channel's
+            # transcripts would silently stop). Same reasoning as _w().
+            handle = self._stt.get(channel_id)
+            if handle is None:
+                return
+            try:
+                result = handle.transcript_queue.get(timeout=RECEIVER_POLL_TIMEOUT_S)
+            except queue.Empty:
+                continue
+            except (EOFError, OSError):
+                # The child's queue went away -- it was killed, or is being
+                # torn down. Pause rather than exit: a supervisor restart is
+                # about to put a fresh handle (and a fresh queue) in the dict,
+                # and returning here would leave that replacement's output
+                # undrained for the rest of the run.
+                self._receivers_stop.wait(RECEIVER_POLL_TIMEOUT_S)
+                continue
+            try:
+                if result.stt_latency_s is not None:
+                    with self._stt_latency_lock:
+                        self._stt_last_latency_s[channel_id] = result.stt_latency_s
+                self._publish_transcript(result.event, result.stt_latency_s)
+            except Exception:
+                logger.exception(
+                    "STT receiver failed on a result from channel=%s",
+                    channel_id,
+                    extra={"channel_id": channel_id},
+                )
+
+    def _stop_stt_receivers(self) -> None:
+        self._receivers_stop.set()
+        # Snapshot before joining: a concurrent build()/start() can add
+        # entries, and iterating the live dict then raises "dictionary
+        # changed size during iteration" on the shutdown path.
+        for thread in list(self._stt_receivers.values()):
+            thread.join(timeout=WORKER_JOIN_TIMEOUT_S)
+        self._stt_receivers.clear()
 
     def _mqtt_connected(self) -> bool | None:
         """None when the configured audio source isn't MQTT-based (e.g. a
@@ -535,9 +703,9 @@ class PipelineOrchestrator:
 
     def _restart_dict_worker(
         self,
-        workers: dict[str, threading.Thread],
+        workers: dict[str, Any],
         key: str,
-        build_fn: Callable[[], threading.Thread],
+        build_fn: Callable[[], Any],
     ) -> None:
         """Same as _restart(), for a worker held in a dict (workers[key]=new)
         rather than a bare attribute (setattr(self, attr, new)).
@@ -545,20 +713,49 @@ class PipelineOrchestrator:
         A sibling method, not a generalization of _restart() itself -- that
         one is exercised by four other stable supervised targets and there's
         no reason to risk it for what's otherwise a two-line difference.
+
+        For a process-backed worker this can do something the thread version
+        never could: if it will not exit, kill it. A wedged thread is a
+        permanent zombie holding its input queue until the OS watchdog
+        restarts everything; a wedged process is reclaimable here and now.
         """
         old = workers[key]
         self._signal(old)
         self._join(old)
         if old.is_alive():
+            killer = getattr(old, "kill", None)
+            if callable(killer):
+                logger.warning(
+                    "Orchestrator: %s did not exit after signal -- killing it",
+                    getattr(old, "name", key),
+                )
+                killer()
+                self._join(old)
+            else:
+                logger.warning(
+                    "Orchestrator: %s did not exit after signal -- a zombie thread may "
+                    "linger on its input queue until a full process restart",
+                    getattr(old, "name", key),
+                )
+        exitcode = getattr(old, "exitcode", None)
+        if exitcode is not None and exitcode != 0:
+            # Threads can never report this. A segfault in the native decoder
+            # shows up as -11 here instead of as unexplained silence.
             logger.warning(
-                "Orchestrator: %s did not exit after signal -- a zombie thread may "
-                "linger on its input queue until a full process restart",
+                "Orchestrator: %s exited with code %s",
                 getattr(old, "name", key),
+                exitcode,
             )
         new = build_fn()
         workers[key] = new
         if self._running and not self._stop_event.is_set():
             new.start()
+            # A replacement child must load its model before the supervisor
+            # starts watching it again, for the same reason start() waits --
+            # otherwise the load itself looks like a stall and loops.
+            waiter = getattr(new, "wait_ready", None)
+            if callable(waiter):
+                waiter(self._settings.stt.process_start_timeout_s)
 
     # ── Worker builders ────────────────────────────────────────
 
@@ -613,44 +810,92 @@ class PipelineOrchestrator:
             ),
         )
 
-    def _build_stt(self, channel_id: str) -> threading.Thread:
-        """One dedicated STTWorker (own Transcriber, own thread) for
-        `channel_id`. Called once per configured channel from build() --
-        see docs/ARCHITECTURE.md for why this replaced a single shared
-        worker: one sequential decoder can't sustain real-time dual-channel
-        transcription, proven on the RPi5 target hardware.
+    def _publish_transcript(self, event, latency_s: float | None) -> None:
+        """Close the segment-lifecycle trace and hand the event to the UI.
+
+        Shared verbatim by both STT modes, so a transcript is logged and
+        published identically whether it came from a worker thread's direct
+        callback or was carried back from a child process in an SttResult.
+        Only the *source* of `latency_s` differs; see _build_stt.
+
+        Deliberately stays in the parent in process mode rather than being
+        emitted by the child: this is the one orchestrator-level line
+        carrying stage/channel_id/segment_id, and keeping it here means it
+        stays adjacent and in-order with the TranscriptHub publish below.
+        """
+        if not event.is_final:
+            # A revisable prefix, not the segment's closing event. It must
+            # not take the branch below: that line is the one-per-segment
+            # lifecycle close, and last_latency_s belongs to whichever
+            # *final* ran last -- _handle_partial deliberately leaves it
+            # alone, so reading it here would report a stale number
+            # against the wrong segment.
+            logger.debug(
+                "PARTIAL channel=%s segment=%s [%.2f-%.2f] %r",
+                event.channel_id,
+                event.segment_id,
+                event.start,
+                event.end,
+                event.text,
+                extra={
+                    "stage": "stt",
+                    "channel_id": event.channel_id,
+                    "segment_id": event.segment_id,
+                },
+            )
+            self._transcript_hub.publish(event)
+            return
+
+        # Closes the segment-lifecycle trace (audio_ingest -> channel ->
+        # vad -> stt -> transcript): the only orchestrator-level log line
+        # carrying stage/channel_id/segment_id, since it's the segment's
+        # final event even though this callback lives here, not in stt/.
+        # A final always carries a latency; nan only if something upstream
+        # failed to record one, which is worth seeing rather than crashing
+        # the log call.
+        latency = latency_s if latency_s is not None else float("nan")
+        logger.info(
+            "TRANSCRIPT channel=%s segment=%s [%.2f-%.2f] latency=%.3fs %r",
+            event.channel_id,
+            event.segment_id,
+            event.start,
+            event.end,
+            latency,
+            event.text,
+            extra={
+                "stage": "stt",
+                "channel_id": event.channel_id,
+                "segment_id": event.segment_id,
+                "stt_latency_s": latency,
+            },
+        )
+        self._transcript_hub.publish(event)
+
+    def _build_stt(self, channel_id: str) -> Any:
+        """One dedicated STT worker for `channel_id` -- a process when
+        settings.stt.use_processes, otherwise a thread.
+
+        See docs/ARCHITECTURE.md for why STT is per-channel at all (one
+        sequential decoder cannot sustain real-time dual-channel
+        transcription on the RPi5), and docs/STT_MULTIPROCESS_PLAN.md for
+        why per-channel *threads* were not enough: moonshine's native decode
+        holds the GIL, so two threads serialize (1.02x) where two processes
+        overlap (1.70x).
         """
         if self._segment_queues is None:
             raise RuntimeError("Segment queues not initialized")
 
-        def _on_transcript(event) -> None:
-            if not event.is_final:
-                # A revisable prefix, not the segment's closing event. It must
-                # not take the branch below: that line is the one-per-segment
-                # lifecycle close, and last_latency_s belongs to whichever
-                # *final* ran last -- _handle_partial deliberately leaves it
-                # alone, so reading it here would report a stale number
-                # against the wrong segment.
-                logger.debug(
-                    "PARTIAL channel=%s segment=%s [%.2f-%.2f] %r",
-                    event.channel_id,
-                    event.segment_id,
-                    event.start,
-                    event.end,
-                    event.text,
-                    extra={
-                        "stage": "stt",
-                        "channel_id": event.channel_id,
-                        "segment_id": event.segment_id,
-                    },
-                )
-                self._transcript_hub.publish(event)
-                return
+        if self._settings.stt.use_processes:
+            return STTProcessHandle(
+                channel_id=channel_id,
+                segment_queue=self._segment_queues[channel_id],
+                config=self._stt_config(),
+                ctx=self._mp_ctx,
+                log_queue=self._log_queue,
+                log_level=current_log_level(),
+            )
 
-            # Closes the segment-lifecycle trace (audio_ingest -> channel ->
-            # vad -> stt -> transcript): the only orchestrator-level log line
-            # carrying stage/channel_id/segment_id, since it's the segment's
-            # final event even though this callback lives here, not in stt/.
+        def _on_transcript(event) -> None:
             # last_latency_s is read through self._stt[channel_id] rather
             # than captured, but is always this exact segment's value:
             # _handle_segment sets it immediately before calling
@@ -658,46 +903,37 @@ class PipelineOrchestrator:
             # replaced wholesale on restart (only mutated in place), so this
             # lookup observes a restart's replacement worker for free, same
             # guarantee _w() gives the attribute-based workers.
-            latency_s = self._stt[channel_id].last_latency_s  # type: ignore[attr-defined]
-            logger.info(
-                "TRANSCRIPT channel=%s segment=%s [%.2f-%.2f] latency=%.3fs %r",
-                event.channel_id,
-                event.segment_id,
-                event.start,
-                event.end,
-                latency_s,
-                event.text,
-                extra={
-                    "stage": "stt",
-                    "channel_id": event.channel_id,
-                    "segment_id": event.segment_id,
-                    "stt_latency_s": latency_s,
-                },
+            latency_s = (
+                self._stt[channel_id].last_latency_s  # type: ignore[attr-defined]
+                if event.is_final
+                else None
             )
-            self._transcript_hub.publish(event)
+            self._publish_transcript(event, latency_s)
 
-        stt = self._settings.stt
         return STTWorker(
             self._segment_queues[channel_id],
             _on_transcript,
-            config=STTWorkerConfig(
-                language=stt.language,
-                model_arch=stt.model_arch,
-                sample_rate=self._settings.audio.sample_rate,
-                options={
-                    "max_tokens_per_second": stt.max_tokens_per_second,
-                    "vad_threshold": stt.vad_threshold,
-                    "identify_speakers": str(stt.identify_speakers).lower(),
-                    "log_api_calls": str(stt.log_api_calls).lower(),
-                    "save_input_wav_path": stt.save_input_wav_path,
-                    "return_audio_data": str(stt.return_audio_data).lower(),
-                },
-                partial_max_queue_depth=stt.partial_max_queue_depth,
-            ),
-            # Must exactly match the SupervisedTarget.name built for this
-            # channel in _build_stt_supervisor_targets() -- get_status()
-            # merges supervisor state into workers[name] by this name.
+            config=self._stt_config(),
             name=f"STTWorker-{channel_id}",
+        )
+
+    def _stt_config(self) -> STTWorkerConfig:
+        """Plain values only -- must stay picklable, since process mode ships
+        this to the child at spawn."""
+        stt = self._settings.stt
+        return STTWorkerConfig(
+            language=stt.language,
+            model_arch=stt.model_arch,
+            sample_rate=self._settings.audio.sample_rate,
+            options={
+                "max_tokens_per_second": stt.max_tokens_per_second,
+                "vad_threshold": stt.vad_threshold,
+                "identify_speakers": str(stt.identify_speakers).lower(),
+                "log_api_calls": str(stt.log_api_calls).lower(),
+                "save_input_wav_path": stt.save_input_wav_path,
+                "return_audio_data": str(stt.return_audio_data).lower(),
+            },
+            partial_max_queue_depth=stt.partial_max_queue_depth,
         )
 
     def _build_segment_dump(self) -> threading.Thread:

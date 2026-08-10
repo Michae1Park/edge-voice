@@ -25,9 +25,19 @@ def _mock_mqtt_channels():
     ]
 
 
-def _minimal_settings(queues: QueuesSettings | None = None) -> Settings:
+def _minimal_settings(
+    queues: QueuesSettings | None = None, use_processes: bool = False
+) -> Settings:
+    """Thread-backed STT by default.
+
+    Production runs `stt.use_processes=True`, but spawning two interpreters
+    and loading two models per test would make this suite minutes slower for
+    no extra coverage: the decode path is identical either way (see
+    stt/stt_process.py), and the process plumbing has its own tests in
+    tests/test_stt_process.py.
+    """
     q = queues or QueuesSettings()
-    return Settings(
+    settings = Settings(
         mqtt=MQTTSettings(
             broker_host="localhost",
             broker_port=1883,
@@ -39,6 +49,8 @@ def _minimal_settings(queues: QueuesSettings | None = None) -> Settings:
         ),
         queues=q,
     )
+    settings.stt.use_processes = use_processes
+    return settings
 
 
 # -- __init__ -----------------------------
@@ -489,12 +501,18 @@ def test_final_transcript_still_emits_the_closing_log_line(caplog):
 
 def test_stt_latency_s_is_max_across_channels():
     """No single "most recent across channels" exists anymore with one
-    worker per channel (each has its own last_latency_s) -- see
-    _stt_latency_s's docstring. max() is what's actually computed."""
+    worker per channel -- see _stt_latency_s's docstring. max() is what's
+    actually computed.
+
+    Seeds the per-channel dict rather than each worker's `_last_latency_s`:
+    the aggregate is derived from the per-channel view precisely so that one
+    code path serves both STT modes (a child process's attributes are
+    unreachable, so process mode has only the per-channel mirror).
+    """
     orch = PipelineOrchestrator(_minimal_settings())
     orch.build()
-    orch._stt["rx"]._last_latency_s = 0.10
-    orch._stt["tx"]._last_latency_s = 0.42
+    orch._stt["rx"]._channel_latency_s["rx"] = 0.10
+    orch._stt["tx"]._channel_latency_s["tx"] = 0.42
     assert orch._stt_latency_s() == 0.42
 
 
@@ -510,3 +528,40 @@ def test_stt_channel_latencies_s_merges_without_collision():
     orch._stt["rx"]._channel_latency_s["rx"] = 0.10
     orch._stt["tx"]._channel_latency_s["tx"] = 0.42
     assert orch._stt_channel_latencies_s() == {"rx": 0.10, "tx": 0.42}
+
+
+# -- process-backed STT (the deployed configuration) -----------------------------
+
+
+@pytest.mark.integration
+def test_process_mode_builds_handles_and_reports_them_as_workers():
+    """Spawns two real STT child processes (loads two models).
+
+    The unit tests above all run thread-backed for speed; this is the one
+    that proves the deployed configuration actually wires up.
+    """
+    orch = PipelineOrchestrator(_minimal_settings(use_processes=True))
+    orch.build()
+    try:
+        # Handles, not threads -- distinguished by their IPC surface.
+        assert set(orch._stt) == {"rx", "tx"}
+        assert all(hasattr(h, "transcript_queue") for h in orch._stt.values())
+        # Not started yet, so no pids and nothing is ready.
+        assert all(h.ident is None for h in orch._stt.values())
+
+        orch.start()
+        # start() blocks on readiness, so by here both models are loaded.
+        assert all(h.ready for h in orch._stt.values())
+        assert all(h.ident is not None for h in orch._stt.values())
+
+        workers = orch.get_status()["workers"]
+        assert workers["STTWorker-rx"] == "running"
+        assert workers["STTWorker-tx"] == "running"
+        assert set(orch.queue_depths()) >= {"segment_rx", "segment_tx"}
+    finally:
+        orch.stop()
+        orch.wait()
+
+    # Shutdown must actually reap the children -- an undrained transcript
+    # queue would otherwise hold them open (see the plan's section 5.7).
+    assert all(not h.is_alive() for h in orch._stt.values())

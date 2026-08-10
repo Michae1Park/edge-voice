@@ -57,10 +57,19 @@ class TranscriptHub:
                 logger.warning("webui subscriber queue full -- dropping transcript")
 
     def subscribe(self) -> "queue.Queue[TranscriptEvent]":
-        """Register a new subscriber, pre-seeded with the current backlog."""
+        """Register a new subscriber, pre-seeded with the current backlog.
+
+        The backlog is replayed sorted by `start` (when the audio was
+        spoken), not by publish order. Each channel decodes independently --
+        in its own process, in the deployed config -- so a short utterance on
+        one channel can be published ahead of a longer one spoken earlier on
+        the other. A reconnecting client should see the same chronological
+        order a live client does, and the live view already orders by
+        timestamp (see console.html's insertByTimestamp).
+        """
         sub: "queue.Queue[TranscriptEvent]" = queue.Queue(maxsize=DEFAULT_SUBSCRIBER_MAXSIZE)
         with self._lock:
-            for event in self._backlog:
+            for event in sorted(self._backlog, key=lambda e: e.start):
                 sub.put_nowait(event)
             self._subscribers.add(sub)
         return sub

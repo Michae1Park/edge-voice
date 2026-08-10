@@ -625,6 +625,11 @@
     function renderMessage(m) {
       var wrap = document.createElement("div");
       wrap.className = "msg " + m.channel_id + (m.is_final ? "" : " partial");
+      // When the audio was spoken, not when the transcript arrived -- see
+      // insertByTimestamp. `start` is real wall-clock (AudioPacket.timestamp
+      // propagates unchanged from MQTT ingest), so it's directly comparable
+      // across channels.
+      wrap.dataset.start = String(m.start);
 
       var meta = document.createElement("div");
       meta.className = "msg-meta";
@@ -651,12 +656,50 @@
       return { wrap: wrap, bubble: bubble, time: time };
     }
 
+    // Place a message by WHEN IT WAS SPOKEN, not when it arrived.
+    //
+    // Each channel has its own STT worker (its own process, in the deployed
+    // config), so the two decode in parallel and finish independently: a
+    // short `tx` utterance can overtake a long `rx` one spoken before it, and
+    // appending blindly would show the conversation out of order. Enforcing
+    // order in the pipeline instead would mean holding finished transcripts
+    // behind the slowest channel -- giving back exactly the latency the
+    // parallel decoders bought. See docs/STT_MULTIPROCESS_PLAN.md section 7.
+    //
+    // In practice partials usually resolve this before it's visible: a
+    // partial for a long utterance arrives ~1s in and claims the slot early,
+    // and its final then replaces it in place (keyed by segment_id below).
+    //
+    // Returns true when the message landed above the end of the feed.
+    function insertByTimestamp(wrap) {
+      var startTs = parseFloat(wrap.dataset.start);
+      var existing = inner.querySelectorAll(".msg[data-start]");
+      var ref = cursorRow;
+      for (var i = 0; i < existing.length; i++) {
+        if (parseFloat(existing[i].dataset.start) > startTs) {
+          ref = existing[i];
+          break;
+        }
+      }
+      inner.insertBefore(wrap, ref);
+      return ref !== cursorRow;
+    }
+
     function appendMessage(wrap) {
       empty.hidden = true;
       var wasNearBottom = isNearBottom();
-      inner.insertBefore(wrap, cursorRow);
+      var prevTop = feed.scrollTop;
+      var prevHeight = feed.scrollHeight;
+
+      var insertedAbove = insertByTimestamp(wrap);
+
       if (wasNearBottom) {
         scrollToBottom(true);
+      } else if (insertedAbove && wrap.offsetTop < prevTop) {
+        // Something was inserted above what the reader is looking at, so the
+        // content below it just shifted down by that much. Compensate, or
+        // the view appears to jump while they're reading scrollback.
+        feed.scrollTop = prevTop + (feed.scrollHeight - prevHeight);
       } else {
         jumpBtn.hidden = false;
       }

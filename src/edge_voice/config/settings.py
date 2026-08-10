@@ -157,6 +157,22 @@ class STTSettings(BaseModel):
     # queued ahead of real work -- finals are never dropped. 0 means "drop a
     # partial whenever anything else is already waiting".
     partial_max_queue_depth: int = Field(default=0, ge=0)
+    # Run each channel's STT worker in its own OS process rather than its own
+    # thread. True is the deployed configuration: moonshine's native decode
+    # does not release the GIL, so two STT *threads* serialize (measured 1.02x
+    # speedup on the RPi5 -- i.e. none), while two processes genuinely overlap
+    # (84% of decode time concurrent, 1.70x). See docs/STT_MULTIPROCESS_PLAN.md.
+    #
+    # False keeps the original thread-backed path. Tests default to it so the
+    # suite stays fast and synchronous instead of spawning interpreters and
+    # loading models, and it is the one-line rollback if processes misbehave
+    # on a given device.
+    use_processes: bool = True
+    # How long start() waits for every STT child to load its model and signal
+    # ready. Generous on purpose: load alone is 3.6-7.3s on the RPi5, plus
+    # spawn and imports. A child that never becomes ready inside this window
+    # is reported as a startup failure, distinctly from a stall.
+    process_start_timeout_s: float = Field(default=120.0, gt=0)
 
 
 class LoggingSettings(BaseModel):
