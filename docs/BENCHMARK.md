@@ -64,13 +64,268 @@ Edit `WAV`, `MODEL_LN`, `MODEL_SIZE` at the top of the script to point at a diff
 
 ---
 
+## Pipeline end-to-end: dual-channel conversational audio (post-multiprocessing)
 
+**Date:** 2026-08-10
+**Hardware:** Raspberry Pi 5
+**Script:** `[scratch/bench_pipeline_load.py](../scratch/bench_pipeline_load.py)`
+**Config:** `settings.stt.use_processes=true` (one dedicated STT process per
+channel, not the old single shared decoder), `vad.segment_limits_enabled=true`,
+`max_segment_s=5.0`, `soft_cut_enabled=false` — i.e. `configs/default.yaml`
+as currently committed. `--stt-cores 2,3 --other-cores 0,1`,
+`MOONSHINE_ORT_SINGLE_THREAD=1` (see that script's docstring for why the
+latter is required alongside core pinning). A same-session comparison run
+with `soft_cut_enabled=true` (`soft_cut_s=3.0`) is kept in the Notes below
+to document the effect that setting has.
+
+### Method
+
+Real `PipelineOrchestrator`, real MQTT broker, real Moonshine `tiny-ko`
+model — not a mock. `wav/rx_recorded_1.wav` + `wav/tx_recorded_1.wav` (a
+recorded call-leg pair with natural conversational pauses/turn-taking)
+looped for 190s (6 loops) on both channels concurrently. Run immediately
+after a fresh reboot — see the Notes below for why that matters here.
+
+```bash
+MOONSHINE_ORT_SINGLE_THREAD=1 python scratch/bench_pipeline_load.py \
+    --stt-cores 2,3 --other-cores 0,1 \
+    --wav wav/rx_recorded_1.wav wav/tx_recorded_1.wav \
+    --channels rx tx --duration-s 180
+```
+
+### Results
+
+54 segments over 6 loops (190s), fresh-reboot baseline, current committed
+config (`soft_cut_enabled=false`):
+
+| Metric | p50 | p95 | max |
+| --- | --- | --- | --- |
+| Full latency (mic → transcript) | 1948 ms | 3971 ms | 4035 ms |
+
+| RSS mean | RSS peak | CPU mean | CPU median | CPU max |
+| --- | --- | --- | --- | --- |
+| 1242 MB | 1243 MB | 64% | 62% | 155% (of 400% available) |
+
+| Queue depth | first half | second half | peak | verdict |
+| --- | --- | --- | --- | --- |
+| combined (ingest+routed+segment) | 0.15 | 0.19 | 2 | flat/draining |
+
+By channel:
+
+| Channel | n | Full latency mean | STT decode mean |
+| --- | --- | --- | --- |
+| rx | 24 | 2779.4 ms | 2750.1 ms |
+| tx | 30 | 1640.7 ms | 1549.7 ms |
+
+`hit_cap` was `False` for all 54 segments — natural pauses in this
+recording never come close to the 5.0s hard cap, so `segment_limits_enabled`
+costs nothing here (see the soft-cut note below for the one way it *used to*
+cost something even with `hit_cap` false throughout).
+
+### Notes
+
+- **Healthy with real margin**: queue depth peaks at 2 (against a
+configured capacity of 256+128+64=448), and CPU never exceeds 155% of the
+400% available — nowhere close to falling behind real-time for this
+content.
+- rx runs measurably higher latency than tx on this file — a property of
+the source recording (rx's turns are longer on average, see `dur_s` in the
+per-segment CSV), not a channel-handling asymmetry in the pipeline.
+- **Soft-cut added real, avoidable latency on ordinary segments — confirmed
+fixed by disabling it.** A soft cut (`vad_worker.py`'s `_maybe_cut`) doesn't
+cut at the live edge; it scans back up to `soft_cut_lookahead_s` (1.0s) for
+the best pause and backdates the emitted segment's `.end` to that point:
+
+  ```python
+  cut_ts = state.segment_start_ts + cut_idx * chunk_s   # a point in the past
+  self._finalize_segment(channel_id, state, end_ts=cut_ts)
+  ```
+
+  Since `full_latency_ms = created_at - end` is measured against that
+  backdated `.end`, part of the "latency" on a soft-cut segment is really
+  just "how far back the chosen pause was," not the pipeline falling
+  behind — and the queued *tail* piece then genuinely waits behind the
+  head's own decode on top of that (each channel has exactly one STT
+  decoder). A same-session run with `soft_cut_enabled=true` (`soft_cut_s=3.0`)
+  showed exactly this: an ordinary ~3.35s utterance (`rx`, recurring at the
+  same point each loop) got split into two pieces every time it recurred,
+  each paying real cost:
+
+  | Piece | dur_s | chars | pre_ms, soft-cut on | pre_ms, soft-cut off (this run) |
+  | --- | --- | --- | --- | --- |
+  | (whole utterance, uncut) | 3.36-3.40s | 34 | *(split below)* | **-1.5 / 17.7 / 20.2** |
+  | head | 2.27s | 22 | 695 – 722 ms | *(no longer split)* |
+  | tail | 1.08s | 12 | 1106 – 1348 ms | *(no longer split)* |
+
+  Added `vad.soft_cut_enabled` (default `true`, matching the prior behavior
+  whenever `segment_limits_enabled` was on) so the pause search can be
+  turned off independently of the hard cap, which is what actually bounds
+  worst-case backlog and is unaffected by this flag. `configs/default.yaml`
+  now ships `soft_cut_enabled=false`.
+
+  Confirmed by this run, three ways:
+  - The recurring utterance lands as one clean segment all three times
+  (elapsed≈26s/88s/150s), `pre_ms` back to single-digit-to-tens, matching
+  the original pre-`segment_limits` baseline (`pre_ms=16.9`) almost exactly.
+  - Segment count dropped from 57 (soft-cut on) to 54 (soft-cut off) — exactly
+  the 3 fewer segments expected from 3 recurring splits no longer happening.
+  - Aggregate `pre_ms` p95 (VAD wait + queueing, across all segments) dropped
+  from **1105.9 ms to 51.7 ms** run-over-run; both runs' `pre_ms` **max**
+  stayed near 2020ms from the same, unrelated end-of-run drain artifact (the
+  final segment caught mid-grace-period at shutdown) — confirming the p95
+  improvement is specifically the soft-cut fix, not a general latency shift.
+
+  Re-enable `soft_cut_enabled` if mid-word chops on a rare
+  `max_segment_s` overrun turn out to matter more than this latency does.
+- **Confirms a suspected thermal/DVFS drift, not a regression.** An earlier
+same-day run on identical audio, taken mid-session after a long string of
+back-to-back stress tests (no reboot in between), measured ~35-70% slower
+per segment on this exact same hardware/config. This fresh-reboot run lands
+back in line with the very first post-multiprocessing measurement (taken
+before any of that session's stress testing) — confirming the mid-session
+numbers were inflated by sustained heat/clock throttling on a board with no
+active cooling, not a real regression from the segment-cap or
+stall-detection fixes:
+
+  | Run | Latency p50 | Latency p95 | CPU mean |
+  | --- | --- | --- | --- |
+  | First post-multiprocessing (session start, `segment_limits_enabled=false`) | 1817 ms | 3976 ms | 67% |
+  | Mid-session (after a long run of back-to-back stress tests) | 3448 ms | 6498 ms | 88% |
+  | Fresh-reboot, soft-cut on (same session, `soft_cut_enabled=true`) | 1903 ms | 3778 ms | 64% |
+  | **Fresh-reboot, soft-cut off (this run, current config)** | **1948 ms** | **3971 ms** | **64%** |
+
+  Same conclusion holds per-segment, on identical audio (`stt_ms`):
+
+  | Segment (duration, chars) | Session start | Mid-session | Reboot, soft-cut on | Reboot, soft-cut off (this run) |
+  | --- | --- | --- | --- | --- |
+  | 2.37s, 27 chars | 1866 ms | 3220 ms | 1999 ms | 2030 ms |
+  | 1.92s, 18 chars | 1262 ms | 2111 ms | 1168 ms | 1133 ms |
+  | 1.69s, 13 chars | 1067 ms | 1443 ms | 1062 ms | 1074 ms |
+  | 4.83s, 43 chars | 4238 ms | 5916 ms | 4182 ms | 3936 ms |
+
+  The two reboot runs (soft-cut on vs. off) agree closely on these four
+  *unsplit* segments, as expected — soft-cut only touches segments that
+  actually run past `soft_cut_s`, so its cost is isolated to those, not a
+  blanket slowdown. Both reboot runs sit well below the mid-session numbers
+  either way, reinforcing that the thermal effect and the soft-cut effect
+  are two independent, now both-understood findings, not one conflated one.
+
+  Practical takeaway: benchmark numbers taken deep into a long, uncooled
+  RPi5 test session run measurably pessimistic — a cold-boot (or at least
+  cooled-down) baseline is the number to trust for capacity planning, and
+  the mid-session one is now understood as a thermal artifact rather than a
+  separate finding.
+
+---
+
+## Pipeline end-to-end: dual-channel stress test — near-continuous speech exceeds real-time capacity
+
+**Date:** 2026-08-10
+**Hardware:** Raspberry Pi 5
+**Script:** `[scratch/bench_pipeline_load.py](../scratch/bench_pipeline_load.py)`
+**Config:** same as above, with `max_segment_s` swept across 2.0s/3.0s/5.0s
+(`soft_cut_s` 1.0s/2.0s/3.0s respectively) to isolate the cap's effect.
+
+### Method
+
+Same harness, but `wav/conversation_60s.wav` looped on **both** rx and tx —
+a single mono clip of dense, near-continuous Korean radio/news speech
+(~8% measured silence, vs. the natural-pause recording above) chosen
+specifically to stress-test near-100% dual-channel speech duty cycle. This
+is **not representative of real usage** (estimated <0.1% likelihood for
+this product's actual two-party conversational/walkie-talkie traffic,
+which has natural turn-taking pauses) — kept here as a documented hardware
+ceiling, not a target to optimize toward.
+
+```bash
+MOONSHINE_ORT_SINGLE_THREAD=1 python scratch/bench_pipeline_load.py \
+    --stt-cores 2,3 --other-cores 0,1 \
+    --wav wav/conversation_60s.wav wav/conversation_60s.wav \
+    --channels rx tx --duration-s 180
+```
+
+### Results
+
+This input surfaced two real reliability bugs before it settled into a
+pure capacity finding — noted here since the numbers only make sense in
+that order:
+
+1. **False-positive stall/restart loop (fixed).** With `STTWorker`'s
+   liveness (`last_activity`) stamped only at segment dequeue, a single
+   legitimately-slow decode (routine on this content) looked identical to a
+   hang once it ran past `reliability.stall_timeout_s` (10s default). The
+   supervisor SIGKILLed still-working STT children, which re-stalled on the
+   next long segment, and repeated until `max_restarts` was exhausted
+   (heading to DEGRADED). Fixed by making the child's heartbeat track real
+   CPU progress instead of segment-start time.
+2. **Two interpreter-exit hangs on shutdown (fixed).** (a) A still-decoding
+   STT child left alive past the shutdown join timeout was never
+   force-killed on the plain `stop()` path (only a supervisor-triggered
+   restart had that). (b) Once a child *did* exit while its `segment_queue`
+   still had unconsumed backlog, the parent's abandoned feeder thread could
+   block forever inside `pipe_write()`, and `multiprocessing` joins that
+   thread with no timeout at interpreter exit — hanging the whole process.
+   Both are now handled in `orchestrator.py`'s shutdown path.
+
+With both fixed, the run completes and reports real numbers — which show a
+genuine capacity limit, not a bug. Three `max_segment_s` values were swept,
+each a single ~62s pass of the same clip on both channels:
+
+| `max_segment_s` | `soft_cut_s` | First-segment RTF† | Time to queue saturation | Peak combined queue depth | Queue trend |
+| --- | --- | --- | --- | --- | --- |
+| 2.0s | 1.0s | **0.92 – 0.98** (clean start) | ~18s | 399 | GROWING |
+| 3.0s | 2.0s | 2.22 – 2.35 (dirty start‡) | ~24s | 391 | GROWING |
+| 5.0s | 3.0s | 1.81 – 1.95 (dirty start‡) | ~22s | 388 | GROWING |
+
+RTF = `stt_ms / (dur_s * 1000)`; >1.0 means decode is slower than real-time.
+
+† The 2.0s run is the only clean (queue-empty) start; the other two
+inherited backlog from the immediately-preceding sweep iteration (no
+cooldown between them), so their RTF numbers are not a clean read on cap
+length alone — flagged, not corrected for, pending a re-run with a
+cooldown/reboot between iterations (see open items).
+‡ Routed queue was already 85-104/128 deep before either run's first
+transcript had even landed.
+
+Worst individual segments observed (uncapped run, `segment_limits_enabled=false`):
+
+| Segment duration | Decode time | RTF |
+| --- | --- | --- |
+| 37.81s | 119.5s | 3.16x |
+| 5.02s (capped) | 16.6s | 3.31x |
+
+Note the peak-queue-depth column above is nearly identical across all three
+caps (388-399) regardless of setting — that's the configured queue capacity
+ceiling (`queues.ingest=256` + `queues.routed=128` = 384), not a real
+difference between cap values. The more informative signal is that every
+cap value saturates on essentially the same ~20-25s timescale.
+
+### Notes
+
+- Shrinking `max_segment_s` bounds *worst-case single-segment latency*, but
+does **not** fix the underlying deficit: aggregate STT decode throughput for
+two concurrent channels of this content exceeds what 2 pinned RPi5 cores can
+do, regardless of how the audio is chunked. Every cap value tested saturates
+the queues on essentially the same timescale.
+- Confirmed not a thermal-throttling or power-supply artifact:
+`vcgencmd measure_temp` stayed at 56-58°C through testing (well under the
+~80°C throttle point), and `vcgencmd get_throttled`'s under-voltage/throttle
+flags were isolated to boot-time, not during any test run.
+- Conclusion: **not pursued further as a tuning problem.** Given the
+confirmed <0.1% real-world likelihood of this input pattern, the fix here is
+not a config change but the two reliability fixes above (so this exact
+class of extreme input degrades to bounded latency + eventual packet loss
+under backpressure, rather than a crash loop) — see the "normal audio" entry
+above for the actual target-workload numbers.
+
+---
 
 ## Open items for future entries
 
-- End-to-end latency (mic → transcript) under the real pipeline, not this
-isolated STT-only harness.
-- RAM/CPU footprint on RPi5 under sustained dual-channel load.
+- Cap-length sweep (stress-test entry above) re-run with a cooldown/reboot
+between each `max_segment_s` value, to get a clean read on whether segment
+length itself affects decode efficiency, independent of the thermal drift
+and inherited-backlog confounds noted there.
 - `tiny` vs `base` latency/accuracy tradeoff, per language.
 - Streaming-model (`tiny-streaming-en` etc.) comparison — `bench_streaming_cost.py`
 experiment 2/3 have this wired up but commented out (see
