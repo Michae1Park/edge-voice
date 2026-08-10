@@ -280,6 +280,41 @@ class PipelineOrchestrator:
             if self._settings.stt.use_processes:
                 self._stop_stt_receivers()
                 self._stop_log_listener()
+                self._abandon_segment_queue_backlog()
+
+    def _abandon_segment_queue_backlog(self) -> None:
+        """Stop the parent from ever blocking at interpreter exit trying to
+        flush a segment_queue's feeder thread.
+
+        Each per-channel segment_queue (process mode) is an mp.Queue:
+        VADWorker, in this process, puts SpeechSegments into it; the STT
+        child process reads them. Under a real backlog -- segments queued
+        faster than STT can decode, exactly what bench_pipeline_load.py's
+        stress runs produce -- that child exits (by design, see
+        STTWorker.run()) having only finished whatever segment was already
+        in flight, leaving the rest sitting unread. Once no reader is ever
+        coming back, the parent's feeder thread for that queue can be stuck
+        forever inside pipe_write() once the still-buffered backlog exceeds
+        the underlying pipe's capacity -- easily true here, since each
+        segment carries real PCM audio. multiprocessing registers a
+        no-timeout join() of that feeder thread at interpreter exit
+        (reproduced on the RPi5: `ps -eLo wchan` showed the feeder threads
+        parked in pipe_write and the main thread parked in
+        futex_wait_queue), so without this, the *entire process* hangs
+        forever over one abandoned queue -- see Queue.cancel_join_thread()'s
+        own docs, written for exactly this case.
+
+        Safe here specifically because STT has already been signalled to
+        stop by this point (this runs after _stop_stt_receivers(), which
+        itself runs after the main producer/consumer join loop) -- nothing
+        downstream still needs whatever's left in the queue to get through.
+        """
+        if self._segment_queues is None:
+            return
+        for q in self._segment_queues.values():
+            canceller = getattr(q, "cancel_join_thread", None)
+            if callable(canceller):
+                canceller()
 
     def _stop_log_listener(self) -> None:
         """After the children are gone, so their final records still land."""

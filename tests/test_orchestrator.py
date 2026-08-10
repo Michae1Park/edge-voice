@@ -305,6 +305,56 @@ def test_join_falls_back_to_a_warning_when_no_kill_is_available():
     assert worker.is_alive() is True
 
 
+# -- _abandon_segment_queue_backlog (the interpreter-exit hang guard) ------
+#
+# Reproduces, at unit-test speed, a second RPi5 hang found right after the
+# first: even once a wedged STT child is reaped (_join's kill fallback,
+# above), a real backlog left in its segment_queue can still block the
+# *parent* forever. `ps -eLo wchan` on the RPi5 showed two threads parked in
+# pipe_write (the queue's feeder threads, stuck because the child that would
+# have drained them was already gone) and the main thread parked in
+# futex_wait_queue (joining them) -- multiprocessing joins a Queue's feeder
+# thread with no timeout at interpreter exit, so the whole process hung.
+
+
+class _FakeMpQueue:
+    """Stands in for an mp.Queue -- has .cancel_join_thread(), like the real
+    thing, unlike a plain queue.Queue (used in thread mode)."""
+
+    def __init__(self) -> None:
+        self.cancelled = False
+
+    def cancel_join_thread(self) -> None:
+        self.cancelled = True
+
+
+def test_abandon_segment_queue_backlog_cancels_join_thread_on_every_queue():
+    orch = PipelineOrchestrator(_minimal_settings())
+    rx, tx = _FakeMpQueue(), _FakeMpQueue()
+    orch._segment_queues = {"rx": rx, "tx": tx}
+
+    orch._abandon_segment_queue_backlog()
+
+    assert rx.cancelled is True
+    assert tx.cancelled is True
+
+
+def test_abandon_segment_queue_backlog_ignores_a_plain_queue():
+    """Thread mode's segment_queue is a stdlib queue.Queue with no
+    cancel_join_thread at all -- must not crash calling a method that
+    doesn't exist on it."""
+    orch = PipelineOrchestrator(_minimal_settings())
+    orch._segment_queues = {"rx": queue.Queue()}
+
+    orch._abandon_segment_queue_backlog()  # must not raise
+
+
+def test_abandon_segment_queue_backlog_is_a_noop_before_build():
+    orch = PipelineOrchestrator(_minimal_settings())
+
+    orch._abandon_segment_queue_backlog()  # must not raise; _segment_queues is None
+
+
 # -- reliability / supervisor (Milestone 6) --
 
 
