@@ -146,7 +146,7 @@ class STTSettings(BaseModel):
           has actually been run here. See that comment before relying on one.
 
     No streaming arch exists for any language but en, which is what blocks
-    docs/STREAMING_STT_PLAN.md. Re-check with
+    docs/deferred/STREAMING_STT_PLAN.md. Re-check with
     scratch/probe_moonshine_models.py after upgrading moonshine-voice.
     """
 

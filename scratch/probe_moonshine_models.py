@@ -21,7 +21,7 @@ installed registry. Two reasons to re-run it:
      Note 0.1.0 moved MODEL_INFO into libmoonshine.so, so this script's
      registry side may need adjusting there.
   2. To check whether a *streaming* model exists for a non-English language.
-     That is the upstream gate on docs/STREAMING_STT_PLAN.md: streaming stays
+     That is the upstream gate on docs/deferred/STREAMING_STT_PLAN.md: streaming stays
      unreachable while the deployment language is Korean, and the STREAMING
      column below is the one-command answer to "has that changed yet?"
 
@@ -175,7 +175,9 @@ def main() -> None:
 
     streaming_langs = sorted({n.rsplit("-", 1)[1] for n in found if "streaming" in n})
     print(f"\nStreaming archs published for: {', '.join(streaming_langs) or 'nothing'}")
-    print("docs/STREAMING_STT_PLAN.md unblocks when the deployment language appears in that list.")
+    print(
+        "docs/deferred/STREAMING_STT_PLAN.md unblocks when the deployment language appears in that list."
+    )
 
 
 if __name__ == "__main__":

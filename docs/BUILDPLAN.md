@@ -100,9 +100,9 @@ Next action: Milestone 8's remaining gaps — unit tests for `config`
              integration fixture covers those). CI itself already runs
              lint + format + mypy + the default suite on push and PR.
 Blocked on: nothing for ms 8. Two scoped features are parked:
-             docs/STREAMING_STT_PLAN.md is on hold deliberately (2026-08-06,
+             docs/deferred/STREAMING_STT_PLAN.md is on hold deliberately (2026-08-06,
              possibly indefinitely) — benchmarking showed no throughput win,
-             see the doc's own status line — and docs/CALL_LIFECYCLE_PLAN.md
+             see the doc's own status line — and docs/deferred/CALL_LIFECYCLE_PLAN.md
              awaits a decision to start.
 ```
 
@@ -185,7 +185,7 @@ yet.
    JSON envelope (`{"samples_b64": ..., "timestamp": ...}`); `wav_source_raw.py`
    is the raw-PCM variant used against the real pipeline, since raw PCM is
    what ingest consumes today. The envelope form is the shape
-   `CALL_LIFECYCLE_PLAN.md` would standardize on.
+   `docs/deferred/CALL_LIFECYCLE_PLAN.md` would standardize on.
 7. Both `audio_generation` sources verified: import lines contain no
    `pipeline`, `cli`, or `orchestrator` imports.
 
@@ -824,7 +824,7 @@ as the complete history of the project.
 Both have their own design docs. Neither is blocked on anything in the
 milestones above.
 
-- **`docs/CALL_LIFECYCLE_PLAN.md`** — call-start/call-end signals over MQTT
+- **`docs/deferred/CALL_LIFECYCLE_PLAN.md`** — call-start/call-end signals over MQTT
   (reset the pipeline, clear the UI per call) and JSON-wrapped audio payloads.
   The hard part is already identified: a race where in-flight audio from the
   old call drains through the queues *after* the UI clears. Also resolves the
@@ -834,7 +834,7 @@ milestones above.
   `wav_source.py` publishes a JSON envelope, while `wav_source_raw.py` and
   `mic_source.py` publish raw PCM, which is all `MqttAudioIngest` consumes
   today.
-- **`docs/STREAMING_STT_PLAN.md`** — **on hold (2026-08-06), deliberately, no
+- **`docs/deferred/STREAMING_STT_PLAN.md`** — **on hold (2026-08-06), deliberately, no
   committed timeline to resume.** Scoped and fully benchmarked, not merely
   unstarted: streaming turned out **not** to be a speed win — measured at
   3.3×–10.7× the compute of non-streaming segment decode, because every

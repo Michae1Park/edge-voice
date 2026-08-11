@@ -329,7 +329,7 @@ and inherited-backlog confounds noted there.
 - `tiny` vs `base` latency/accuracy tradeoff, per language.
 - Streaming-model (`tiny-streaming-en` etc.) comparison — `bench_streaming_cost.py`
 experiment 2/3 have this wired up but commented out (see
-`docs/STREAMING_STT_PLAN.md`, currently on hold).
+`docs/deferred/STREAMING_STT_PLAN.md`, currently on hold).
 - Remaining shipped `tiny-*` checkpoints (`ja`, `ar`, `uk`, `vi`) not yet
 benchmarked — expected to follow the same ~1.9x-decoder pattern as `ko`/`zh`
 based on cache inspection, but unconfirmed against real audio.

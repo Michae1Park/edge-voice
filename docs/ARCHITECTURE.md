@@ -119,7 +119,7 @@ packages onto the milestones that built them.
 | `webui/templates/console.html` | The kiosk console page — transcript feed, status pill and strip, per-module chips, static legend bar. |
 | **Dev/test tooling** (separate processes, never imported by the pipeline) | |
 | `utils/audio_generation/wav_source_raw.py` | Replays `.wav` files at real-time pace as raw PCM over MQTT — the wire format ingest actually consumes; used by the integration fixture. |
-| `utils/audio_generation/wav_source.py` | Same replay, but publishing a JSON envelope — the shape `CALL_LIFECYCLE_PLAN.md` would standardize on (§11). |
+| `utils/audio_generation/wav_source.py` | Same replay, but publishing a JSON envelope — the shape `docs/deferred/CALL_LIFECYCLE_PLAN.md` would standardize on (§11). |
 | `utils/audio_generation/mic_source.py` | Captures a live mic at the device's native rate, resamples, publishes raw PCM over MQTT exactly like a real call leg. |
 | `utils/audio_generation/fake_source.py` | Synthetic packet generator that skips MQTT entirely, from the pre-MQTT skeleton; kept for exercising the worker graph without audio. |
 | `audio_ingest/audio_dump.py`, `audio_ingest/segment_audio_dump.py` | Optional debug workers writing raw and post-VAD audio to WAV, for inspecting VAD boundaries against the original recording. Off by default. |
@@ -549,14 +549,14 @@ validation — performance is still verified manually, on target hardware.
   `make install-service` — containerization itself remains a non-goal (§2),
   but packaging/distribution beyond "clone the repo, apt the broker, install a
   unit file" is still open.
-- **Streaming STT** (`STREAMING_STT_PLAN.md`) — scoped, not started. Moonshine
+- **Streaming STT** (`docs/deferred/STREAMING_STT_PLAN.md`) — scoped, not started. Moonshine
   publishes streaming archs for English only, so `(language, arch)` becomes a
   validated pair rather than a free choice; that validation layer is the first
   piece of work in the plan. Measured finding worth carrying here: streaming is
   **3.3×–10.7× more compute**, not less — it buys latency-to-first-text and
   replaces the partial transcripts in §3, rather than making STT faster. Whether
   two streaming channels fit on a Pi is the open risk that decides the plan.
-- **Call lifecycle + JSON audio payloads** (`CALL_LIFECYCLE_PLAN.md`) —
+- **Call lifecycle + JSON audio payloads** (`docs/deferred/CALL_LIFECYCLE_PLAN.md`) —
   scoped, not started. Call-start/call-end signals over MQTT, resetting the
   pipeline and clearing the UI per call, with audio moving from raw PCM to a
   JSON envelope. Two known hazards are already recorded there: `reset_channel`
