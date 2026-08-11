@@ -5,6 +5,7 @@ config, and starts the pipeline (and optionally the web UI) as configured.
 
 import argparse
 import logging
+import os
 import signal
 import subprocess
 import sys
@@ -17,6 +18,10 @@ from edge_voice.pipeline.orchestrator import PipelineOrchestrator
 from edge_voice.webui.app import create_app
 
 logger = logging.getLogger(__name__)
+
+# Read by libmoonshine's onnxruntime session setup (native getenv, not an
+# edge_voice setting) to force onnxruntime's intra-op thread pool to 1
+os.environ.setdefault("MOONSHINE_ORT_SINGLE_THREAD", "1")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
