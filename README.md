@@ -100,6 +100,22 @@ make install-service   # sudo cp deploy/edge-voice.service /etc/systemd/system/,
 
 Edit `User=`, `WorkingDirectory=`, and `ExecStart=` in `deploy/edge-voice.service` to match your install (venv path, user) before running this — the checked-in values are placeholders. Re-run `make install-service` any time you change that file.
 
+### Sanity-checking a running deployment
+
+If transcription seems slower than expected, confirm the process layout and env actually match what you intended before digging further. Find the running process and its STT child processes (the binary is `edge-voice`, hyphenated — `pgrep -f edge_voice` will find nothing):
+
+```bash
+pgrep -af edge-voice
+PARENT=$(pgrep -f edge-voice | head -1)
+ps --ppid "$PARENT" -o pid,cmd | grep spawn_main   # STT worker child processes
+```
+
+Confirm `MOONSHINE_ORT_SINGLE_THREAD` actually reached a running process, not just that you set it somewhere (`spawn` inherits env at fork time, so a stale shell or service env can silently drop it):
+
+```bash
+cat /proc/<pid>/environ | tr '\0' '\n' | grep MOONSHINE_ORT_SINGLE_THREAD
+```
+
 ## Development
 
 ```bash
