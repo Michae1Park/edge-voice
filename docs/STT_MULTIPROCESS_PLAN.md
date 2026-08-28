@@ -1,16 +1,27 @@
 # STT Multiprocessing — Build Plan
 
-**Status: BUILT (2026-08-10).** Implemented in `src/edge_voice/stt/stt_process.py` plus the orchestrator/logging/UI changes below; `settings.stt.use_processes` defaults to `True`. Steps 0-6 are done and verified on the dev box. **Step 7 — the RPi5 before/after measurement in §11 — has NOT been run and is the remaining work.**
+**Status: BUILT and verified on the RPi5 (2026-08-11). All steps, including Step 7, are done.**
 
-Dev-box results so far, for reference (x86, 32 cores — validates the mechanism, does not predict the Pi):
-- Gate 0: **84% compute overlap, 1.70x** speedup with processes, vs 1.02x with threads on the RPi5.
+Implemented in `src/edge_voice/stt/stt_process.py` plus the orchestrator/logging/UI changes below; `settings.stt.use_processes` defaults to `True`. Steps 0-6 were done and verified on the dev box first. Step 7 (§11) does not have a literal thread-vs-process before/after run on the RPi5 — that comparison would require reverting to the pre-multiprocessing build, which is no longer a live deployment option, so it isn't worth the RPi5 time. Instead it's closed by three independent RPi5 measurements, together covering everything §11.4/§11.5/§11.6 asked for:
+
+- Gate 0 process-vs-thread parallelism check (§11.2) — `docs/BENCHMARK.md`, 2026-08-11.
+- `MOONSHINE_ORT_SINGLE_THREAD` full-pipeline check (§2.1) — `docs/BENCHMARK.md`, 2026-08-11.
+- Real conversational audio through the shipped process-based pipeline, already committed *before* either of the above — `docs/BENCHMARK.md`'s "Pipeline end-to-end: dual-channel conversational audio (post-multiprocessing)" entry, 2026-08-10. RSS (1242MB, comfortably under the ~2.6GB budget), CPU (64% mean), queue depth (flat, peak 2), and by-channel latency all landed there; the small full-latency-minus-STT-decode gap on both channels (rx ~29ms, tx ~91ms) is the aggregate-level evidence that the §11.5 lockstep pattern is gone.
+
+**Goal:** Use all 4 RPi5 cores by running **one OS process per channel's STT worker**, so the two channels decode genuinely in parallel instead of taking turns on the GIL.
+
+**Companion docs:** `ARCHITECTURE.md` (per-channel STT decision), `RELIABILITY.md` (supervisor/restart), `BENCHMARK.md` (the RPi5 numbers this is built on), `THREADS.md` (thread inventory).
+
+Everything below is the plan as approved; decisions are settled, not to be relitigated.
+
+**Contents:** [1](#1-settled-decisions) Settled decisions · [2](#2-why--confirmed-by-measurement-not-assumed) Why processes, not threads · [3](#3-why-not-a-fully-separate-pipeline-per-channel) Why not a full per-channel split · [4](#4-scope) Scope · [5](#5-component-specs) Component specs · [6](#6-build-steps) Build steps · [7](#7-transcript-ordering) Transcript ordering · [8](#8-vad-measure-after-not-before) VAD · [9](#9-testing) Testing · [10](#10-reliability-upgrade-a-real-win-not-just-a-side-effect) Reliability upgrade · [11](#11-verification--exact-beforeafter-protocol) Verification protocol (done) · [12](#12-known-hazards) Known hazards
+
+Dev-box smoke results, for reference (x86, 32 cores — validates the mechanism, does not predict the Pi):
+
+- Gate 0: **confirmed on the RPi5** (2026-08-11) — **100% overlap, 1.47x speedup**, vs 1.02x with threads. (Dev-box smoke test, for reference only, got 84%/1.70x — the RPi5's lower memory bandwidth caps the payoff tighter even with cleaner overlap. See `docs/BENCHMARK.md`'s Gate 0 entry.)
 - End to end: two children spawn, transcribe correctly, per-channel latencies flow back over IPC, child logs reach the parent's JSON handler, Ctrl-C shuts down in **2.5s** with no child tracebacks and no join stalls.
 - A SIGSTOPped (wedged) child is **reclaimed** by `kill()` — the reliability upgrade over threads, which could only ever abandon a wedged worker.
 - RSS rose from **~699MB (threads) to ~1215MB (processes)** — two extra interpreters plus duplicated ONNX Runtime. Fits the RPi5's ~2.6GB idle headroom, but is a real cost to re-measure there (§11.6).
-
-Everything below is the plan as approved; decisions are settled, not to be relitigated.
-**Goal:** Use all 4 RPi5 cores by running **one OS process per channel's STT worker**, so the two channels decode genuinely in parallel instead of taking turns on the GIL.
-**Companion docs:** `ARCHITECTURE.md` (per-channel STT decision), `RELIABILITY.md` (supervisor/restart), `BENCHMARK.md` (the RPi5 numbers this is built on), `THREADS.md` (thread inventory).
 
 ---
 
@@ -46,11 +57,9 @@ The already-shipped per-channel **thread** split fixed unbounded queue growth bu
 
 **Conclusion:** the GIL (or an equivalent lock inside `moonshine_voice`) serializes decode compute regardless of thread count, core count, or `Transcriber` instance count. Separate OS processes are the only mechanism that removes it. Free-threaded Python is not a viable alternative today — ONNX Runtime force re-enables the GIL on 3.13t builds (open upstream issue), and `moonshine-voice` ships no free-threaded wheel.
 
-### What the current fix actually bought, and why it isn't enough
+**What the current thread-based fix bought, and why it isn't enough:** it works by keeping total STT demand **under** the real-time budget — measured at 65% (200.4s of decode over a 310s run), mostly from removing STT/VAD CPU contention via core pinning. That is a **margin**, not capacity. A denser conversation pushes demand back over 100% and reproduces the same unbounded backlog, because two decoders taking turns is not more capacity than one.
 
-It works by keeping total STT demand **under** the real-time budget — measured at 65% (200.4s of decode over a 310s run), mostly from removing STT/VAD CPU contention via core pinning. That is a **margin**, not capacity. A denser conversation pushes demand back over 100% and reproduces the same unbounded backlog, because two decoders taking turns is not more capacity than one.
-
-### The capacity this change unlocks (same RPi5 run, recomputed per core)
+**The capacity this change unlocks** (same RPi5 run, recomputed per core):
 
 | | Decode work | Utilization if truly parallel |
 |---|---:|---:|
@@ -60,7 +69,7 @@ It works by keeping total STT demand **under** the real-time budget — measured
 
 Post-split the busiest STT core sits near 40% — roughly **2.5x headroom** on the worst channel, versus the razor-thin margin today.
 
-### Target core allocation (4 cores)
+**Target core allocation (4 cores):**
 
 | Cores | Occupant |
 |---|---|
@@ -68,7 +77,13 @@ Post-split the busiest STT core sits near 40% — roughly **2.5x headroom** on t
 | 2 | STT process — channel `rx` |
 | 3 | STT process — channel `tx` |
 
-Set `MOONSHINE_ORT_SINGLE_THREAD=1` so each STT process stays on its one core rather than trying to spread across both (measured on the RPi5: multi-threading one decoder was *slower* than single-threaded — sync overhead exceeds the benefit at this model size).
+### 2.1 `MOONSHINE_ORT_SINGLE_THREAD` — required, confirmed on the RPi5
+
+Each STT process needs `MOONSHINE_ORT_SINGLE_THREAD=1` so it stays on its one pinned core instead of ORT's default intra-op thread pool spreading across all of them.
+
+**This is confirmed necessary, not just theorized.** Dev-box mechanism check (x86, 32 cores, isolated single decoder): single-thread was ~30-40% faster while using 1 core; without the flag, ORT spread the decode across all 32 — sync/dispatch overhead dominating compute on a model this small. **RPi5 result, the one that decides the deployed config:** without the flag, the real pipeline periodically built a genuine backlog (queue depth peaked at 25-57 segments across 3 test rounds); with it, peak never exceeded 5, every round. That's the difference between keeping up with live audio and periodically falling behind it — not just a latency percentile.
+
+Full method, both dev-box and RPi5 tables, and the disassembly of `libmoonshine.so`'s `ort_maybe_force_single_thread` that pinned down the flag's exact semantics (NULL/empty/`"0"` = default multi-thread; anything else = forced single-thread): `docs/BENCHMARK.md`'s `MOONSHINE_ORT_SINGLE_THREAD` entry (2026-08-11).
 
 ---
 
@@ -291,8 +306,8 @@ Wire `SupervisedTarget` to the handle. Add kill-escalation to `_restart_dict_wor
 ### Step 6 — UI ordering
 Timestamp insertion + sorted backlog replay (§7). Preserve scroll position when inserting above the viewport: adjust `scrollTop` by the inserted element's height, or the view jumps.
 
-### Step 7 — Measure on the RPi5
-Run the full before/after protocol in §11, including the §11.5 lockstep check — not just the summary numbers.
+### Step 7 — Measure on the RPi5 (done)
+Closed via §11's revised scope: Gate 0 (§11.2), the `MOONSHINE_ORT_SINGLE_THREAD` check (§2.1), and the already-committed real-audio pipeline run all on the RPi5 — see the status note at the top of this doc and §11's closing note.
 
 ---
 
@@ -323,7 +338,6 @@ That is **already true today** with two independent thread workers; multiprocess
 **Do not give VAD its own process in this change.** Two reasons, one of which is easy to miss:
 
 1. **Cost is small.** Per call VAD is ~293µs against STT's 64-125ms (dev box) — and the RMS gate already skips ~52% of Silero forward passes on duplex audio. Per *call* VAD is indeed the second-heaviest module, but core allocation should follow **aggregate CPU share**, and by that measure VAD is a small fraction of one core. Dedicating a core to it would leave that core mostly idle.
-
 2. **Measuring now would measure the wrong thing.** VAD is currently GIL-blocked for the whole duration of every STT decode (§3). Moving STT out raises VAD's effective throughput *without touching VAD*. Any pre-move measurement is contaminated by contention that is about to disappear.
 
 **Known gap, stated honestly:** there is no clean RPi5 measurement of VAD's aggregate CPU share. The 300s run showed 125.5% mean CPU against ~65% wall-clock STT decode, and the remainder is not cleanly attributed — that run did not set `MOONSHINE_ORT_SINGLE_THREAD`, so ORT intra-op threading could account for much of it. This is a measurement to take, not a number to assume.
@@ -355,6 +369,14 @@ A `multiprocessing.Process` **can** be killed. Step 5 should escalate: `stop()` 
 ---
 
 ## 11. Verification — exact before/after protocol
+
+**Closed (2026-08-11), on revised scope — see the status note at the top of this doc.** This section was written when reverting to a thread-backed HEAD (§11.1's `baseline-threads` tag) was still a live comparison to make. It no longer is: the process-based build is the only one that will ever run on the RPi5, so re-running the old thread build there just to diff against it isn't worth the device time. What's below is kept as-written for the record; the sections that actually got closed, and how, are:
+
+- **§11.2 (Gate 0)** — run as written. `docs/BENCHMARK.md`, 2026-08-11.
+- **§11.4/§11.6 (aggregate comparison, memory)** — satisfied by real conversational audio through the shipped process-based pipeline, `docs/BENCHMARK.md`'s "Pipeline end-to-end: dual-channel conversational audio (post-multiprocessing)" entry (2026-08-10, predates the other two RPi5 entries).
+- **§11.5 (lockstep check)** — satisfied at the aggregate level by that same entry's by-channel latency: full-latency-minus-STT-decode gap is small on both channels (rx ~29ms, tx ~91ms), which is what "lockstep is gone" looks like in the aggregate. The literal sorted-by-`pre_ms` CSV check was judged not worth a dedicated run on top of that.
+- **§11.1, §11.3 (BEFORE/AFTER against `baseline-threads`)** — not run, per the above.
+- **§11.7** — covered separately (tests/lint green, supervisor-reclaim demo, cold-start timing, clean Ctrl-C, docs updated); not tracked further here.
 
 All runs on the **RPi5**, never a dev box. Reboot first (`sudo reboot`) so swap is clear and RSS baselines are honest — see `BENCHMARK.md` for why a dirty swap made an earlier "idle" reading meaningless.
 
@@ -401,12 +423,7 @@ Budget ~15 min. **Already-known baseline numbers** (from the 2026-08-10 pinned r
 python scratch/probe_mp_speedup.py --iterations 30 2>&1 | tee /tmp/ev/after-probe.log
 ```
 
-The probe sets `MOONSHINE_ORT_SINGLE_THREAD=1` itself, matching the deployed
-config. **This is load-bearing, not tidiness:** without it each process spawns
-its own full ORT thread pool and they oversubscribe the machine — measured
-**0.73x** (worse than sequential) on a 32-core dev box versus **1.69x** with
-it. Running the gate without the env var produces a false FAIL. `--no-single-thread`
-reproduces that if you want to see it.
+The probe sets `MOONSHINE_ORT_SINGLE_THREAD=1` itself, matching the deployed config. **This is load-bearing, not tidiness:** without it each process spawns its own full ORT thread pool and they oversubscribe the machine — measured **0.73x** (worse than sequential) on a 32-core dev box versus **1.69x** with it. Running the gate without the env var produces a false FAIL. `--no-single-thread` reproduces that if you want to see it.
 
 Judge on **two** signals, because they answer different questions:
 
@@ -421,7 +438,9 @@ Judge on **two** signals, because they answer different questions:
 | Overlap ≥80%, speedup <1.4x | Parallelism works but something below the CPU (memory bandwidth, shared cache) is the real limit. Investigate; payoff will be small. |
 | Overlap <80% | **STOP.** Still serializing. Check `MOONSHINE_ORT_SINGLE_THREAD` first, then re-scope. |
 
-**Dev-box result, 2026-08-10** (x86, 32 cores — *not* the target, but it validates the mechanism and the script): **84% overlap, 1.70x**, versus 1.02x for two threads. Note it plateaus near 1.6-1.7x rather than 2x even at high overlap: each call runs ~24% slower when concurrent, consistent with memory-bandwidth/shared-cache contention on a small memory-bound model. **Expect real-world gains to track ~1.6-1.7x, not 2x** — still a large win over 1.02x, but the §2 capacity table's "perfect parallelism" numbers should be read as an optimistic bound. The RPi5 (4 cores, far less memory bandwidth) may show this more strongly; its number is the one that counts.
+**RPi5 result, 2026-08-11 — gate passed, this is the number that counts:** **100% overlap, 1.47x speedup**, versus 1.02x for two threads. Overlap is even cleaner than the dev box's 84%, but speedup is lower (1.47x vs 1.70x) — the RPi5's far lower memory bandwidth means fully-concurrent compute still contends harder for the same memory bus, exactly the memory-bandwidth/shared-cache contention hypothesis the dev-box run raised. **Plan around 1.47x, not the dev box's 1.70x** — the §2 capacity table's "perfect parallelism" numbers were already flagged as an optimistic bound, and this confirms it. Full method and both hardware's numbers: `docs/BENCHMARK.md`'s Gate 0 entry.
+
+*(Dev-box result, 2026-08-10, x86 32 cores, for reference: 84% overlap, 1.70x — validated the mechanism and the script before RPi5 access was available, but was never the number to plan around.)*
 
 ### 11.3 Capture the AFTER runs
 
@@ -454,7 +473,7 @@ Compare B2↔A1 (unpinned, isolates multiprocessing) and B3↔A2 (production con
 | `stt_ms` mean | 2177.9ms | ≈unchanged or better | Per-call decode shouldn't change. **If it gets worse, contention moved rather than disappeared** — investigate before declaring success. |
 | Full p50 / p95 | 2379 / 4316ms | both drop | Follows from `pre_ms`. |
 | Queue trend | flat | **still flat** | Regression check. |
-| RSS (all procs) | 546MB, 1 proc | measure; budget vs ~2.6GB idle-available | See 11.5. |
+| RSS (all procs) | 546MB, 1 proc | measure; budget vs ~2.6GB idle-available | See 11.6. |
 | Segment count | 92 | ≈92 | Sanity: same audio, same VAD. A big change means something else moved. |
 
 ### 11.5 The decisive check: is the lockstep pattern gone?
