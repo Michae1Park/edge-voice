@@ -320,6 +320,99 @@ above for the actual target-workload numbers.
 
 ---
 
+## `MOONSHINE_ORT_SINGLE_THREAD`: single-thread vs ORT's default multi-thread pool
+
+**Date:** 2026-08-11
+**Hardware:** Raspberry Pi 5 (decisive numbers); a 32-core x86 dev box was also run same-day as a same-day mechanism pre-check, noted in Results/Notes for context only
+**Scripts:** `[scratch/bench_ort_threads.py](../scratch/bench_ort_threads.py)` (isolated single decoder), `[scratch/bench_pipeline_load.py](../scratch/bench_pipeline_load.py)` (full pipeline)
+**Config:** `settings.stt.use_processes=true` (shipped default) for the pipeline runs; `EDGE_VOICE_STT__USE_PROCESSES=false` forces the single in-process decoder the isolated test needs, so it isn't conflated with multiprocessing
+
+### Why this needed measuring
+
+`docs/STT_MULTIPROCESS_PLAN.md` assumed single-thread ORT beats its default multi-threaded pool ("sync overhead exceeds the benefit at this model size") without ever measuring it on the Pi. Disassembling `ort_maybe_force_single_thread` in `libmoonshine.so` confirmed the flag is binary: `getenv("MOONSHINE_ORT_SINGLE_THREAD")` — NULL, empty, or the literal string `"0"` all skip forcing and leave ORT's own default pool (sized to `hardware_concurrency()`); anything else forces `intra_op_num_threads=1`. That settled *what* the flag does; this entry settles whether it's worth setting.
+
+### Method
+
+Two levels:
+
+1. **Isolated decoder** — one thread-backed decoder, not the multiprocess default, fed the same 24s tx/rx clip, one run per env var value.
+2. **Full pipeline** — real orchestrator, real MQTT broker, `use_processes=true`, 150s runs, **3 rotated rounds per config**. Rotated (not fixed order) because a same-order dev-box comparison couldn't rule out time-drift aliasing with the config effect — see Notes.
+
+```bash
+# isolated decoder
+EDGE_VOICE_STT__USE_PROCESSES=false python3 scratch/bench_ort_threads.py
+EDGE_VOICE_STT__USE_PROCESSES=false MOONSHINE_ORT_SINGLE_THREAD=0 python3 scratch/bench_ort_threads.py
+EDGE_VOICE_STT__USE_PROCESSES=false MOONSHINE_ORT_SINGLE_THREAD=1 python3 scratch/bench_ort_threads.py
+
+# full pipeline, one of three configs (pinned adds --stt-cores 2,3 --other-cores 0,1)
+MOONSHINE_ORT_SINGLE_THREAD=1 python3 scratch/bench_pipeline_load.py --duration-s 150 --grace-s 5
+```
+
+### Results — isolated decoder (RPi5)
+
+| `MOONSHINE_ORT_SINGLE_THREAD` | `total_latency_s` (24s audio) | Cores >50% busy |
+| --- | ---: | ---: |
+| unset | 16.43s | 4 |
+| `0` | 17.23s | 4 |
+| `1` | **13.73s** | 3 |
+
+Single-thread ~16-20% faster. (Dev-box pre-check, same day, same direction at larger margin: 0.94s vs 1.55s/1.34s, 1 core busy vs 31-32 — confirms the mechanism, not a substitute for the Pi number.)
+
+### Results — full pipeline (RPi5, averaged over 3 rotated rounds)
+
+| Config | Full latency mean | p95 | CPU mean | Queue depth peak (3 rounds) |
+| --- | ---: | ---: | ---: | --- |
+| unpinned, multi-thread (default) | 2849 ms | 5651 ms | 122% | **25, 51, 57** |
+| pinned + single-thread (deployed config) | **2112 ms** | **3811 ms** | 65% | 1, 1, 5 |
+| unpinned + single-thread | 2170 ms | 3989 ms | 65% | 1, 1, 3 |
+
+### Notes
+
+- **The decisive signal is queue depth, not latency.** Without the flag, every one of 3 rounds built a real backlog (25-57 segments). With it — pinned or not — no round ever exceeded 5. That's the difference between keeping up with live audio and periodically falling behind it, not just "a bit slower."
+- **Pinning adds a further, smaller edge on top of single-threading** (2112ms vs 2170ms mean, ~3%) — real, consistent with cache-locality reasoning, but secondary. The flag is the load-bearing decision; pinning is a bonus on top of it.
+- **Rounds were rotated, not sequential**, so a monotonic drift (thermal, background load) would hit all three configs equally instead of aliasing into a fake config effect — see the dev-box caution below for why this mattered.
+- **The same full-pipeline comparison on the dev box was noisy and pointed the wrong way** (single run each, no rotation): pinned+single-thread measured *slightly slower* than the multi-thread default there. Root cause, not a contradiction: the dev box has 32 idle cores and this recording is sparse/gappy, so neither pinning nor single-threading has any scarcity to defend against — the RPi5's real constraint (4 cores, real memory-bandwidth limits) is what makes the effect show up at all. The isolated-decoder mechanism test *did* transfer from dev box to Pi; the full-pipeline comparison did not, and needed the real hardware.
+- Confirms the assumption in `docs/STT_MULTIPROCESS_PLAN.md` §2.1. Ship `MOONSHINE_ORT_SINGLE_THREAD=1`.
+
+---
+
+## STT multiprocessing Gate 0: process-based parallelism on RPi5
+
+**Date:** 2026-08-11
+**Hardware:** Raspberry Pi 5
+**Script:** `[scratch/probe_mp_speedup.py](../scratch/probe_mp_speedup.py)`
+**Config:** `tiny-ko`, `MOONSHINE_ORT_SINGLE_THREAD=1` (set by the script itself), 30 decodes/child, model load excluded from timing
+
+### Why this needed measuring
+
+`docs/STT_MULTIPROCESS_PLAN.md`'s whole premise rests on `multiprocessing.Process` removing the GIL-serialization that capped two threads at 1.02x (measured on the RPi5, `probe_gil_release.py`). The process-based number — 84% overlap, 1.70x speedup — was so far only measured on a 32-core x86 dev box. §11.2 names this **Gate 0**: the cheap check before writing any `src/` code, required to pass on the RPi5 specifically, not inferred from the dev box.
+
+### Method
+
+Two independent `Transcriber` instances, one per `multiprocessing.Process`, each decoding the same 3s clip 30 times. Model load is excluded from the timing — each child signals ready, then blocks on a shared barrier; the clock starts once both are waiting — so spawn+load overhead (3.6-7.3s per instance on the RPi5) doesn't swamp the decode-only comparison.
+
+```bash
+python3 scratch/probe_mp_speedup.py --iterations 30
+```
+
+### Results
+
+| | Dev-box (x86, 32 cores) | RPi5 |
+| --- | ---: | ---: |
+| Overlap | 84% | **100%** |
+| Speedup | 1.70x | **1.47x** |
+| Gate (≥80% overlap, ≥1.4x speedup) | pass | **pass** |
+
+For reference, two *threads* on the RPi5 (`probe_gil_release.py`) measured 1.02x — no benefit, GIL-bound.
+
+### Notes
+
+- **Overlap higher, speedup lower — consistent with the memory-bandwidth hypothesis, not a contradiction.** On the RPi5 the two processes were computing simultaneously effectively the entire time (100%), more cleanly than the dev box's 84%. But the RPi5's far lower memory bandwidth means that concurrent compute contends harder for the same memory bus, capping the throughput gain to 1.47x instead of the dev box's 1.70x. The GIL-removal mechanism is confirmed even more cleanly on target hardware; the payoff is real but smaller — this is the number to plan around, not the dev box's more optimistic 1.70x.
+- Repeated `STTWorker: ... final line was repetitive, falling back to best partial` log lines are expected: the probe decodes the identical clip 30 times per child, so the repetition guard firing every time is a property of the synthetic workload, not a defect.
+- **Gate 0 passes** — confirms the plan's premise on the actual target hardware. Step 7's remaining work is the full before/after pipeline protocol (`docs/STT_MULTIPROCESS_PLAN.md` §11.3-11.7); this closes only the Gate 0 sub-step (§11.2).
+
+---
+
 ## Open items for future entries
 
 - Cap-length sweep (stress-test entry above) re-run with a cooldown/reboot
