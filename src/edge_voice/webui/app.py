@@ -29,6 +29,7 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from edge_voice.pipeline.models import TranscriptEvent
@@ -37,6 +38,7 @@ from edge_voice.pipeline.orchestrator import PipelineOrchestrator
 logger = logging.getLogger(__name__)
 
 _TEMPLATE_PATH = Path(__file__).parent / "templates" / "console.html"
+_STATIC_DIR = Path(__file__).parent / "static"
 
 # How long each blocking Queue.get() waits before looping back to check for
 # client disconnect. Not a "refresh rate" -- a new transcript interrupts the
@@ -46,6 +48,7 @@ SSE_POLL_TIMEOUT_S = 1.0
 
 def create_app(orchestrator: PipelineOrchestrator) -> FastAPI:
     app = FastAPI(title="edge-voice")
+    app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:

@@ -93,7 +93,7 @@ def _wait_until(predicate, timeout: float = 3.0, interval: float = 0.05) -> bool
 def test_index_serves_console_html(client):
     resp = client.get("/")
     assert resp.status_code == 200
-    assert "EDGE-VOICE" in resp.text
+    assert "Edge Voice" in resp.text
 
 
 def test_status_before_start(client):
