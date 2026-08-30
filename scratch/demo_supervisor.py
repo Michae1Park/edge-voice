@@ -65,11 +65,13 @@ def main() -> None:
     print(f"Same instance? {orch._vad is dead_vad}  (should be False -- it was replaced)")
 
     section("3. Simulating an STTWorker stall (handler hangs, input backs up)")
-    orch._stt._handle_segment = lambda seg: time.sleep(999)  # type: ignore[union-attr]  # never returns
+    # One dedicated STTWorker per channel now (see docs/ARCHITECTURE.md) --
+    # stall just the "rx" one, same as feeding only "rx" segments below.
+    orch._stt["rx"]._handle_segment = lambda seg: time.sleep(999)  # type: ignore[attr-defined]  # never returns
     from edge_voice.pipeline.models import SpeechSegment
 
     for i in range(3):
-        orch._segment_queue.put(  # type: ignore[union-attr]
+        orch._segment_queues["rx"].put(  # type: ignore[union-attr, index]
             SpeechSegment(
                 channel_id="rx", start=0.0, end=1.0, audio=b"\x00" * 3200, segment_id=f"demo-{i}"
             )

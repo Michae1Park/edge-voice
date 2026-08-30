@@ -26,7 +26,8 @@ each worker does. This covers *how* they start, run, and stop.
 | `MqttAudioIngest` | Pulls audio in from MQTT | No |
 | `ChannelRouter` | Re-packetizes, routes by channel | No |
 | `VADWorker` | Segments speech per channel | No |
-| `STTWorker` | Runs transcription | No |
+| `STTWorker-<channel>` | Runs transcription, one per channel. **A separate OS process, not a thread**, when `stt.use_processes` (the default) — see `STT_MULTIPROCESS_PLAN.md`. The orchestrator drives it through `STTProcessHandle`, which presents the same Thread-shaped surface, so everything in this doc still applies. | No |
+| `STTReceiver-<channel>` | Drains one STT child's transcript queue and republishes into `TranscriptHub`. Process mode only. Must outlive its child on shutdown — an undrained queue keeps the child alive. | `stt.use_processes` |
 | `Supervisor` | Watches the four above, restarts on crash/stall | `reliability.enabled` |
 | `MetricsCollector` | Aggregates queue depth / STT latency / restart budget / MQTT status on a timer | `metrics.enabled` |
 | `AudioDumpWorker` / `SegmentAudioDumpWorker` | Debug-only raw/segment audio capture | `dump.enabled` / `segment_dump.enabled` |
@@ -50,7 +51,9 @@ mistaken for one.
 _build_mqtt_subscriber() → MqttAudioIngest(...)   ┐
 _build_router()          → ChannelRouter(...)     │  __init__ only,
 _build_vad()             → VADWorker(...)         │  nothing running
-_build_stt()             → STTWorker(...)         ┘
+_build_stt(channel)      → STTProcessHandle(...)  ┘  (or STTWorker if
+                            one per channel          stt.use_processes
+                                                     is False)
 _build_supervisor()      → Supervisor(...)          (if reliability.enabled)
 _build_metrics()         → MetricsCollector(...)    (if metrics.enabled)
 ```

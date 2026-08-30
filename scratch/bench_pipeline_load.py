@@ -59,9 +59,12 @@ CONDITIONS recorded per segment, since latency isn't just one number:
   - elapsed_s since the run started -- to eyeball drift/warmup/thermal
     effects over a long sustained run, e.g. on the RPi5.
 
-RAM/CPU sampled from /proc/self/{status,stat} for THIS process only (the
-pipeline's worker threads all live here; a separately running MQTT broker is
-a different OS process and not included -- check with `ps aux | grep
+RAM/CPU are summed across this process AND the STT child processes, read
+from /proc/<pid>/{status,stat}. Summing is essential once STT runs in its
+own processes (settings.stt.use_processes): sampling /proc/self alone would
+exclude the most expensive stage entirely and hide the very thing this
+measures -- CPU rising past 100% as two decoders run in parallel. A
+separately running MQTT broker is still not included (check `ps aux | grep
 mosquitto` if that's wanted too). RSS and CPU are sampled at DIFFERENT
 cadences on purpose -- they fail differently, so they need different
 resolution:
@@ -94,21 +97,23 @@ directly. This is deliberately the real pipeline, not a mock.
 
 Optional CPU pinning (--stt-cores / --other-cores)
 ---------------------------------------------------
-`threading.Thread.native_id` (the real OS thread ID) is available once a
-thread has started, and `orch._stt` etc. are the actual Thread objects
-(same reach-in pattern demo_supervisor.py already uses) -- so this script
-can set OS-level CPU affinity per worker thread with no changes to src/.
---stt-cores confines STTWorker to specific cores; --other-cores (optional)
-confines every other worker (ingest/router/VAD/supervisor/metrics) plus
-this script's own main thread to a disjoint set, for a true dedication test
-rather than just a preference. Linux-only (os.sched_setaffinity).
+Works for both STT modes, because Linux puts thread IDs and process IDs in
+one namespace and sched_setaffinity takes either. Which attribute holds the
+usable id differs, and _pin_worker() handles that: a `threading.Thread`
+exposes the OS thread id as `native_id` (its `ident` is Python's own handle
+and is NOT valid here), while an `STTProcessHandle` deliberately exposes
+the child's pid as `ident`. --stt-cores confines the STT workers;
+--other-cores (optional) confines every other worker
+(ingest/router/VAD/supervisor/metrics) plus this script's own main thread
+to a disjoint set, for a true dedication test rather than a preference.
+Linux-only (os.sched_setaffinity).
 
-This only pins the STT *worker* thread -- it does NOT by itself stop ONNX
-Runtime from spawning its own internal threads for one inference call
-(intra-op parallelism), which wouldn't inherit this affinity automatically.
-See scratch/bench_ort_threads.py (already in this repo) for the separate
-MOONSHINE_ORT_SINGLE_THREAD lever that controls THAT -- the two are meant
-to be used together, not as alternatives to each other.
+Pinning alone does NOT stop ONNX Runtime from spawning its own internal
+threads per inference call. That matters more than it sounds: with two STT
+processes each spawning a full thread pool, they oversubscribe the machine
+and end up SLOWER than sequential (measured 0.73x vs 1.69x on a 32-core dev
+box -- see scratch/probe_mp_speedup.py). Always set
+MOONSHINE_ORT_SINGLE_THREAD=1 alongside these flags.
 
 Looping the same clip means segments near each loop boundary can be cut
 oddly (abrupt silence->speech at the splice) -- a small fraction of samples,
@@ -140,6 +145,8 @@ import queue
 import statistics
 import threading
 import time
+from collections.abc import Callable
+from typing import Any
 from dataclasses import dataclass, fields
 
 from edge_voice.config.settings import Settings
@@ -155,20 +162,20 @@ CLK_TCK = os.sysconf("SC_CLK_TCK")
 CAP_EPSILON_S = 0.15
 
 
-def _read_proc_self() -> tuple[float, int]:
-    """(rss_mb, cpu_ticks) for this process, from /proc/self/{status,stat}.
+def _read_proc(pid: str = "self") -> tuple[float, int]:
+    """(rss_mb, cpu_ticks) for one process, from /proc/<pid>/{status,stat}.
 
     cpu_ticks is cumulative (utime+stime) since process start -- callers diff
     two readings to get CPU used over an interval. Linux-only, same
     assumption as the rest of this repo's deployment target (RPi5).
     """
     rss_kb = 0
-    with open("/proc/self/status") as f:
+    with open(f"/proc/{pid}/status") as f:
         for line in f:
             if line.startswith("VmRSS:"):
                 rss_kb = int(line.split()[1])
                 break
-    with open("/proc/self/stat") as f:
+    with open(f"/proc/{pid}/stat") as f:
         # Fields are 1-indexed in proc(5); utime=14, stime=15. Split off the
         # comm field by its LAST ')' rather than by position -- comm can
         # itself contain spaces/parens, but never a ')' after the real one.
@@ -177,16 +184,45 @@ def _read_proc_self() -> tuple[float, int]:
     return rss_kb / 1024.0, utime + stime
 
 
+def _read_proc_tree(extra_pids: list[int]) -> tuple[float, int]:
+    """Summed (rss_mb, cpu_ticks) across this process and `extra_pids`.
+
+    Load-bearing since STT moved to child processes: sampling /proc/self
+    alone would exclude the single most expensive part of the pipeline, and
+    would make the whole point of the change -- CPU rising above 100% as two
+    decoders run in parallel -- invisible. A dead pid is skipped rather than
+    raising: children come and go across a supervisor restart.
+    """
+    rss_mb, ticks = _read_proc("self")
+    for pid in extra_pids:
+        try:
+            child_rss, child_ticks = _read_proc(str(pid))
+        except (FileNotFoundError, ProcessLookupError, PermissionError):
+            continue
+        rss_mb += child_rss
+        ticks += child_ticks
+    return rss_mb, ticks
+
+
 class ResourceSampler:
-    """Background RSS/CPU%% sampler for this process -- see _read_proc_self()
-    and the module docstring's RAM/CPU section for why these run on
-    different cadences (rss_interval_s << cpu_interval_s by default).
+    """Background RSS/CPU%% sampler across the pipeline's whole process tree
+    -- see _read_proc_tree() and the module docstring's RAM/CPU section for
+    why RSS and CPU run on different cadences.
     """
 
-    def __init__(self, rss_interval_s: float, cpu_interval_s: float, run_started: float) -> None:
+    def __init__(
+        self,
+        rss_interval_s: float,
+        cpu_interval_s: float,
+        run_started: float,
+        extra_pids: Callable[[], list[int]] | None = None,
+    ) -> None:
         self._rss_interval_s = rss_interval_s
         self._cpu_interval_s = cpu_interval_s
         self._run_started = run_started
+        # Re-read every sample rather than captured once: a supervisor
+        # restart replaces a child, and its pid changes with it.
+        self._extra_pids = extra_pids or (lambda: [])
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
         # (elapsed_s, rss_mb) so a peak can be reported with *when* it
@@ -202,12 +238,12 @@ class ResourceSampler:
         self._thread.join(timeout=self._rss_interval_s * 4)
 
     def _run(self) -> None:
-        rss_mb, last_cpu_ticks = _read_proc_self()
+        rss_mb, last_cpu_ticks = _read_proc_tree(self._extra_pids())
         now = time.monotonic()
         self.rss_samples.append((now - self._run_started, rss_mb))
         last_cpu_t = now
         while not self._stop.wait(self._rss_interval_s):
-            rss_mb, ticks = _read_proc_self()
+            rss_mb, ticks = _read_proc_tree(self._extra_pids())
             now = time.monotonic()
             self.rss_samples.append((now - self._run_started, rss_mb))
             # CPU only recomputed once cpu_interval_s has actually elapsed --
@@ -224,19 +260,35 @@ def _parse_cores(spec: str) -> set[int]:
     return {int(x) for x in spec.split(",") if x.strip()}
 
 
-def _pin_thread(thread: threading.Thread | None, cores: set[int], label: str) -> None:
+def _pin_worker(worker: Any, cores: set[int], label: str) -> None:
+    """Pin a worker to `cores`, whether it's a thread or an STT process.
+
+    Linux puts thread IDs and process IDs in one namespace, so
+    sched_setaffinity takes either. Which attribute holds the usable id
+    differs though, and getting it wrong silently pins the wrong thing:
+      - threading.Thread: `native_id` is the OS TID. (`ident` is Python's
+        own thread handle and is NOT valid here.)
+      - STTProcessHandle: `ident` is the child's pid, by design -- see its
+        docstring.
+    So `native_id` must be preferred, falling back to `ident` only for the
+    process handles that have no `native_id` at all.
+    """
     if not hasattr(os, "sched_setaffinity"):
         logger.warning("os.sched_setaffinity unavailable on this platform -- skipping (%s)", label)
         return
-    if thread is None:
+    if worker is None:
         logger.warning("%s: no such worker in this build (reliability/metrics disabled?)", label)
         return
-    native_id = thread.native_id
-    if native_id is None:
-        logger.warning("%s: thread has no native_id (not started yet?) -- skipping", label)
+    os_id = getattr(worker, "native_id", None)
+    kind = "tid"
+    if os_id is None:
+        os_id = getattr(worker, "ident", None)
+        kind = "pid"
+    if os_id is None:
+        logger.warning("%s: no OS id yet (not started?) -- skipping", label)
         return
-    os.sched_setaffinity(native_id, cores)
-    logger.info("Pinned %s (tid=%d) to cores %s", label, native_id, sorted(cores))
+    os.sched_setaffinity(os_id, cores)
+    logger.info("Pinned %s (%s=%d) to cores %s", label, kind, os_id, sorted(cores))
 
 
 def _pin_main_thread(cores: set[int]) -> None:
@@ -482,12 +534,34 @@ def main() -> None:
                     else None,
                     q_ingest=depths.get("ingest", -1),
                     q_routed=depths.get("routed", -1),
-                    q_segment=depths.get("segment", -1),
+                    # Per-channel since orchestrator.queue_depths() moved to
+                    # one segment queue per channel (each channel now has its
+                    # own dedicated STTWorker) -- this row's own channel's
+                    # queue is the relevant one, not some other channel's.
+                    q_segment=depths.get(f"segment_{ev.channel_id}", -1),
                 )
             )
 
     drain_thread = threading.Thread(target=_drain, daemon=True)
-    sampler = ResourceSampler(args.rss_interval_s, args.cpu_interval_s, run_started)
+
+    def _stt_child_pids() -> list[int]:
+        """pids of the STT children, if STT is running in process mode.
+
+        Empty in thread mode (workers have no `ident`-as-pid), which is
+        exactly right: there everything already lives in this process.
+        """
+        pids = []
+        for worker in orch._stt.values():
+            pid = getattr(worker, "ident", None)
+            # A thread also has `ident`, but no `transcript_queue` -- that's
+            # what distinguishes a process handle from a worker thread here.
+            if pid is not None and hasattr(worker, "transcript_queue"):
+                pids.append(pid)
+        return pids
+
+    sampler = ResourceSampler(
+        args.rss_interval_s, args.cpu_interval_s, run_started, extra_pids=_stt_child_pids
+    )
 
     orch.start()
     drain_thread.start()
@@ -495,7 +569,12 @@ def main() -> None:
     time.sleep(0.5)  # let workers actually come up before publishing / before native_id exists
 
     if args.stt_cores:
-        _pin_thread(orch._stt, _parse_cores(args.stt_cores), "STTWorker")
+        # orch._stt is now one dedicated worker per channel (dict), not a
+        # single attribute -- pin every channel's STT worker to the same
+        # core set, since "dedicate cores to STT" means all of them, not
+        # just one channel's.
+        for cid, stt_worker in orch._stt.items():
+            _pin_worker(stt_worker, _parse_cores(args.stt_cores), f"STTWorker-{cid}")
     if args.other_cores:
         other_cores = _parse_cores(args.other_cores)
         if args.stt_cores and _parse_cores(args.stt_cores) & other_cores:
@@ -510,7 +589,7 @@ def main() -> None:
             ("Supervisor", orch._supervisor),
             ("MetricsCollector", orch._metrics),
         ):
-            _pin_thread(worker, other_cores, label)
+            _pin_worker(worker, other_cores, label)
         _pin_main_thread(other_cores)
 
     logger.info(

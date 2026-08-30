@@ -18,7 +18,7 @@ update_interval defaults to the Transcriber's own (0.5s), so
 create_stream(update_interval=0.5) would build an identical object. Explicit
 streams earn their keep only for a non-default interval, or for several
 concurrent sessions on one model (one per channel -- see
-docs/STREAMING_STT_PLAN.md §6). Experiment 3 needs both of those, which is why
+docs/deferred/STREAMING_STT_PLAN.md §6). Experiment 3 needs both of those, which is why
 it calls create_stream() directly.
 
 What to watch in 1 and 2: add_audio() only buffers, EXCEPT when accumulated

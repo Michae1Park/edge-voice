@@ -54,6 +54,10 @@ User=ai
 WorkingDirectory=/home/ai/workspace/edge-voice
 ExecStart=/home/ai/workspace/edge-voice/venv/bin/edge-voice
 
+# Forces onnxruntime's intra-op thread pool to 1 thread instead of spreading
+# a single short inference call across several
+Environment=MOONSHINE_ORT_SINGLE_THREAD=1
+
 # Harden a bit; the app needs only its own dir (for config + dump output).
 NoNewPrivileges=true
 ProtectSystem=strict

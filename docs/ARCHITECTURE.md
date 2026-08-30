@@ -22,7 +22,10 @@ MQTT audio channels
  Per-channel Silero VAD ──── in-progress prefixes ──┐
         │                    (revisable partials)   │
         ▼                                           ▼
- Shared Moonshine STT ─────────────────────▶ Transcript Events
+ Per-channel Moonshine STT ─────────────────▶ Transcript Events
+ (one dedicated OS process
+  per channel, decoding in
+  parallel — see §3)
                                                     │
         ├─ Structured logs (JSON console + rotating file)
         ├─ Live transcript stream (SSE)
@@ -62,8 +65,8 @@ that was never set.
 | End-to-end latency, speech end → final transcript | TBD | Not yet measured as a single number; per-stage latency *is* collected (§7), so the pieces exist to sum |
 | Time to first visible text on a turn | TBD | Measured for the partial-cadence tuning only: first text lands ~1.1s earlier than the final at the shipped defaults (see `configs/default.yaml`) |
 | Sustained real-time factor (audio consumed ÷ wall clock, per channel) | ≥ 1.0 sustained across both channels | Not directly measured; queue depth (§7) is the current proxy — a growing routed or segment queue means the target is being missed |
-| Concurrent channels | 2 (one per party) | Design point, not a measured ceiling. Where a single shared STT worker saturates is unmeasured — see §3 Tradeoffs |
-| Memory | TBD ceiling | Known components: ~175MB shared Moonshine `Transcriber`, ~4MB per channel for Silero, plus bounded queues |
+| Concurrent channels | 2 (one per party) | Measured on the RPi5 target (see `docs/BENCHMARK.md`): a single shared STT decoder cannot sustain real-time dual-channel transcription (queue backlog grows unbounded), which is why STT moved to one dedicated decoder per channel — see §3 Tradeoffs |
+| Memory | TBD ceiling | Known components: ~30-60MB per Moonshine `Transcriber` (varies by language/checkpoint, measured directly on RPi5 — see `docs/BENCHMARK.md` and `scratch/probe_decoder_memory.py`), one per channel, ~4MB per channel for Silero, plus bounded queues |
 | CPU headroom | TBD | The RMS gate removes ~52% of Silero forward passes on duplex call audio, ~74% on a mostly-idle channel |
 
 
@@ -92,11 +95,11 @@ packages onto the milestones that built them.
 | **Entry point & configuration** | |
 | `cli.py` | Parses args, loads `Settings`, configures logging, then either runs headless for a fixed duration or starts the pipeline and blocks serving the kiosk UI. `--mic` additionally spawns a mic-capture subprocess. |
 | `config/settings.py` | The single typed (pydantic) settings model and its layered load: defaults → `configs/default.yaml` → `configs/local.yaml` → env vars, validated on load (§6). |
-| **Pipeline stages** (the four supervised worker threads) | |
+| **Pipeline stages** (the supervised worker threads) | |
 | `audio_ingest/mqtt_client.py` | Subscribes to per-channel MQTT topics, wraps each payload as an `AudioPacket`, pushes to the ingest queue. Owns its own reconnect backoff and exposes `connected` for health (§5). |
 | `channel/router.py` | Validates `channel_id`, tracks per-channel last-seen wall-clock time (the freshness signal in §7), re-packetizes to the fixed frame size VAD expects, forwards to the routed queue. |
-| `vad/vad_worker.py` | Per-channel Silero segmentation: own model instance and state machine per channel, preroll, idle flush, soft/hard length cuts, `segment_id` minted at segment *start*, and the optional in-progress partials (§3). |
-| `stt/stt_worker.py` | Transcribes segments against the one shared Moonshine `Transcriber` — one `add_audio()` call per segment, repetitive-output guard, per-call and per-channel latency, partial handling and shedding. |
+| `vad/vad_worker.py` | Per-channel Silero segmentation: own model instance and state machine per channel, preroll, idle flush, soft/hard length cuts, `segment_id` minted at segment *start*, and the optional in-progress partials (§3). Emits each channel's segments to that channel's own segment queue. |
+| `stt/stt_worker.py` | One dedicated instance per channel, each against its own Moonshine `Transcriber` — one `add_audio()` call per segment, repetitive-output guard, per-call and per-channel latency, partial handling and shedding. |
 | **Composition & lifecycle** | |
 | `pipeline/orchestrator.py` | Builds every queue and worker from `Settings` and owns start/stop ordering; the single seam exposing `get_status()`, `queue_depths()`, `channel_freshness()`, and `health()`. |
 | `pipeline/models.py` | The shared vocabulary — `AudioPacket`, `SpeechSegment`, `TranscriptEvent` — so stages import one common type set rather than each other. |
@@ -116,40 +119,45 @@ packages onto the milestones that built them.
 | `webui/templates/console.html` | The kiosk console page — transcript feed, status pill and strip, per-module chips, static legend bar. |
 | **Dev/test tooling** (separate processes, never imported by the pipeline) | |
 | `utils/audio_generation/wav_source_raw.py` | Replays `.wav` files at real-time pace as raw PCM over MQTT — the wire format ingest actually consumes; used by the integration fixture. |
-| `utils/audio_generation/wav_source.py` | Same replay, but publishing a JSON envelope — the shape `CALL_LIFECYCLE_PLAN.md` would standardize on (§11). |
+| `utils/audio_generation/wav_source.py` | Same replay, but publishing a JSON envelope — the shape `docs/deferred/CALL_LIFECYCLE_PLAN.md` would standardize on (§11). |
 | `utils/audio_generation/mic_source.py` | Captures a live mic at the device's native rate, resamples, publishes raw PCM over MQTT exactly like a real call leg. |
 | `utils/audio_generation/fake_source.py` | Synthetic packet generator that skips MQTT entirely, from the pre-MQTT skeleton; kept for exercising the worker graph without audio. |
 | `audio_ingest/audio_dump.py`, `audio_ingest/segment_audio_dump.py` | Optional debug workers writing raw and post-VAD audio to WAV, for inspecting VAD boundaries against the original recording. Off by default. |
 | **Deployment** | |
 | `deploy/edge-voice.service`, `Makefile` | systemd unit (watchdog, restart policy, crash-loop breaker) plus `make install` / `make install-service` for the apt and unit-file steps. |
 
-### Core Decision: Per-Channel VAD, Shared STT
+### Core Decision: Per-Channel VAD and STT
 
-The system runs one Silero VAD model instance per channel, but a single shared Moonshine STT instance across all channels.
+The system runs one Silero VAD model instance per channel, and one dedicated Moonshine STT `Transcriber` per channel.
 
-This differs from earlier prototypes that ran fully independent pipelines per audio source, and from an earlier version of this design that used one shared VAD instance for all channels.
+This differs from earlier prototypes that ran fully independent pipelines per audio source, and from earlier versions of this design that used one shared VAD instance for all channels, and — until this decision was reversed — one shared STT instance for all channels too.
 
 **VAD is per-channel, not shared.** A single shared model was tried first and reverted: `VADIterator` only holds the segmentation state machine, the LSTM hidden state used for inference lives inside the model instance itself. Two channels interleaving packets against one shared model corrupted each other's hidden state — measured as doubled, garbage segment counts against recorded call fixtures. Each channel therefore gets its own model instance (one `VADIterator` + one Silero model per `channel_id`), which also removes any need for cross-channel locking since a channel's state is only ever touched by that channel's packets. The extra cost (~4MB, ~0.06s load) per channel is negligible next to correctness.
 
-**STT remains shared.** Unlike VAD, Moonshine's `Transcriber.start()`/`stop()` fully resets its decoder state between segments (verified byte-for-byte against a fresh instance per segment), and the STT worker only ever processes one finalized segment at a time regardless of which channel it came from — there is no concurrent access to isolate. Sharing one instance also fits the turn-taking nature of phone conversations: the previous speaker's context shouldn't bleed into the next line regardless of channel, and it avoids holding a second copy of the model in memory (~175MB saved).
+**STT is per-channel too, not shared.** This was originally the opposite decision: one shared decoder, on the reasoning that Moonshine's `Transcriber.start()`/`stop()` fully resets decoder state between segments (verified byte-for-byte against a fresh instance per segment, still true), that a single worker thread meant "there is no concurrent access to isolate," and that sharing avoided a second copy of the model in memory (~175MB estimated). Measured on the actual RPi5 target hardware (`docs/BENCHMARK.md`, `scratch/bench_pipeline_load.py`), that reasoning didn't hold up:
+
+  - **Throughput**: one sequential decoder cannot sustain real-time dual-channel transcription. Total STT decode demand for two concurrent channels sums to ~95%+ of the real-time wall-clock budget on a single decoder, so its input queue backs up without bound. A single channel alone, given its own dedicated decoder, comfortably uses only ~65% of budget with real margin. Giving the one shared decoder more CPU cores doesn't fix it either — multi-threading a single `Transcriber` across cores measured *slower* than single-threaded, because thread-sync overhead on a model this small outweighs the benefit. The only lever that works is genuine parallelism: a second independent decoder instance.
+  - **Memory**: the ~175MB estimate was never measured against this hardware/model. A second `Transcriber` costs on the order of tens of MB marginal RSS in practice (measured directly with `scratch/probe_decoder_memory.py`) — comfortably inside the RPi5's available memory at idle.
+
+The turn-taking argument (a speaker's context shouldn't bleed into the next line regardless of channel) doesn't actually depend on sharing one instance — each channel's own dedicated `Transcriber` still resets fully between segments via the same `start()`/`stop()` lifecycle, so per-segment correctness is unchanged from the old design.
 
 ### Routing Model
 
 ```text
-MQTT channel 1 ──┐               ┌─▶ VAD (channel 1) ─┐
-                 ├─▶ Router ─────┤                     ├─▶ Shared STT ─▶ Transcript
-MQTT channel 2 ──┘               └─▶ VAD (channel 2) ─┘
+MQTT channel 1 ──┐               ┌─▶ VAD (channel 1) ─┬─▶ STT (channel 1) ─┐
+                 ├─▶ Router ─────┤                     │                    ├─▶ Transcript
+MQTT channel 2 ──┘               └─▶ VAD (channel 2) ─┴─▶ STT (channel 2) ─┘
 ```
 
 - Incoming audio packets are tagged with `channel_id`.
 - Packets are placed onto a shared ingest queue.
 - The router re-packetizes each channel's stream to a fixed outgoing frame size (independently configurable from the incoming frame size — e.g. 20ms arriving frames re-chunked to the 32ms window VAD expects) before handing packets on.
 - VAD processes packets serially (one worker thread) but against independent per-channel model instances and state — no cross-channel interference, no locking required.
-- Finalized speech segments are placed onto a shared STT queue, alongside the optional revisable prefixes described below.
-- STT processes one segment at a time, against one shared model instance.
+- Finalized speech segments are placed onto that channel's own segment queue (one queue per channel), alongside the optional revisable prefixes described below.
+- Each channel's STT worker processes its own segments in order, against its own dedicated `Transcriber` instance, in parallel with every other channel's worker.
 - Channel attribution is preserved throughout the pipeline.
 
-Both models are loaded at worker construction, not lazily on the first packet
+Every model is loaded at worker construction, not lazily on the first packet
 or segment: a model load on the real-time path would show up as a multi-second
 stall in exactly the moment the pipeline is meant to be responsive, and it
 would also register as a stall to the supervisor (§5).
@@ -541,14 +549,14 @@ validation — performance is still verified manually, on target hardware.
   `make install-service` — containerization itself remains a non-goal (§2),
   but packaging/distribution beyond "clone the repo, apt the broker, install a
   unit file" is still open.
-- **Streaming STT** (`STREAMING_STT_PLAN.md`) — scoped, not started. Moonshine
+- **Streaming STT** (`docs/deferred/STREAMING_STT_PLAN.md`) — scoped, not started. Moonshine
   publishes streaming archs for English only, so `(language, arch)` becomes a
   validated pair rather than a free choice; that validation layer is the first
   piece of work in the plan. Measured finding worth carrying here: streaming is
   **3.3×–10.7× more compute**, not less — it buys latency-to-first-text and
   replaces the partial transcripts in §3, rather than making STT faster. Whether
   two streaming channels fit on a Pi is the open risk that decides the plan.
-- **Call lifecycle + JSON audio payloads** (`CALL_LIFECYCLE_PLAN.md`) —
+- **Call lifecycle + JSON audio payloads** (`docs/deferred/CALL_LIFECYCLE_PLAN.md`) —
   scoped, not started. Call-start/call-end signals over MQTT, resetting the
   pipeline and clearing the UI per call, with audio moving from raw PCM to a
   JSON envelope. Two known hazards are already recorded there: `reset_channel`
@@ -558,6 +566,24 @@ validation — performance is still verified manually, on target hardware.
   is currently split — `wav_source.py` publishes a JSON envelope while
   `wav_source_raw.py` and `mic_source.py` publish raw PCM, and only raw PCM is
   what ingest actually consumes today.
+- **STT multiprocessing** (`STT_MULTIPROCESS_PLAN.md`) — **BUILT (2026-08-10);
+  the RPi5 before/after measurement is the one piece still outstanding.** The per-channel
+  `STTWorker` *threads* (this section, above) fixed unbounded queue growth but
+  not genuine parallelism: confirmed on the RPi5, both on the real pipeline
+  (decode calls alternate in lockstep between channels) and in isolation
+  (`scratch/probe_gil_release.py`: two threads, two independent `Transcriber`
+  instances, 1.02x speedup — no benefit). The GIL serializes decode compute
+  regardless of thread/core count, and free-threaded Python is not yet a way
+  out (ONNX Runtime force re-enables the GIL on 3.13t builds). The current fix
+  works by keeping total demand under budget (~65% measured), which is a
+  margin, not a capacity guarantee. The plan moves each channel's `STTWorker`
+  to its own OS process — one per channel, cores 2 and 3, with ingest/router/
+  VAD staying as threads on cores 0-1. Recomputed per core, the same RPi5 run
+  would put the busiest STT core at ~40%, i.e. real headroom rather than a
+  margin. VAD deliberately stays a thread and gets re-measured afterwards: it
+  is currently GIL-blocked for the duration of every decode, so moving STT out
+  speeds VAD up for free, and measuring it beforehand would measure
+  contention that is about to disappear.
 
 Resolved since the last revision of this document:
 

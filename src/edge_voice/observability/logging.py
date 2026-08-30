@@ -35,7 +35,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from logging.handlers import RotatingFileHandler
+from logging.handlers import QueueListener, RotatingFileHandler
 from pathlib import Path
 from typing import Any, MutableMapping
 
@@ -95,6 +95,37 @@ class _MergingAdapter(logging.LoggerAdapter[logging.Logger]):
 def get_stage_logger(name: str, stage: str) -> logging.LoggerAdapter[logging.Logger]:
     """A logger for one pipeline stage; every record it emits carries `stage`."""
     return _MergingAdapter(logging.getLogger(name), {"stage": stage})
+
+
+def current_log_level() -> int:
+    """The root logger's effective level, for handing to a child process.
+
+    A child ships every record it emits to the parent over a queue, so it
+    needs to do its own level filtering -- otherwise DEBUG chatter crosses
+    the process boundary just to be dropped on arrival.
+    """
+    return logging.getLogger().getEffectiveLevel()
+
+
+def start_log_queue_listener(log_queue: Any) -> QueueListener:
+    """Fan child-process log records into this process's handlers.
+
+    Child processes install a `QueueHandler` and send records unformatted
+    (see stt/stt_process.py). Formatting therefore still happens here,
+    against the same handlers a single-process run uses, so JsonFormatter's
+    structured fields come out identical either way.
+
+    `respect_handler_level=True` because the records already passed the
+    child's level filter; from here on the handlers' own levels decide.
+
+    Note this listener must be started even when there are no handlers at
+    all (logging disabled): its other job is simply to *drain* the queue. A
+    child whose log queue is never read eventually blocks writing to it.
+    """
+    root = logging.getLogger()
+    listener = QueueListener(log_queue, *root.handlers, respect_handler_level=True)
+    listener.start()
+    return listener
 
 
 def configure_logging(settings: LoggingSettings, debug: bool = False) -> None:

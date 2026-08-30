@@ -100,9 +100,9 @@ Next action: Milestone 8's remaining gaps — unit tests for `config`
              integration fixture covers those). CI itself already runs
              lint + format + mypy + the default suite on push and PR.
 Blocked on: nothing for ms 8. Two scoped features are parked:
-             docs/STREAMING_STT_PLAN.md is on hold deliberately (2026-08-06,
+             docs/deferred/STREAMING_STT_PLAN.md is on hold deliberately (2026-08-06,
              possibly indefinitely) — benchmarking showed no throughput win,
-             see the doc's own status line — and docs/CALL_LIFECYCLE_PLAN.md
+             see the doc's own status line — and docs/deferred/CALL_LIFECYCLE_PLAN.md
              awaits a decision to start.
 ```
 
@@ -185,7 +185,7 @@ yet.
    JSON envelope (`{"samples_b64": ..., "timestamp": ...}`); `wav_source_raw.py`
    is the raw-PCM variant used against the real pipeline, since raw PCM is
    what ingest consumes today. The envelope form is the shape
-   `CALL_LIFECYCLE_PLAN.md` would standardize on.
+   `docs/deferred/CALL_LIFECYCLE_PLAN.md` would standardize on.
 7. Both `audio_generation` sources verified: import lines contain no
    `pipeline`, `cli`, or `orchestrator` imports.
 
@@ -824,7 +824,7 @@ as the complete history of the project.
 Both have their own design docs. Neither is blocked on anything in the
 milestones above.
 
-- **`docs/CALL_LIFECYCLE_PLAN.md`** — call-start/call-end signals over MQTT
+- **`docs/deferred/CALL_LIFECYCLE_PLAN.md`** — call-start/call-end signals over MQTT
   (reset the pipeline, clear the UI per call) and JSON-wrapped audio payloads.
   The hard part is already identified: a race where in-flight audio from the
   old call drains through the queues *after* the UI clears. Also resolves the
@@ -834,7 +834,7 @@ milestones above.
   `wav_source.py` publishes a JSON envelope, while `wav_source_raw.py` and
   `mic_source.py` publish raw PCM, which is all `MqttAudioIngest` consumes
   today.
-- **`docs/STREAMING_STT_PLAN.md`** — **on hold (2026-08-06), deliberately, no
+- **`docs/deferred/STREAMING_STT_PLAN.md`** — **on hold (2026-08-06), deliberately, no
   committed timeline to resume.** Scoped and fully benchmarked, not merely
   unstarted: streaming turned out **not** to be a speed win — measured at
   3.3×–10.7× the compute of non-streaming segment decode, because every
@@ -849,6 +849,22 @@ milestones above.
   and would decide whether the rest proceeds. English test audio is no longer
   missing (`wav/obama_2012.wav`), though it's a studio-quality monologue, not
   two-party telephone audio.
+- **`docs/STT_MULTIPROCESS_PLAN.md`** — **approved for build (2026-08-10),
+  decisions settled, not yet started.** The doc is written as an ordered,
+  step-by-step build plan with per-step acceptance criteria; start at its
+  Step 0. Per-channel `STTWorker` threads (shipped) fixed unbounded queue
+  growth but not genuine parallelism: confirmed on the RPi5 both on the real
+  pipeline (decode calls alternate in lockstep between channels) and in
+  isolation (`scratch/probe_gil_release.py`: 1.02x speedup from two threads —
+  no benefit). The GIL serializes decode compute regardless of thread/core
+  count. Current fix works by keeping total demand under budget (~65%
+  measured), a margin not a guarantee. Plan: one OS process per channel's STT
+  worker (cores 2/3), ingest+router+VAD staying as threads (cores 0-1), mp
+  queues at the STT boundary only — `vad_worker.py` needs zero changes since
+  `mp.Queue` duck-types `queue.Queue`. **Step 0 is a hard gate:** adapt
+  `probe_gil_release.py` to `multiprocessing.Process` and confirm ≥1.7x
+  speedup in isolation before touching `src/`; if it comes back ~1.0x the
+  plan's premise is wrong and the build should stop.
 
 ---
 

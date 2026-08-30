@@ -85,6 +85,11 @@ class VADSettings(BaseModel):
     idle_flush_s: float = 2.0
     segment_limits_enabled: bool = False
     max_segment_s: float = 7.0
+    # See VADWorkerConfig.soft_cut_enabled -- the hard cap alone bounds
+    # worst-case backlog; this only controls whether VAD spends effort (and
+    # some real latency on every segment that runs past soft_cut_s) trying
+    # to land the cut on a pause instead of chopping mid-word.
+    soft_cut_enabled: bool = True
     soft_cut_s: float = 5.0
     soft_cut_lookahead_s: float = 1.0
     soft_cut_min_dip: float = 0.10
@@ -102,8 +107,17 @@ class VADSettings(BaseModel):
     @model_validator(mode="after")
     def _check_soft_cut_below_hard_cap(self) -> "VADSettings":
         """soft_cut_s must leave room before max_segment_s, or the hard cap
-        always fires first and the natural-pause search never runs."""
-        if self.segment_limits_enabled and self.soft_cut_s >= self.max_segment_s:
+        always fires first and the natural-pause search never runs.
+
+        Only checked when the search can actually run at all -- irrelevant
+        once soft_cut_enabled is off, same as it's irrelevant with
+        segment_limits_enabled off.
+        """
+        if (
+            self.segment_limits_enabled
+            and self.soft_cut_enabled
+            and self.soft_cut_s >= self.max_segment_s
+        ):
             raise ValueError(
                 f"vad.soft_cut_s ({self.soft_cut_s}s) must be less than "
                 f"vad.max_segment_s ({self.max_segment_s}s), otherwise the hard "
@@ -132,7 +146,7 @@ class STTSettings(BaseModel):
           has actually been run here. See that comment before relying on one.
 
     No streaming arch exists for any language but en, which is what blocks
-    docs/STREAMING_STT_PLAN.md. Re-check with
+    docs/deferred/STREAMING_STT_PLAN.md. Re-check with
     scratch/probe_moonshine_models.py after upgrading moonshine-voice.
     """
 
@@ -157,6 +171,22 @@ class STTSettings(BaseModel):
     # queued ahead of real work -- finals are never dropped. 0 means "drop a
     # partial whenever anything else is already waiting".
     partial_max_queue_depth: int = Field(default=0, ge=0)
+    # Run each channel's STT worker in its own OS process rather than its own
+    # thread. True is the deployed configuration: moonshine's native decode
+    # does not release the GIL, so two STT *threads* serialize (measured 1.02x
+    # speedup on the RPi5 -- i.e. none), while two processes genuinely overlap
+    # (84% of decode time concurrent, 1.70x). See docs/STT_MULTIPROCESS_PLAN.md.
+    #
+    # False keeps the original thread-backed path. Tests default to it so the
+    # suite stays fast and synchronous instead of spawning interpreters and
+    # loading models, and it is the one-line rollback if processes misbehave
+    # on a given device.
+    use_processes: bool = True
+    # How long start() waits for every STT child to load its model and signal
+    # ready. Generous on purpose: load alone is 3.6-7.3s on the RPi5, plus
+    # spawn and imports. A child that never becomes ready inside this window
+    # is reported as a startup failure, distinctly from a stall.
+    process_start_timeout_s: float = Field(default=120.0, gt=0)
 
 
 class LoggingSettings(BaseModel):

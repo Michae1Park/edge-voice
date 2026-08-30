@@ -1,29 +1,46 @@
 """Ad-hoc: does MOONSHINE_ORT_SINGLE_THREAD change inference latency?
 
 libmoonshine.so links onnxruntime and reads this env var at session-creation
-time (found via `strings`/`ldd` -- see the conversation that produced this
-script for details). There's no numeric thread-count option, just this one
-toggle, and its exact semantics (which value means what, what the default
-is) aren't documented anywhere accessible from Python -- this script exists
-to observe the effect empirically instead of guessing.
+time (found via `strings`/`ldd`). Confirmed by disassembling
+`ort_maybe_force_single_thread` in libmoonshine.so (2026-08-11): it's
+`getenv("MOONSHINE_ORT_SINGLE_THREAD")`, and forces intra_op_num_threads=1
+UNLESS the value is NULL, empty, or the literal string "0" -- those three
+all jump to the same skip-forcing branch. So unset / "" / "0" are identical
+(ORT's default multi-threaded intra-op pool); "1" or any other non-empty,
+non-"0" string forces single-thread.
 
-Must be run on the target device (RPi5), not a dev box -- thread-count
-effects on a 4-core ARM part won't show up on a 32-core x86 dev machine.
+Must set EDGE_VOICE_STT__USE_PROCESSES=false when running this -- since
+settings.stt.use_processes defaults True, without the override this goes
+through two STT *processes* (rx/tx) instead of the single in-process decoder
+this script is meant to isolate, conflating this question with the
+multiprocess one (see docs/STT_MULTIPROCESS_PLAN.md §3).
+
+Dev-box pre-check (x86, 32 cores, 2026-08-11) DID show the effect clearly --
+unset/=0 spread the decode across ~all 32 cores and ran slower (1.55s/1.34s
+total latency); =1 stayed on 1 core and ran faster (0.94s). See
+docs/STT_MULTIPROCESS_PLAN.md §3.1 for the full numbers. That corrects the
+assumption below this note used to make (that a 32-core box couldn't show a
+4-core-relevant effect) -- it can, and did. Still run this on the RPi5
+before trusting the *magnitude* for the deployed config: 4 ARM cores with
+real memory-bandwidth limits and thermal throttling risk is a different
+regime than 32 x86 cores with headroom to spare.
 
 Feeds the real tx/rx call recording through the real pipeline once, same
 feed-straight-onto-ingest_queue trick as scratch/demo_segment_cut_latency.py,
 and reports per-segment + total STT latency. Run it three times, from three
 separate shells, with the env var unset / =0 / =1, and diff the totals:
 
-    python3 scratch/bench_ort_threads.py                       # baseline (unset)
-    MOONSHINE_ORT_SINGLE_THREAD=0 python3 scratch/bench_ort_threads.py
-    MOONSHINE_ORT_SINGLE_THREAD=1 python3 scratch/bench_ort_threads.py
+    EDGE_VOICE_STT__USE_PROCESSES=false python3 scratch/bench_ort_threads.py
+    EDGE_VOICE_STT__USE_PROCESSES=false MOONSHINE_ORT_SINGLE_THREAD=0 python3 scratch/bench_ort_threads.py
+    EDGE_VOICE_STT__USE_PROCESSES=false MOONSHINE_ORT_SINGLE_THREAD=1 python3 scratch/bench_ort_threads.py
 
-While each run is going, watch `htop` (press `1` for the per-core view) in
-another SSH session -- if only one core pegs to 100% during a long segment's
-transcription, that run is single-threaded, regardless of what the totals
-say. That's the more reliable signal; the latency numbers alone can be noisy
-on a Pi (thermal throttling, other processes).
+Prefer `mpstat -P ALL 1` (sampled to a file, in the background, for the
+run's duration) over watching `htop` live -- it gives a per-core busy-%
+log you can diff afterward instead of a read that's gone once the run
+ends. If only one core stays busy during a long segment's transcription,
+that run is single-threaded, regardless of what the totals say. That's the
+more reliable signal; the latency numbers alone can be noisy on a Pi
+(thermal throttling, other processes).
 """
 
 from __future__ import annotations

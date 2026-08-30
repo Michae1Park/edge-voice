@@ -1,7 +1,9 @@
 """
 VADWorker: single thread consuming the mixed (both-channel) routed_queue,
 demultiplexing by AudioPacket.channel_id, and emitting finalized
-SpeechSegments to segment_queue.
+SpeechSegments to segment_queues[channel_id] -- one queue per channel, so
+each channel's STTWorker can decode independently instead of sharing a
+single downstream queue (and therefore a single decoder) across channels.
 
 Because this is one thread pulling packets in order, there's no need for
 the vad_lock from the two-thread version -- calls into the model are
@@ -20,6 +22,8 @@ Assumptions:
     w.stop() + join(timeout=10) pattern -- adjust if you use something else).
   - segment_id is generated here as f"{channel_id}-{start:.3f}"; swap for
     uuid4 or whatever convention SegmentAudioDumpWorker/STT expect.
+  - segment_queues must have exactly one entry per channel_id in channel_ids
+    -- constructed once, same shape as self._channels, never grown at runtime.
 """
 
 from __future__ import annotations
@@ -66,6 +70,19 @@ class VADWorkerConfig:
     # turn-taking never reaches soft_cut_s and pays nothing for this.
     segment_limits_enabled: bool = False
     max_segment_s: float = 7.0  # hard cap: cut here regardless of audio
+    # A soft cut backdates the emitted segment's `.end` to the chosen pause,
+    # up to soft_cut_lookahead_s in the past -- so any measurement of
+    # mic-to-transcript latency taken against `.end` (e.g.
+    # bench_pipeline_load.py) partly reflects "how far back the pause was,"
+    # not real pipeline lag, and the queued tail then waits behind the
+    # head's own decode on top of that (confirmed on the RPi5: an ordinary
+    # ~3.3s utterance that soft_cut_s=3.0 split in two measured ~700-1750ms
+    # of this per piece, vs ~17ms as one segment with soft-cut off -- see
+    # docs/BENCHMARK.md). Toggle this off to keep only the hard cap (which
+    # is what actually bounds worst-case backlog) when segments long enough
+    # to need it are rare enough that a mid-word chop on the rare overrun is
+    # an acceptable trade for zero cost on every ordinary long utterance.
+    soft_cut_enabled: bool = True
     soft_cut_s: float = 5.0  # past this, start looking for a natural pause
     soft_cut_lookahead_s: float = 1.0  # how far back to scan for that pause
     soft_cut_min_dip: float = 0.10  # dip must be this far below current score
@@ -132,12 +149,12 @@ class _ChannelState:
 
 
 class VADWorker(threading.Thread):
-    """Drop-in replacement for FakeVADWorker(routed_queue, segment_queue)."""
+    """Drop-in replacement for FakeVADWorker(routed_queue, segment_queues)."""
 
     def __init__(
         self,
         routed_queue: "queue.Queue[AudioPacket]",
-        segment_queue: "queue.Queue[SpeechSegment]",
+        segment_queues: "dict[str, queue.Queue[SpeechSegment]]",
         channel_ids: list[str],
         config: VADWorkerConfig | None = None,
         model=None,
@@ -146,7 +163,9 @@ class VADWorker(threading.Thread):
     ) -> None:
         super().__init__(name=name, daemon=True)
         self.routed_queue = routed_queue
-        self.segment_queue = segment_queue
+        # One queue per channel_id -- see module docstring. Keyed the same
+        # way as self._channels below, built from the same channel_ids list.
+        self.segment_queues = segment_queues
         self.dump_queue = dump_queue
         self.config = config or VADWorkerConfig()
 
@@ -421,7 +440,7 @@ class VADWorker(threading.Thread):
     def _emit_partial(
         self, channel_id: str, state: _ChannelState, start_ts: float, seg_s: float
     ) -> None:
-        """Put a prefix on segment_queue only -- never dump_queue.
+        """Put a prefix on this channel's segment queue only -- never dump_queue.
 
         Uses put_nowait rather than fanout_put for two reasons: a dump of
         every prefix would bury the real segments in segment_audio_dump, and
@@ -440,10 +459,10 @@ class VADWorker(threading.Thread):
             is_partial=True,
         )
         try:
-            self.segment_queue.put_nowait(segment)
+            self.segment_queues[channel_id].put_nowait(segment)
         except queue.Full:
             logger.debug(
-                "VADWorker: segment_queue full -- dropping partial on channel=%s",
+                "VADWorker: segment queue full -- dropping partial on channel=%s",
                 channel_id,
                 extra={"channel_id": channel_id, "segment_id": segment.segment_id},
             )
@@ -457,6 +476,12 @@ class VADWorker(threading.Thread):
         scan the lookahead window for the deepest dip in VAD confidence and cut
         just after it, so the boundary lands in a pause rather than mid-word.
         If no dip qualifies before max_segment_s, cut anyway.
+
+        The hard cap below is unconditional -- it's the only thing that
+        actually bounds worst-case backlog, so `soft_cut_enabled` never
+        touches it. Only the pause-seeking search (and its latency cost on
+        every segment that runs past soft_cut_s, see VADWorkerConfig) is
+        skippable.
         """
         cfg = self.config
         samples_per_chunk = len(packet.samples) // 2  # int16
@@ -468,6 +493,9 @@ class VADWorker(threading.Thread):
 
         if seg_s >= cfg.max_segment_s:
             self._cut_segment(channel_id, state, n_chunks, chunk_s, "hard cap")
+            return
+
+        if not cfg.soft_cut_enabled:
             return
 
         # Only start recording scores once a cut is plausibly near, so normal
@@ -544,7 +572,7 @@ class VADWorker(threading.Thread):
             audio=b"".join(state.segment_chunks),
             segment_id=segment_id,
         )
-        fanout_put(segment, self.segment_queue, self.dump_queue)
+        fanout_put(segment, self.segment_queues[channel_id], self.dump_queue)
         state.segment_chunks = []
         state.segment_start_ts = None
         state.segment_id = None

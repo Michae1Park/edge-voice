@@ -117,12 +117,13 @@ anything already reading those three fields keeps working.
   "running": true,
   "degraded": false,
   "workers": {"MqttAudioIngest": "running", "ChannelRouter": "running",
-              "VADWorker": "running", "STTWorker": "running"},
+              "VADWorker": "running", "STTWorker-rx": "running",
+              "STTWorker-tx": "running"},
 
   "status": "ok",                    // "ok" | "warn" | "down"
 
   // sampled live, at request time
-  "queue_depths": {"ingest": 0, "routed": 0, "segment": 0},
+  "queue_depths": {"ingest": 0, "routed": 0, "segment_rx": 0, "segment_tx": 0},
   "channels": {"rx": {"freshness_s": 0.42, "stale": false},
                "tx": {"freshness_s": null, "stale": false}},
   "stale_after_s": 30.0,
