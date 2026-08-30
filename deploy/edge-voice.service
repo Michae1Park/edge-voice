@@ -7,11 +7,14 @@
 # systemd kills and restarts the unit.
 #
 # Install (on the device, not in CI):
-#   sudo cp deploy/edge-voice.service /etc/systemd/system/
-#   # edit User=, WorkingDirectory=, ExecStart= to match the install path
-#   sudo systemctl daemon-reload
-#   sudo systemctl enable --now edge-voice
+#   ./install.sh   -- templates User=/WorkingDirectory=/ExecStart=/
+#                     ReadWritePaths= below to this install path and user,
+#                     then installs, daemon-reloads, and enables the unit.
 #   systemctl status edge-voice     # watch it come up / auto-restart
+#
+# To redeploy after editing this file by hand instead: `make install-service`
+# (copies this file as-is -- edit User=/WorkingDirectory=/ExecStart=/
+# ReadWritePaths= below to match the install path first).
 #
 # Verifying the watchdog actually fires (the on-device half of the Milestone 6
 # "Done when" that can't be proven in CI):
