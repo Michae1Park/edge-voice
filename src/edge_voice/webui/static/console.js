@@ -64,35 +64,38 @@
     return d.toLocaleTimeString([], { hour12: false });
   }
 
-  // One ledger row per utterance: time, channel badge, text -- reversed
-  // (row-reverse, via the .tx class) for tx, so the two sides read from
-  // the outside in. Channel identity rests on the badge letters and that
-  // reversal, not on colour -- see the legend note in console.html.
+  // One chat bubble per utterance, avatar-led: rx on the left in a neutral
+  // bubble, tx on the right in the accent gradient (row-reverse, via the
+  // .tx class), matching the reference mockup's incoming/outgoing layout.
   function renderMessage(m) {
-    var row = document.createElement("div");
-    row.className = "row " + m.channel_id + (m.is_final ? "" : " partial");
+    var wrap = document.createElement("div");
+    wrap.className = "msg " + m.channel_id + (m.is_final ? "" : " partial");
     // When the audio was spoken, not when the transcript arrived -- see
     // insertByTimestamp. `start` is real wall-clock (AudioPacket.timestamp
     // propagates unchanged from MQTT ingest), so it's directly comparable
     // across channels.
-    row.dataset.start = String(m.start);
+    wrap.dataset.start = String(m.start);
+
+    var avatar = document.createElement("div");
+    avatar.className = "avatar " + m.channel_id;
+    avatar.textContent = m.channel_id.toUpperCase();
+
+    var col = document.createElement("div");
+    col.className = "msg-col";
+
+    var bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.textContent = m.text;
 
     var time = document.createElement("div");
-    time.className = "time";
+    time.className = "msg-meta";
     time.textContent = formatTime(m.created_at);
 
-    var badge = document.createElement("div");
-    badge.className = "badge";
-    badge.textContent = m.channel_id.toUpperCase();
-
-    var text = document.createElement("div");
-    text.className = "text";
-    text.textContent = m.text;
-
-    row.appendChild(time);
-    row.appendChild(badge);
-    row.appendChild(text);
-    return { wrap: row, text: text, time: time };
+    col.appendChild(bubble);
+    col.appendChild(time);
+    wrap.appendChild(avatar);
+    wrap.appendChild(col);
+    return { wrap: wrap, bubble: bubble, time: time };
   }
 
   // Place a message by WHEN IT WAS SPOKEN, not when it arrived.
@@ -110,9 +113,9 @@
   // and its final then replaces it in place (keyed by segment_id below).
   //
   // Returns true when the message landed above the end of the feed.
-  function insertByTimestamp(row) {
-    var startTs = parseFloat(row.dataset.start);
-    var existing = inner.querySelectorAll(".row[data-start]");
+  function insertByTimestamp(wrap) {
+    var startTs = parseFloat(wrap.dataset.start);
+    var existing = inner.querySelectorAll(".msg[data-start]");
     var ref = cursorRow;
     for (var i = 0; i < existing.length; i++) {
       if (parseFloat(existing[i].dataset.start) > startTs) {
@@ -120,21 +123,21 @@
         break;
       }
     }
-    inner.insertBefore(row, ref);
+    inner.insertBefore(wrap, ref);
     return ref !== cursorRow;
   }
 
-  function appendMessage(row) {
+  function appendMessage(wrap) {
     empty.hidden = true;
     var wasNearBottom = isNearBottom();
     var prevTop = feed.scrollTop;
     var prevHeight = feed.scrollHeight;
 
-    var insertedAbove = insertByTimestamp(row);
+    var insertedAbove = insertByTimestamp(wrap);
 
     if (wasNearBottom) {
       scrollToBottom(true);
-    } else if (insertedAbove && row.offsetTop < prevTop) {
+    } else if (insertedAbove && wrap.offsetTop < prevTop) {
       // Something was inserted above what the reader is looking at, so the
       // content below it just shifted down by that much. Compensate, or
       // the view appears to jump while they're reading scrollback.
@@ -146,29 +149,29 @@
 
   // Partials arrive under the same segment_id as the final that replaces
   // them, so the feed keys on it: the first event for an id creates the
-  // row, later ones rewrite that same row instead of appending.
+  // bubble, later ones rewrite that same bubble instead of appending.
   //
   // The entry is dropped once the final lands, which both bounds this map
   // over a long session and is safe: VAD queues a segment's partials
   // strictly before its final on one ordered queue, and the hub replays
   // its backlog in order too, so nothing arrives for an id after its
-  // final. A finalized row is therefore never rewritten.
-  var liveRows = Object.create(null);
+  // final. A finalized bubble is therefore never rewritten.
+  var liveBubbles = Object.create(null);
 
   function applyMessage(m) {
-    var existing = liveRows[m.segment_id];
+    var existing = liveBubbles[m.segment_id];
     if (existing) {
-      existing.text.textContent = m.text;
+      existing.bubble.textContent = m.text;
       existing.time.textContent = formatTime(m.created_at);
       existing.wrap.classList.toggle("partial", !m.is_final);
-      if (m.is_final) delete liveRows[m.segment_id];
+      if (m.is_final) delete liveBubbles[m.segment_id];
       if (isNearBottom()) scrollToBottom(true);
       return;
     }
 
     var rendered = renderMessage(m);
-    // Only in-progress rows are tracked; a final is never revised.
-    if (!m.is_final) liveRows[m.segment_id] = rendered;
+    // Only in-progress bubbles are tracked; a final is never revised.
+    if (!m.is_final) liveBubbles[m.segment_id] = rendered;
     appendMessage(rendered.wrap);
   }
 
@@ -184,7 +187,7 @@
     // Clears this tab's view immediately rather than waiting on the fetch
     // -- it's the only client (see app.py), so there's nothing to stay in
     // sync with, and a slow/failed POST shouldn't leave a stale feed.
-    liveRows = Object.create(null);
+    liveBubbles = Object.create(null);
     while (inner.firstChild && inner.firstChild !== cursorRow) {
       inner.removeChild(inner.firstChild);
     }
@@ -218,9 +221,10 @@
 
   // ── pipeline status poll ───────────────────────────────
 
-  // Value helper: set text + which of warn/dim (if either) applies.
+  // Value helper: set text + which of ok/warn/dim (if any) applies.
   function setValue(valEl, text, state) {
     valEl.textContent = text;
+    valEl.classList.toggle("ok", state === "ok");
     valEl.classList.toggle("warn", state === "warn");
     valEl.classList.toggle("dim", state === "dim");
   }
@@ -234,10 +238,13 @@
     return s < 10 ? s.toFixed(1) + "s" : Math.round(s) + "s";
   }
 
+  // Channel rows -- avatar-badge led, same visual language as the feed's
+  // message avatars, with a trailing status dot for freshness.
   function renderChannels(channels) {
     if (!channels) {
       for (var cached in chanCache) {
         setValue(chanCache[cached].val, DASH, "dim");
+        setDot(chanCache[cached].dot, "dim");
       }
       return;
     }
@@ -246,16 +253,50 @@
     for (var id in channels) {
       var entry = chanCache[id];
       if (!entry) {
-        var cell = document.createElement("span");
-        cell.className = "cell";
-        cell.innerHTML = '<span class="sc">' + id.toUpperCase() + ' Freshness</span><span class="v"></span>';
-        channelChips.appendChild(cell);
-        entry = chanCache[id] = { val: cell.querySelector(".v") };
+        var row = document.createElement("div");
+        row.className = "srow";
+        row.innerHTML =
+          '<span class="ico ' + id + '">' + id.toUpperCase() + '</span>' +
+          '<span class="body"><span class="name">' + id.toUpperCase() + ' channel</span>' +
+          '<span class="sub val"></span></span>' +
+          '<span class="dot"></span>';
+        channelChips.appendChild(row);
+        entry = chanCache[id] = { val: row.querySelector(".val"), dot: row.querySelector(".dot") };
       }
       var info = channels[id] || {};
       var seen = info.freshness_s !== null && info.freshness_s !== undefined;
-      setValue(entry.val, formatAge(info.freshness_s), info.stale ? "warn" : seen ? null : "dim");
+      var state = info.stale ? "warn" : seen ? null : "dim";
+      setValue(entry.val, formatAge(info.freshness_s), state);
+      setDot(entry.dot, info.stale ? "warn" : seen ? "ok" : "dim");
     }
+  }
+
+  // Sets which of ok/warn/dim a trailing status dot shows (see .srow .dot
+  // in console.css) -- distinct from setValue's warn/dim text coloring,
+  // since a dot also needs the "healthy" state, which text never colors.
+  function setDot(dotEl, state) {
+    dotEl.classList.toggle("ok", state === "ok");
+    dotEl.classList.toggle("warn", state === "warn");
+    dotEl.classList.toggle("dim", state === "dim");
+  }
+
+  // One line per queue (ingest, routed, dump, segment_<channel>, ...) --
+  // the set is config-driven (orchestrator.queue_depths omits queues that
+  // were never built), so this can't be a fixed set of rows the way
+  // MODULES is. Rebuilt each poll rather than diffed in place: it's a
+  // handful of short text nodes, not worth a cache keyed by queue name.
+  function renderQueues(depths) {
+    var names = depths ? Object.keys(depths) : [];
+    if (!names.length) {
+      queueVal.innerHTML = '<span class="qline dim">' + DASH + '</span>';
+      return;
+    }
+    var html = "";
+    for (var i = 0; i < names.length; i++) {
+      html += '<span class="qline"><span class="qname">' + names[i] +
+        '</span><span class="qval">' + depths[names[i]] + '</span></span>';
+    }
+    queueVal.innerHTML = html;
   }
 
   // Latency spans microseconds (router repacketize) to hundreds of
@@ -286,21 +327,22 @@
       var mod = MODULES[i];
       var entry = modCache[mod.worker];
       if (!entry) {
-        var cell = document.createElement("span");
-        cell.className = "mcell";
-        cell.innerHTML =
-          '<span class="name"><span class="dot"></span>' + mod.label +
-          '</span><span class="lat"></span>';
-        modulesEl.appendChild(cell);
-        entry = modCache[mod.worker] = { cell: cell, lat: cell.querySelector(".lat") };
+        var row = document.createElement("div");
+        row.className = "srow mrow";
+        row.innerHTML =
+          '<span class="dot"></span>' +
+          '<span class="body"><span class="name">' + mod.label + '</span>' +
+          '<span class="sub lat"></span></span>';
+        modulesEl.appendChild(row);
+        entry = modCache[mod.worker] = { row: row, lat: row.querySelector(".lat") };
       }
       // State is always live, even when the metrics tick hasn't landed.
       var state = workers[mod.worker] || null;
-      entry.cell.classList.toggle("running", state === "running");
-      entry.cell.classList.toggle("restarting", state === "restarting");
-      entry.cell.classList.toggle("mod-degraded", state === "degraded");
-      entry.cell.classList.toggle("stopped", state === "stopped");
-      entry.cell.classList.toggle("dim", !state);
+      entry.row.classList.toggle("running", state === "running");
+      entry.row.classList.toggle("restarting", state === "restarting");
+      entry.row.classList.toggle("mod-degraded", state === "degraded");
+      entry.row.classList.toggle("stopped", state === "stopped");
+      entry.row.classList.toggle("dim", !state);
       // Latency is snapshot-derived, so it can be absent while state isn't.
       // mod.channel (STT rows) reads that one channel's own number
       // directly -- NOT worstLatency(), which would fold every channel
@@ -321,12 +363,9 @@
     var mqtt = data.mqtt_connected;
     setValue(mqttVal,
       mqtt === true ? "connected" : mqtt === false ? "down" : DASH,
-      mqtt === false ? "warn" : mqtt === true ? null : "dim");
+      mqtt === true ? "ok" : "dim");
 
-    var depths = data.queue_depths;
-    var parts = [];
-    for (var name in depths || {}) parts.push(name + ":" + depths[name]);
-    setValue(queueVal, parts.length ? parts.join(" ") : DASH, parts.length ? null : "dim");
+    renderQueues(data.queue_depths);
 
     var metrics = data.metrics || {};
     var ok = metrics.state === "ok";

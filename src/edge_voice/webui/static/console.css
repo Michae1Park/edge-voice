@@ -1,20 +1,24 @@
 :root {
-  --bg: #10151d;
-  --line: #2a323f;
-  --line-soft: #232a35;
-  --row-line: #1c222b;
-  --row-alt: rgba(255, 255, 255, 0.015);
-  --ink: #e7e9ee;
-  --ink-dim: #9aa4b2;
-  --ink-faint: #6d7684;
-  --accent: #b8965a;
-  --accent-dim: rgba(184, 150, 90, 0.14);
-  --good: #4c9a6a;
-  --warn: #c08a3f;
-  --stopped: #6d7684;
-  --radius: 3px;
-  --serif: "Spectral", Georgia, serif;
-  --sans: "Work Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --bg: #0b0e17;
+  --panel-line: rgba(255, 255, 255, 0.07);
+  --panel-line-soft: rgba(255, 255, 255, 0.045);
+  --surface: rgba(255, 255, 255, 0.03);
+  --surface-2: rgba(255, 255, 255, 0.055);
+  --ink: #eef0f6;
+  --ink-dim: #9aa3ba;
+  --ink-faint: #5c6478;
+  --accent-a: #8b5cf6;
+  --accent-b: #6366f1;
+  --accent-dim: rgba(139, 92, 246, 0.18);
+  --good: #34d399;
+  --warn: #f5a623;
+  --stopped: #5c6478;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --sans: -apple-system, "SF Pro Text", "Segoe UI", "Inter", "Helvetica Neue",
+    ui-sans-serif, system-ui, Arial, sans-serif;
+  --mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, "SF Mono",
+    Consolas, monospace;
 }
 
 html, body {
@@ -37,289 +41,379 @@ body {
 .console {
   position: relative;
   display: flex;
-  flex-direction: column;
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
+  background: var(--bg);
 }
 
-/* Faint scanline texture, carried over from the original console -- it
-   reads as instrumentation even in a more editorial palette, at a much
-   lower opacity so it stays atmosphere rather than chrome. */
-.console::before {
-  content: "";
+/* Soft blurred accent circles behind both panels, echoing the reference
+   mockup's glow -- purely atmospheric, so they sit at z-index 0 under
+   everything and never intercept clicks. */
+.glow {
   position: absolute;
-  inset: 0;
+  border-radius: 50%;
+  filter: blur(70px);
   pointer-events: none;
-  background-image: repeating-linear-gradient(
-    0deg,
-    rgba(255, 255, 255, 0.02) 0px,
-    rgba(255, 255, 255, 0.02) 1px,
-    transparent 1px,
-    transparent 3px
-  );
-  opacity: 0.25;
+  z-index: 0;
+}
+.glow-a { width: 440px; height: 440px; right: -160px; bottom: -180px; background: var(--accent-a); opacity: 0.32; }
+.glow-b { width: 320px; height: 320px; left: -120px; top: -110px; background: #3b82f6; opacity: 0.16; }
+
+/* ── sidebar: everything that isn't the transcript itself ─────────── */
+
+.sidebar {
+  position: relative;
+  z-index: 1;
+  width: 308px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-right: 1px solid var(--panel-line);
+  overflow-y: auto;
 }
 
-/* ── header ─────────────────────────────────────────── */
-
-.bar {
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 22px 20px 18px;
+  flex: 0 0 auto;
+}
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  height: 76px;
-  padding: 0 40px;
-  border-bottom: 1px solid var(--line);
-  z-index: 2;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent-a), var(--accent-b));
+  box-shadow: 0 6px 16px rgba(139, 92, 246, 0.35);
 }
-
-.ident {
+.brand-text {
   display: flex;
-  align-items: baseline;
+  flex-direction: column;
   min-width: 0;
 }
-
-.wordmark {
-  font-family: var(--serif);
-  font-style: italic;
-  font-weight: 600;
-  font-size: 21px;
-  letter-spacing: 0.01em;
+.brand-name {
+  font-size: 14px;
+  font-weight: 700;
   color: var(--ink);
 }
 
-.rule {
-  width: 1px;
-  height: 22px;
-  background: var(--line);
-  margin: 0 16px;
-}
-
-.sub {
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.right {
+.side-top {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 26px;
-  margin-left: auto;
+  justify-content: space-between;
+  padding: 0 20px 16px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--panel-line-soft);
 }
 
 .clock {
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
+  font-family: var(--mono);
+  font-size: 12px;
   color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
 }
 
+/* Same three-state model throughout: live (green), degraded (amber --
+   worker crash-looped past its restart budget, or MQTT unreachable),
+   stopped (dim gray). Channel staleness never lands here -- see
+   health/reporting.py. */
 .status {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--good);
   transition: color 0.2s ease;
 }
-.status .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
-
-/* Same three-state model as before: live (accent gold), degraded (warn --
-   worker crash-looped past budget, or MQTT unreachable), stopped (faint
-   gray). Channel staleness never lands here -- see health/reporting.py. */
+.status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); flex: 0 0 auto; }
 .status.stopped { color: var(--stopped); }
 .status.stopped .dot { background: var(--stopped); }
 .status.degraded { color: var(--warn); }
 .status.degraded .dot { background: var(--warn); }
-
 @media (prefers-reduced-motion: no-preference) {
-  .status:not(.stopped) .dot {
-    animation: pulse 1.8s ease-in-out infinite;
-  }
+  .status:not(.stopped) .dot { animation: pulse 1.8s ease-in-out infinite; }
 }
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
 
-.link-btn {
-  font-family: var(--sans);
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-  background: none;
-  border: none;
-  border-bottom: 1px solid var(--line);
-  padding: 0 0 1px;
-  cursor: pointer;
-}
-.link-btn:hover { color: var(--ink-dim); border-color: var(--ink-faint); }
-.link-btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-}
-
-/* ── status strip / module row ─────────────────────────── */
-/* Both rows are the same "cell" pattern: a small-caps label over a value,
-   divided by hairlines -- a data-table register rather than the pill/chip
-   idiom the earlier design used. */
-
-.strip, .modrow {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: stretch;
-  padding: 0 40px;
-  border-bottom: 1px solid var(--line);
-  overflow-x: auto;
-  white-space: nowrap;
-}
-
-#channelChips, #modules { display: contents; }
-
-.cell, .mcell {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 3px;
-  padding: 12px 22px 12px 0;
-  margin-right: 22px;
-  border-right: 1px solid var(--line-soft);
-  flex: 0 0 auto;
-}
-.mcell { padding: 10px 20px 10px 0; margin-right: 20px; min-width: 84px; }
-
-.sc {
-  font-size: 11px;
+.side-section { padding: 0 14px 16px; flex: 0 0 auto; }
+.side-section.grow { flex: 1 1 auto; }
+.side-label {
+  padding: 0 6px 8px;
+  font-size: 10.5px;
+  font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-faint);
 }
 
-.cell .v {
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
-}
-/* Something is wrong with this specific signal (MQTT down, channel gone
-   stale) -- per-signal only, a stale channel never colours the header
-   status. Distinct from .dim: unavailable rather than bad. */
-.cell .v.warn { color: var(--warn); }
-.cell .v.dim { color: var(--ink-faint); }
-
-.mcell .name {
-  font-size: 12px;
-  color: var(--ink-dim);
+.stat-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
 }
-.mcell .dot { width: 5px; height: 5px; border-radius: 50%; flex: 0 0 auto; }
-.mcell .lat {
-  font-size: 11px;
+.stat-row .stat-name { flex: 0 0 auto; color: var(--ink-dim); }
+/* Fixed width + ellipsis (rather than letting long values like the queue
+   depth list wrap) keeps every value in this section flush to the same
+   right edge, regardless of how long its text is. */
+.stat-row .stat-val {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 132px;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--mono);
+  color: var(--ink);
   font-variant-numeric: tabular-nums;
-  color: var(--ink-faint);
 }
-/* State is always live (from `workers`); dot colour is the only encoding
-   here -- no dedicated warn/dim text treatment, since the name itself
-   never changes meaning the way a strip value does. */
-.mcell.running .dot { background: var(--good); }
-.mcell.restarting .dot, .mcell.mod-degraded .dot { background: var(--warn); }
-.mcell.restarting .name, .mcell.mod-degraded .name { color: var(--warn); }
-.mcell.stopped .dot { background: var(--stopped); }
-.mcell.stopped .name { color: var(--ink-faint); }
-.mcell.dim .dot { background: var(--ink-faint); opacity: 0.5; }
+.stat-row .stat-val.ok { color: var(--good); }
+.stat-row .stat-val.warn { color: var(--warn); }
+.stat-row .stat-val.dim { color: var(--ink-faint); }
 
-/* ── feed ───────────────────────────────────────────── */
+/* Queues get their own block rather than a stat-row: the queue set is
+   config-driven (see orchestrator.queue_depths) and can be several
+   entries, which wouldn't fit -- or stay legible -- crammed onto one
+   line the way a single MQTT/Metrics value does. */
+.stat-block { padding: 7px 10px 8px; border-radius: var(--radius-sm); font-size: 12.5px; }
+.stat-block .stat-name { display: block; color: var(--ink-dim); margin-bottom: 5px; }
+.stat-lines { display: flex; flex-direction: column; gap: 3px; }
+.stat-lines .qline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.stat-lines .qname { color: var(--ink-faint); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-lines .qval { flex: 0 0 auto; }
+.stat-lines .qline.dim { color: var(--ink-faint); }
+
+.side-list { display: flex; flex-direction: column; gap: 2px; }
+
+/* Channel rows -- one per configured channel (rx/tx), avatar-badge led so
+   they read the same visual language as the feed's message avatars. */
+.srow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+}
+.srow .ico {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+.srow .ico.rx { background: linear-gradient(135deg, #334155, #1f2937); }
+.srow .ico.tx { background: linear-gradient(135deg, var(--accent-a), var(--accent-b)); }
+.srow .body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.srow .name { font-size: 12.5px; color: var(--ink); }
+.srow .sub { font-size: 11px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.srow .sub.warn { color: var(--warn); }
+.srow .sub.dim { color: var(--ink-faint); }
+.srow .dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; background: var(--stopped); }
+.srow .dot.ok { background: var(--good); }
+.srow .dot.warn { background: var(--warn); }
+.srow .dot.dim { background: var(--ink-faint); opacity: 0.5; }
+
+/* Module rows -- a status indicator leads instead of a channel avatar,
+   since a pipeline stage has no per-channel identity of its own. A halo
+   ring around a solid core reads as a live/status indicator at a glance,
+   rather than as a plain list bullet the way a bare small dot did; the
+   row also picks up a faint tint of the same color so the state is
+   legible even at a glance across the whole row, not just the dot. */
+.mrow {
+  border-radius: var(--radius-sm);
+}
+.mrow .dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--ink-faint);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05);
+}
+.mrow.running { background: rgba(52, 211, 153, 0.07); }
+.mrow.running .dot { background: var(--good); box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.2); }
+.mrow.restarting, .mrow.mod-degraded { background: rgba(245, 166, 35, 0.07); }
+.mrow.restarting .dot, .mrow.mod-degraded .dot { background: var(--warn); box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.2); }
+.mrow.restarting .name, .mrow.mod-degraded .name { color: var(--warn); }
+.mrow.stopped .dot { background: var(--stopped); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05); }
+.mrow.stopped .name { color: var(--ink-faint); }
+.mrow.dim .dot { opacity: 0.5; box-shadow: none; }
+
+.side-footer {
+  margin-top: auto;
+  flex: 0 0 auto;
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--panel-line-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* align-self here targets the sidebar footer's column layout, where it
+   keeps the button from stretching full-width; the chat header's row
+   layout overrides it below to center the button on that axis instead. */
+.link-btn {
+  align-self: flex-start;
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--ink-dim);
+  background: var(--surface-2);
+  border: 1px solid var(--panel-line);
+  border-radius: 999px;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+.link-btn:hover { color: var(--ink); border-color: var(--ink-faint); }
+.link-btn:focus-visible { outline: 2px solid var(--accent-a); outline-offset: 2px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 10px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--ink-faint); }
+.legend-item .dot { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto; }
+
+/* ── chat panel: the transcript ─────────────────────────────────── */
+
+.chat {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chat-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 64px;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--panel-line);
+}
+.chat-ident { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.chat-title { font-size: 14.5px; font-weight: 700; color: var(--ink); }
+.chat-header .link-btn { flex: 0 0 auto; align-self: center; }
 
 .feed {
   flex: 1 1 auto;
   overflow-y: auto;
-  z-index: 1;
-  padding: 22px 0 90px;
+  padding: 24px 28px 96px;
 }
-
 .feed-inner {
-  max-width: 920px;
+  max-width: 720px;
   margin: 0 auto;
-  padding: 0 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   min-height: 100%;
 }
 
 .empty {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  margin: auto;
   color: var(--ink-faint);
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 15px;
+  font-size: 13px;
+  letter-spacing: 0.02em;
   text-align: center;
 }
 .empty[hidden] { display: none; }
 
-/* One ledger row per utterance: timestamp, channel badge, text -- in that
-   order for rx, reversed for tx (row-reverse), so the two sides read from
-   the outside in rather than being told apart by colour. Zebra striping
-   is positional (nth-child), not tied to channel, since bursts on one
-   channel are common and channel-tied striping would go unreadable. */
-.row {
+/* One bubble per utterance, avatar-led like the reference: rx on the
+   left in a neutral slate bubble, tx on the right in the purple/blue
+   accent gradient -- the same gradient used for the brand mark, so the
+   two read as one visual system rather than two arbitrary colors. */
+.msg {
   display: flex;
-  align-items: baseline;
-  gap: 18px;
-  padding: 13px 0;
-  border-bottom: 1px solid var(--row-line);
+  align-items: flex-end;
+  gap: 10px;
+  max-width: 82%;
 }
-.row:nth-child(even) { background: var(--row-alt); }
+.msg.rx { align-self: flex-start; }
+.msg.tx { align-self: flex-end; flex-direction: row-reverse; }
 
-.row .time {
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 12px;
-  color: var(--ink-faint);
-  width: 66px;
+.avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
   flex: 0 0 auto;
-  font-variant-numeric: tabular-nums;
-}
-
-.row .badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  width: 24px;
-  flex: 0 0 auto;
-  text-align: center;
-  padding: 3px 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  color: var(--accent);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fff;
 }
+.avatar.rx { background: linear-gradient(135deg, #334155, #1f2937); }
+.avatar.tx { background: linear-gradient(135deg, var(--accent-a), var(--accent-b)); }
 
-.row.tx { flex-direction: row-reverse; text-align: right; }
+.msg-col { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.msg.tx .msg-col { align-items: flex-end; }
 
-.row .text {
-  flex: 1 1 auto;
-  font-size: 15px;
-  line-height: 1.55;
-  color: var(--ink);
+.bubble {
+  padding: 11px 15px;
+  border-radius: var(--radius);
+  font-size: 14.5px;
+  line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
 }
+.msg.rx .bubble {
+  background: var(--surface-2);
+  border: 1px solid var(--panel-line);
+  border-bottom-left-radius: 4px;
+  color: var(--ink);
+}
+.msg.tx .bubble {
+  background: linear-gradient(135deg, var(--accent-a), var(--accent-b));
+  border-bottom-right-radius: 4px;
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(139, 92, 246, 0.28);
+}
 
-/* In-progress transcript: same row, rewritten in place until the final
-   lands. Dimmed italic text plus a dashed badge so a revisable line is
-   never mistaken for a settled one; a pulsing caret marks it as still
-   being spoken. */
-.row.partial .text { color: var(--ink-dim); font-style: italic; }
-.row.partial .badge { border-style: dashed; }
-.row.partial .text::after {
+/* In-progress transcript: same bubble, rewritten in place until the final
+   lands. Dimmed/italic/dashed so a revisable line is never mistaken for a
+   settled one, with a pulsing caret to show it's still being spoken. */
+.msg.partial .bubble { opacity: 0.82; font-style: italic; border-style: dashed; }
+.msg.partial .bubble::after {
   content: "▌";
   margin-left: 2px;
   font-style: normal;
@@ -330,28 +424,25 @@ body {
   50.01%, 100% { opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .row.partial .text::after { animation: none; }
+  .msg.partial .bubble::after { animation: none; }
 }
 
-/* Trailing status row -- not a transcript entry, so no badge/time
-   columns, just the waiting indicator. Always the last child of
-   feed-inner; see insertByTimestamp in console.js. */
+.msg-meta {
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+}
+
 .cursor-row {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 13px 0;
+  gap: 8px;
+  padding: 4px 0 4px 40px;
   color: var(--ink-faint);
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 13px;
+  font-size: 12px;
 }
-
-.blink {
-  color: var(--good);
-  font-size: 14px;
-  transition: color 0.2s ease;
-}
+.blink { color: var(--good); font-size: 13px; transition: color 0.2s ease; }
 .blink.stopped { color: var(--ink-faint); }
 @media (prefers-reduced-motion: no-preference) {
   .blink:not(.stopped) { animation: blink 1s steps(1) infinite; }
@@ -367,68 +458,49 @@ body {
   left: 50%;
   bottom: 26px;
   transform: translateX(-50%);
-  background: var(--bg);
-  color: var(--ink-dim);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 8px 18px;
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--panel-line);
+  border-radius: 999px;
+  padding: 9px 18px;
   font-family: var(--sans);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
   z-index: 3;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4);
 }
-.jump:hover { color: var(--ink); border-color: var(--ink-faint); }
-.jump:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
+.jump:hover { background: var(--accent-dim); border-color: var(--accent-a); }
+.jump:focus-visible { outline: 2px solid var(--accent-a); outline-offset: 2px; }
 .jump[hidden] { display: none; }
 
-/* ── legend ─────────────────────────────────────────── */
-/* Static key for the module-state dot colors, in its own dashed bar so it
-   never reads as another line of live data. Kiosk has no mouse, so this
-   stays visible rather than living behind a hover/tap affordance. */
-
-.legend-bar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  row-gap: 4px;
-  padding: 7px 40px;
-  border-top: 1px dashed var(--line);
-  border-bottom: 1px dashed var(--line);
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 12px;
-  color: var(--ink-dim);
-  z-index: 2;
+/* ── responsive ─────────────────────────────────────── */
+/* Tablet and below: stack the sidebar above the chat instead of beside
+   it -- there isn't enough width for a fixed 308px rail plus a readable
+   feed column, and this is the same content people already read top-down
+   on the kiosk's status strip in an earlier revision, so scrolling it as
+   a capped-height header reads naturally. */
+@media (max-width: 900px) {
+  /* Keep the console viewport-locked (no page scroll) -- only the sidebar
+     and the feed scroll internally, same as the desktop layout. */
+  .console { flex-direction: column; }
+  .sidebar { width: 100%; max-height: 42vh; border-right: none; border-bottom: 1px solid var(--panel-line); }
+  .chat { min-height: 0; }
+  .side-section.grow { flex: 0 0 auto; }
+  .msg { max-width: 92%; }
 }
 
-.legend { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; }
-.legend .dot { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto; }
-
-.legend-tag {
-  flex: 0 0 auto;
-  font-style: normal;
-  font-family: var(--sans);
-  font-weight: 600;
-  font-size: 9px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 2px 6px;
-}
-
-.legend-sep {
-  flex: 0 0 auto;
-  width: 1px;
-  height: 11px;
-  background: var(--line);
+/* Phone: tighten padding everywhere and let the header wrap instead of
+   clipping the clear button off-screen. */
+@media (max-width: 560px) {
+  .brand { padding: 16px 16px 14px; }
+  .side-top { padding: 0 16px 12px; }
+  .side-section { padding: 0 10px 12px; }
+  .side-footer { padding: 12px 16px 16px; }
+  .chat-header { flex-wrap: wrap; height: auto; min-height: 56px; padding: 10px 16px; gap: 10px; }
+  .feed { padding: 18px 16px 90px; }
+  .msg { max-width: 96%; gap: 8px; }
+  .avatar { width: 26px; height: 26px; font-size: 9px; }
+  .bubble { padding: 10px 13px; font-size: 14px; }
+  .jump { bottom: 16px; padding: 8px 14px; }
 }

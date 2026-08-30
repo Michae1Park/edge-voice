@@ -4,53 +4,76 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Edge Voice — Live Session</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%2310151d'/%3E%3Ccircle cx='8' cy='8' r='3' fill='%23b8965a'/%3E%3C/svg%3E" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='5' fill='%230b0e17'/%3E%3Ccircle cx='8' cy='8' r='3.4' fill='%238b5cf6'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="/static/console.css" />
 </head>
 <body>
 
 <div class="console">
-  <header class="bar">
-    <div class="ident">
-      <span class="wordmark">Edge Voice</span>
-      <span class="rule"></span>
-      <span class="sub">rpi5 · local session · no network</span>
+  <div class="glow glow-a"></div>
+  <div class="glow glow-b"></div>
+
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">EV</span>
+      <div class="brand-text">
+        <span class="brand-name">Edge Voice</span>
+      </div>
     </div>
-    <div class="right">
+
+    <div class="side-top">
       <span class="clock" id="clock">--:--:--</span>
       <span class="status stopped" id="livePill"><span class="dot"></span><span id="liveLabel">connecting</span></span>
-      <button class="link-btn" id="clearBtn" type="button" title="Clear transcript history">Clear</button>
     </div>
-  </header>
 
-  <div class="strip">
-    <span class="cell" id="chipMqtt"><span class="sc">MQTT</span><span class="v" id="mqttVal">&mdash;</span></span>
-    <span class="cell" id="chipQueues"><span class="sc">Queues</span><span class="v" id="queueVal">&mdash;</span></span>
-    <span id="channelChips"></span>
-    <span class="cell" id="chipMetrics"><span class="sc">Metrics</span><span class="v" id="metricsVal">&mdash;</span></span>
-  </div>
-
-  <div class="modrow">
-    <span id="modules"></span>
-  </div>
-
-  <!-- Legend note: channel identity in the feed below rests on the RX/TX
-       badge letters and row-reverse layout, not on colour -- see
-       console.css's .row comment. This legend only keys the module dots. -->
-  <div class="legend-bar" role="note" aria-label="Legend -- static reference, not live data">
-    <span class="legend-tag">Legend</span>
-    <span class="legend"><span class="dot" style="background:var(--good)"></span>running</span>
-    <span class="legend"><span class="dot" style="background:var(--warn)"></span>degraded / restarting</span>
-    <span class="legend"><span class="dot" style="background:var(--stopped)"></span>stopped / unavailable</span>
-  </div>
-
-  <main class="feed" id="feed">
-    <div class="feed-inner" id="feedInner">
-      <div class="empty" id="empty">No transcripts yet — waiting for speech</div>
+    <div class="side-section">
+      <div class="side-label">System</div>
+      <div class="stat-row" id="chipMqtt"><span class="stat-name">MQTT</span><span class="stat-val" id="mqttVal">&mdash;</span></div>
+      <div class="stat-block" id="chipQueues">
+        <span class="stat-name">Queues</span>
+        <div class="stat-lines" id="queueVal"></div>
+      </div>
+      <div class="stat-row" id="chipMetrics"><span class="stat-name">Metrics</span><span class="stat-val" id="metricsVal">&mdash;</span></div>
     </div>
+
+    <div class="side-section">
+      <div class="side-label">Channels</div>
+      <div class="side-list" id="channelChips"></div>
+    </div>
+
+    <div class="side-section grow">
+      <div class="side-label">Pipeline</div>
+      <div class="side-list" id="modules"></div>
+    </div>
+
+    <!-- Legend note: channel identity in the feed rests on the avatar
+         letters and message alignment, not on colour -- this legend only
+         keys the pipeline status indicators above. -->
+    <div class="side-footer">
+      <div class="legend" role="note" aria-label="Legend -- static reference, not live data">
+        <span class="legend-item"><span class="dot" style="background:var(--good)"></span>running</span>
+        <span class="legend-item"><span class="dot" style="background:var(--warn)"></span>degraded</span>
+        <span class="legend-item"><span class="dot" style="background:var(--stopped)"></span>stopped</span>
+      </div>
+    </div>
+  </aside>
+
+  <main class="chat">
+    <header class="chat-header">
+      <div class="chat-ident">
+        <span class="chat-title">Live Transcript</span>
+      </div>
+      <button class="link-btn" id="clearBtn" type="button" title="Clear transcript history">Clear transcript</button>
+    </header>
+
+    <div class="feed" id="feed">
+      <div class="feed-inner" id="feedInner">
+        <div class="empty" id="empty">No transcripts yet — waiting for speech</div>
+      </div>
+    </div>
+
+    <button class="jump" id="jumpBtn" type="button" hidden>&#8595; New lines</button>
   </main>
-
-  <button class="jump" id="jumpBtn" type="button" hidden>New lines below</button>
 </div>
 
 <script src="/static/console.js"></script>
