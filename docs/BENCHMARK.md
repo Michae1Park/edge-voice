@@ -25,13 +25,10 @@ state between updates). The elapsed time for that call is what's logged.
 - Each language was run multiple times (separate process invocations); the
 table below averages the runs to smooth out measurement noise.
 
-
-
 ### Results — update latency, averaged across runs
 
-
 | audio (s) | en (ms) | en chars | ko (ms) | ko chars | zh (ms) | zh chars |
-| --------- | ------- | -------- | ------- | -------- | ------- | -------- |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | 1         | 199.2   | 20       | 467.0   | 9        | 510.8   | 17       |
 | 2         | 432.7   | 50       | 897.0   | 18       | 578.3   | 13       |
 | 3         | 645.5   | 68       | 1339.7  | 28       | 999.0   | 20       |
@@ -43,7 +40,6 @@ table below averages the runs to smooth out measurement noise.
 | 9         | 1923.0  | 191      | 3499.4  | 70       | 3385.8  | 57       |
 | 10        | 2004.1  | 204      | 4069.6  | 78       | 3866.3  | 62       |
 
-
 Notes:
 
 - zh's chars dip from 17 (1s) to 13 (2s) — the model revised an earlier
@@ -52,8 +48,6 @@ data error.
 - Chars matched exactly across each language's own runs, so only latency
 (not output) is averaged above.
 
-
-
 ### Reproducing this
 
 ```bash
@@ -61,6 +55,38 @@ python scratch/bench_streaming_cost.py
 ```
 
 Edit `WAV`, `MODEL_LN`, `MODEL_SIZE` at the top of the script to point at a different clip/language/model size (`WAV="wav/english.wav", MODEL_LN="en"` for the Chinese run above).
+
+### Why Korean and Chinese are ~2x slower than English — not a bug
+
+`tiny-en`, `tiny-ko`, and `tiny-zh` share the same architecture *label* but
+are **different trained checkpoints**, confirmed by inspecting the installed
+`moonshine-voice` 0.0.69 cache directly
+(`~/.cache/moonshine_voice/download.moonshine.ai/model/`):
+
+|                                      | `tiny-en`                            | `tiny-ko` | `tiny-zh`   |
+| ------------------------------------ | ------------------------------------ | --------- | ----------- |
+| Decoder (`decoder_model_merged.ort`) | 30.4 MB                              | 58.3 MB   | **58.3 MB** |
+| Encoder                              | 13.28 MB                             | 13.24 MB  | 13.24 MB    |
+| `decoder_with_attention.ort`         | present (30.1 MB)                    | absent    | absent      |
+| Tokenizer (`tokenizer.bin`)          | same md5, all three: `1373d589…f969` |           |             |
+
+- `tiny-zh`'s decoder is byte-for-byte almost the same size as `tiny-ko`'s
+— the general shape of every non-English `tiny` checkpoint, not a
+Korean-specific quirk.
+- A ~1.9x larger decoder doing token-by-token autoregressive generation on
+CPU accounts for most of the ~2x latency gap on its own.
+- English alone ships `decoder_with_attention.ort`, possibly a faster
+incremental-decode path the other languages lack — inferred from the
+asset list, not confirmed from source.
+- Compounding factor: all three share one BPE tokenizer trained
+predominantly on Latin-script text, which typically needs more decode
+steps per second of speech for Korean/Chinese (multi-byte UTF-8 per
+character/syllable, poor byte-level merge coverage). Consistent with
+Korean's and Chinese's steeper latency growth and lower character
+throughput for the same audio duration.
+- `src/edge_voice/stt/stt_worker.py` has no language-conditional decode
+logic (`max_tokens_per_second`, `repetitive_ratio`, etc. are global) — the
+gap is entirely upstream, in Useful Sensors' per-language checkpoints.
 
 ---
 
@@ -99,21 +125,21 @@ MOONSHINE_ORT_SINGLE_THREAD=1 python scratch/bench_pipeline_load.py \
 config (`soft_cut_enabled=false`):
 
 | Metric | p50 | p95 | max |
-| --- | --- | --- | --- |
+| --- | ---: | ---: | ---: |
 | Full latency (mic → transcript) | 1948 ms | 3971 ms | 4035 ms |
 
 | RSS mean | RSS peak | CPU mean | CPU median | CPU max |
-| --- | --- | --- | --- | --- |
+| ---: | ---: | ---: | ---: | ---: |
 | 1242 MB | 1243 MB | 64% | 62% | 155% (of 400% available) |
 
 | Queue depth | first half | second half | peak | verdict |
-| --- | --- | --- | --- | --- |
+| --- | ---: | ---: | ---: | --- |
 | combined (ingest+routed+segment) | 0.15 | 0.19 | 2 | flat/draining |
 
 By channel:
 
 | Channel | n | Full latency mean | STT decode mean |
-| --- | --- | --- | --- |
+| --- | ---: | ---: | ---: |
 | rx | 24 | 2779.4 ms | 2750.1 ms |
 | tx | 30 | 1640.7 ms | 1549.7 ms |
 
@@ -131,90 +157,94 @@ content.
 - rx runs measurably higher latency than tx on this file — a property of
 the source recording (rx's turns are longer on average, see `dur_s` in the
 per-segment CSV), not a channel-handling asymmetry in the pipeline.
-- **Soft-cut added real, avoidable latency on ordinary segments — confirmed
-fixed by disabling it.** A soft cut (`vad_worker.py`'s `_maybe_cut`) doesn't
+
+#### Soft-cut latency (confirmed fixed by disabling it)
+
+A soft cut (`vad_worker.py`'s `_maybe_cut`) doesn't
 cut at the live edge; it scans back up to `soft_cut_lookahead_s` (1.0s) for
 the best pause and backdates the emitted segment's `.end` to that point:
 
-  ```python
-  cut_ts = state.segment_start_ts + cut_idx * chunk_s   # a point in the past
-  self._finalize_segment(channel_id, state, end_ts=cut_ts)
-  ```
+```python
+cut_ts = state.segment_start_ts + cut_idx * chunk_s   # a point in the past
+self._finalize_segment(channel_id, state, end_ts=cut_ts)
+```
 
-  Since `full_latency_ms = created_at - end` is measured against that
-  backdated `.end`, part of the "latency" on a soft-cut segment is really
-  just "how far back the chosen pause was," not the pipeline falling
-  behind — and the queued *tail* piece then genuinely waits behind the
-  head's own decode on top of that (each channel has exactly one STT
-  decoder). A same-session run with `soft_cut_enabled=true` (`soft_cut_s=3.0`)
-  showed exactly this: an ordinary ~3.35s utterance (`rx`, recurring at the
-  same point each loop) got split into two pieces every time it recurred,
-  each paying real cost:
+Since `full_latency_ms = created_at - end` is measured against that
+backdated `.end`, part of the "latency" on a soft-cut segment is really
+just "how far back the chosen pause was," not the pipeline falling
+behind — and the queued *tail* piece then genuinely waits behind the
+head's own decode on top of that (each channel has exactly one STT
+decoder). A same-session run with `soft_cut_enabled=true` (`soft_cut_s=3.0`)
+showed exactly this: an ordinary ~3.35s utterance (`rx`, recurring at the
+same point each loop) got split into two pieces every time it recurred,
+each paying real cost:
 
-  | Piece | dur_s | chars | pre_ms, soft-cut on | pre_ms, soft-cut off (this run) |
-  | --- | --- | --- | --- | --- |
-  | (whole utterance, uncut) | 3.36-3.40s | 34 | *(split below)* | **-1.5 / 17.7 / 20.2** |
-  | head | 2.27s | 22 | 695 – 722 ms | *(no longer split)* |
-  | tail | 1.08s | 12 | 1106 – 1348 ms | *(no longer split)* |
+| Piece | dur_s | chars | pre_ms, soft-cut on | pre_ms, soft-cut off (this run) |
+| --- | ---: | ---: | ---: | ---: |
+| (whole utterance, uncut) | 3.36-3.40s | 34 | *(split below)* | **-1.5 / 17.7 / 20.2** |
+| head | 2.27s | 22 | 695 – 722 ms | *(no longer split)* |
+| tail | 1.08s | 12 | 1106 – 1348 ms | *(no longer split)* |
 
-  Added `vad.soft_cut_enabled` (default `true`, matching the prior behavior
-  whenever `segment_limits_enabled` was on) so the pause search can be
-  turned off independently of the hard cap, which is what actually bounds
-  worst-case backlog and is unaffected by this flag. `configs/default.yaml`
-  now ships `soft_cut_enabled=false`.
+Added `vad.soft_cut_enabled` (default `true`, matching the prior behavior
+whenever `segment_limits_enabled` was on) so the pause search can be
+turned off independently of the hard cap, which is what actually bounds
+worst-case backlog and is unaffected by this flag. `configs/default.yaml`
+now ships `soft_cut_enabled=false`.
 
-  Confirmed by this run, three ways:
-  - The recurring utterance lands as one clean segment all three times
+Confirmed by this run, three ways:
+- The recurring utterance lands as one clean segment all three times
   (elapsed≈26s/88s/150s), `pre_ms` back to single-digit-to-tens, matching
   the original pre-`segment_limits` baseline (`pre_ms=16.9`) almost exactly.
-  - Segment count dropped from 57 (soft-cut on) to 54 (soft-cut off) — exactly
+- Segment count dropped from 57 (soft-cut on) to 54 (soft-cut off) — exactly
   the 3 fewer segments expected from 3 recurring splits no longer happening.
-  - Aggregate `pre_ms` p95 (VAD wait + queueing, across all segments) dropped
+- Aggregate `pre_ms` p95 (VAD wait + queueing, across all segments) dropped
   from **1105.9 ms to 51.7 ms** run-over-run; both runs' `pre_ms` **max**
   stayed near 2020ms from the same, unrelated end-of-run drain artifact (the
   final segment caught mid-grace-period at shutdown) — confirming the p95
   improvement is specifically the soft-cut fix, not a general latency shift.
 
-  Re-enable `soft_cut_enabled` if mid-word chops on a rare
-  `max_segment_s` overrun turn out to matter more than this latency does.
-- **Confirms a suspected thermal/DVFS drift, not a regression.** An earlier
-same-day run on identical audio, taken mid-session after a long string of
-back-to-back stress tests (no reboot in between), measured ~35-70% slower
-per segment on this exact same hardware/config. This fresh-reboot run lands
-back in line with the very first post-multiprocessing measurement (taken
-before any of that session's stress testing) — confirming the mid-session
-numbers were inflated by sustained heat/clock throttling on a board with no
-active cooling, not a real regression from the segment-cap or
-stall-detection fixes:
+Re-enable `soft_cut_enabled` if mid-word chops on a rare
+`max_segment_s` overrun turn out to matter more than this latency does.
 
-  | Run | Latency p50 | Latency p95 | CPU mean |
-  | --- | --- | --- | --- |
-  | First post-multiprocessing (session start, `segment_limits_enabled=false`) | 1817 ms | 3976 ms | 67% |
-  | Mid-session (after a long run of back-to-back stress tests) | 3448 ms | 6498 ms | 88% |
-  | Fresh-reboot, soft-cut on (same session, `soft_cut_enabled=true`) | 1903 ms | 3778 ms | 64% |
-  | **Fresh-reboot, soft-cut off (this run, current config)** | **1948 ms** | **3971 ms** | **64%** |
+#### Thermal/DVFS drift (not a regression)
 
-  Same conclusion holds per-segment, on identical audio (`stt_ms`):
+An earlier same-day run on identical audio, taken mid-session after a long
+string of back-to-back stress tests (no reboot in between), measured
+~35-70% slower per segment on this exact same hardware/config. This
+fresh-reboot run lands back in line with the very first post-multiprocessing
+measurement (taken before any of that session's stress testing) —
+confirming the mid-session numbers were inflated by sustained heat/clock
+throttling on a board with no active cooling, not a real regression from the
+segment-cap or stall-detection fixes:
 
-  | Segment (duration, chars) | Session start | Mid-session | Reboot, soft-cut on | Reboot, soft-cut off (this run) |
-  | --- | --- | --- | --- | --- |
-  | 2.37s, 27 chars | 1866 ms | 3220 ms | 1999 ms | 2030 ms |
-  | 1.92s, 18 chars | 1262 ms | 2111 ms | 1168 ms | 1133 ms |
-  | 1.69s, 13 chars | 1067 ms | 1443 ms | 1062 ms | 1074 ms |
-  | 4.83s, 43 chars | 4238 ms | 5916 ms | 4182 ms | 3936 ms |
+| Run | Latency p50 | Latency p95 | CPU mean |
+| --- | ---: | ---: | ---: |
+| First post-multiprocessing (session start, `segment_limits_enabled=false`) | 1817 ms | 3976 ms | 67% |
+| Mid-session (after a long run of back-to-back stress tests) | 3448 ms | 6498 ms | 88% |
+| Fresh-reboot, soft-cut on (same session, `soft_cut_enabled=true`) | 1903 ms | 3778 ms | 64% |
+| **Fresh-reboot, soft-cut off (this run, current config)** | **1948 ms** | **3971 ms** | **64%** *(= Results above)* |
 
-  The two reboot runs (soft-cut on vs. off) agree closely on these four
-  *unsplit* segments, as expected — soft-cut only touches segments that
-  actually run past `soft_cut_s`, so its cost is isolated to those, not a
-  blanket slowdown. Both reboot runs sit well below the mid-session numbers
-  either way, reinforcing that the thermal effect and the soft-cut effect
-  are two independent, now both-understood findings, not one conflated one.
+Same conclusion holds per-segment, on identical audio (`stt_ms`):
 
-  Practical takeaway: benchmark numbers taken deep into a long, uncooled
-  RPi5 test session run measurably pessimistic — a cold-boot (or at least
-  cooled-down) baseline is the number to trust for capacity planning, and
-  the mid-session one is now understood as a thermal artifact rather than a
-  separate finding.
+| Segment (duration, chars) | Session start | Mid-session | Reboot, soft-cut on | Reboot, soft-cut off (this run) |
+| --- | ---: | ---: | ---: | ---: |
+| 2.37s, 27 chars | 1866 ms | 3220 ms | 1999 ms | 2030 ms |
+| 1.92s, 18 chars | 1262 ms | 2111 ms | 1168 ms | 1133 ms |
+| 1.69s, 13 chars | 1067 ms | 1443 ms | 1062 ms | 1074 ms |
+| 4.83s, 43 chars | 4238 ms | 5916 ms | 4182 ms | 3936 ms |
+
+The two reboot runs (soft-cut on vs. off) agree closely on these four
+*unsplit* segments, as expected — soft-cut only touches segments that
+actually run past `soft_cut_s`, so its cost is isolated to those, not a
+blanket slowdown. Both reboot runs sit well below the mid-session numbers
+either way, reinforcing that the thermal effect and the soft-cut effect
+are two independent, now both-understood findings, not one conflated one.
+
+**Practical takeaway:** benchmark numbers taken deep into a long, uncooled
+RPi5 test session run measurably pessimistic — a cold-boot (or at least
+cooled-down) baseline is the number to trust for capacity planning, and the
+mid-session one is now understood as a thermal artifact rather than a
+separate finding.
 
 ---
 
@@ -272,7 +302,7 @@ genuine capacity limit, not a bug. Three `max_segment_s` values were swept,
 each a single ~62s pass of the same clip on both channels:
 
 | `max_segment_s` | `soft_cut_s` | First-segment RTF† | Time to queue saturation | Peak combined queue depth | Queue trend |
-| --- | --- | --- | --- | --- | --- |
+| ---: | ---: | ---: | ---: | ---: | --- |
 | 2.0s | 1.0s | **0.92 – 0.98** (clean start) | ~18s | 399 | GROWING |
 | 3.0s | 2.0s | 2.22 – 2.35 (dirty start‡) | ~24s | 391 | GROWING |
 | 5.0s | 3.0s | 1.81 – 1.95 (dirty start‡) | ~22s | 388 | GROWING |
@@ -290,7 +320,7 @@ transcript had even landed.
 Worst individual segments observed (uncapped run, `segment_limits_enabled=false`):
 
 | Segment duration | Decode time | RTF |
-| --- | --- | --- |
+| ---: | ---: | ---: |
 | 37.81s | 119.5s | 3.16x |
 | 5.02s (capped) | 16.6s | 3.31x |
 
@@ -329,7 +359,7 @@ above for the actual target-workload numbers.
 
 ### Why this needed measuring
 
-`docs/STT_MULTIPROCESS_PLAN.md` assumed single-thread ORT beats its default multi-threaded pool ("sync overhead exceeds the benefit at this model size") without ever measuring it on the Pi. Disassembling `ort_maybe_force_single_thread` in `libmoonshine.so` confirmed the flag is binary: `getenv("MOONSHINE_ORT_SINGLE_THREAD")` — NULL, empty, or the literal string `"0"` all skip forcing and leave ORT's own default pool (sized to `hardware_concurrency()`); anything else forces `intra_op_num_threads=1`. That settled *what* the flag does; this entry settles whether it's worth setting.
+`docs/archived/STT_MULTIPROCESS_PLAN.md` assumed single-thread ORT beats its default multi-threaded pool ("sync overhead exceeds the benefit at this model size") without ever measuring it on the Pi. Disassembling `ort_maybe_force_single_thread` in `libmoonshine.so` confirmed the flag is binary: `getenv("MOONSHINE_ORT_SINGLE_THREAD")` — NULL, empty, or the literal string `"0"` all skip forcing and leave ORT's own default pool (sized to `hardware_concurrency()`); anything else forces `intra_op_num_threads=1`. That settled *what* the flag does; this entry settles whether it's worth setting.
 
 ### Method
 
@@ -372,7 +402,7 @@ Single-thread ~16-20% faster. (Dev-box pre-check, same day, same direction at la
 - **Pinning adds a further, smaller edge on top of single-threading** (2112ms vs 2170ms mean, ~3%) — real, consistent with cache-locality reasoning, but secondary. The flag is the load-bearing decision; pinning is a bonus on top of it.
 - **Rounds were rotated, not sequential**, so a monotonic drift (thermal, background load) would hit all three configs equally instead of aliasing into a fake config effect — see the dev-box caution below for why this mattered.
 - **The same full-pipeline comparison on the dev box was noisy and pointed the wrong way** (single run each, no rotation): pinned+single-thread measured *slightly slower* than the multi-thread default there. Root cause, not a contradiction: the dev box has 32 idle cores and this recording is sparse/gappy, so neither pinning nor single-threading has any scarcity to defend against — the RPi5's real constraint (4 cores, real memory-bandwidth limits) is what makes the effect show up at all. The isolated-decoder mechanism test *did* transfer from dev box to Pi; the full-pipeline comparison did not, and needed the real hardware.
-- Confirms the assumption in `docs/STT_MULTIPROCESS_PLAN.md` §2.1. Ship `MOONSHINE_ORT_SINGLE_THREAD=1`.
+- Confirms the assumption in `docs/archived/STT_MULTIPROCESS_PLAN.md` §2.1. Ship `MOONSHINE_ORT_SINGLE_THREAD=1`.
 
 ---
 
@@ -385,7 +415,7 @@ Single-thread ~16-20% faster. (Dev-box pre-check, same day, same direction at la
 
 ### Why this needed measuring
 
-`docs/STT_MULTIPROCESS_PLAN.md`'s whole premise rests on `multiprocessing.Process` removing the GIL-serialization that capped two threads at 1.02x (measured on the RPi5, `probe_gil_release.py`). The process-based number — 84% overlap, 1.70x speedup — was so far only measured on a 32-core x86 dev box. §11.2 names this **Gate 0**: the cheap check before writing any `src/` code, required to pass on the RPi5 specifically, not inferred from the dev box.
+`docs/archived/STT_MULTIPROCESS_PLAN.md`'s whole premise rests on `multiprocessing.Process` removing the GIL-serialization that capped two threads at 1.02x (measured on the RPi5, `probe_gil_release.py`). The process-based number — 84% overlap, 1.70x speedup — was so far only measured on a 32-core x86 dev box. §11.2 names this **Gate 0**: the cheap check before writing any `src/` code, required to pass on the RPi5 specifically, not inferred from the dev box.
 
 ### Method
 
@@ -409,7 +439,7 @@ For reference, two *threads* on the RPi5 (`probe_gil_release.py`) measured 1.02x
 
 - **Overlap higher, speedup lower — consistent with the memory-bandwidth hypothesis, not a contradiction.** On the RPi5 the two processes were computing simultaneously effectively the entire time (100%), more cleanly than the dev box's 84%. But the RPi5's far lower memory bandwidth means that concurrent compute contends harder for the same memory bus, capping the throughput gain to 1.47x instead of the dev box's 1.70x. The GIL-removal mechanism is confirmed even more cleanly on target hardware; the payoff is real but smaller — this is the number to plan around, not the dev box's more optimistic 1.70x.
 - Repeated `STTWorker: ... final line was repetitive, falling back to best partial` log lines are expected: the probe decodes the identical clip 30 times per child, so the repetition guard firing every time is a property of the synthetic workload, not a defect.
-- **Gate 0 passes** — confirms the plan's premise on the actual target hardware. Step 7's remaining work is the full before/after pipeline protocol (`docs/STT_MULTIPROCESS_PLAN.md` §11.3-11.7); this closes only the Gate 0 sub-step (§11.2).
+- **Gate 0 passes** — confirms the plan's premise on the actual target hardware. Step 7's remaining work is the full before/after pipeline protocol (`docs/archived/STT_MULTIPROCESS_PLAN.md` §11.3-11.7); this closes only the Gate 0 sub-step (§11.2).
 
 ---
 
@@ -426,46 +456,4 @@ experiment 2/3 have this wired up but commented out (see
 - Remaining shipped `tiny-*` checkpoints (`ja`, `ar`, `uk`, `vi`) not yet
 benchmarked — expected to follow the same ~1.9x-decoder pattern as `ko`/`zh`
 based on cache inspection, but unconfirmed against real audio.
-
----
-
-
-
-## Analysis
-
-
-
-### Why Korean and Chinese are ~2x slower than English — not a bug
-
-`tiny-en`, `tiny-ko`, and `tiny-zh` share the same architecture *label* but
-are **different trained checkpoints**, confirmed by inspecting the installed
-`moonshine-voice` 0.0.69 cache directly
-(`~/.cache/moonshine_voice/download.moonshine.ai/model/`):
-
-
-|                                      | `tiny-en`                            | `tiny-ko` | `tiny-zh`   |
-| ------------------------------------ | ------------------------------------ | --------- | ----------- |
-| Decoder (`decoder_model_merged.ort`) | 30.4 MB                              | 58.3 MB   | **58.3 MB** |
-| Encoder                              | 13.28 MB                             | 13.24 MB  | 13.24 MB    |
-| `decoder_with_attention.ort`         | present (30.1 MB)                    | absent    | absent      |
-| Tokenizer (`tokenizer.bin`)          | same md5, all three: `1373d589…f969` |           |             |
-
-
-- `tiny-zh`'s decoder is byte-for-byte almost the same size as `tiny-ko`'s
-— the general shape of every non-English `tiny` checkpoint, not a
-Korean-specific quirk.
-- A ~1.9x larger decoder doing token-by-token autoregressive generation on
-CPU accounts for most of the ~2x latency gap on its own.
-- English alone ships `decoder_with_attention.ort`, possibly a faster
-incremental-decode path the other languages lack — inferred from the
-asset list, not confirmed from source.
-- Compounding factor: all three share one BPE tokenizer trained
-predominantly on Latin-script text, which typically needs more decode
-steps per second of speech for Korean/Chinese (multi-byte UTF-8 per
-character/syllable, poor byte-level merge coverage). Consistent with
-Korean's and Chinese's steeper latency growth and lower character
-throughput for the same audio duration.
-- `src/edge_voice/stt/stt_worker.py` has no language-conditional decode
-logic (`max_tokens_per_second`, `repetitive_ratio`, etc. are global) — the
-gap is entirely upstream, in Useful Sensors' per-language checkpoints.
 
