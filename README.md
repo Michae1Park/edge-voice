@@ -6,12 +6,12 @@ Real-time, dual-channel (Rx/Tx) transcription for edge devices using Silero VAD 
 
 <p align="center"><b>English</b></p>
 <p align="center">
-  <img src="docs/video/en_partial.gif" width="100%">
+  <img src="docs/video/en_partial.webp" width="100%">
 </p>
 
 <p align="center"><b>Korean (multilingual)</b></p>
 <p align="center">
-  <img src="docs/video/ko_partial.gif" width="100%">
+  <img src="docs/video/ko_partial.webp" width="100%">
 </p>
 
 ## Architecture
