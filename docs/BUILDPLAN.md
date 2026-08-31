@@ -83,27 +83,34 @@ Conflating the two will make restart-count metrics noisy and useless.
 ## STATUS (update this every session, even with one line)
 
 ```
-Last updated: 2026-08-06
+Last updated: 2026-08-31
 Current milestone: 8 — Testing & CI (partially pre-satisfied; see below)
 Done: ms 0, 1, 2, 3, 4, 5, 6, 7
 Since ms 7 (not part of any milestone — see "Unplanned work that landed"):
-             partial transcripts (vad.partial_interval_s, on by default),
-             one-add_audio()-per-segment STT fix, eager model construction
-             for both VAD and STT, ONNX Runtime backend confirmation at
-             startup, rms_gate_enabled flipped back on (RPi5 queue clogging),
-             webui clear button + legend/freshness bar, live mic capture over
-             MQTT + `edge-voice --mic`, systemd crash-loop protection +
-             `make install-service`, mosquitto/portaudio via `make install`.
+             STT moved to one dedicated decoder per channel, then to one OS
+             process per channel (`docs/archived/STT_MULTIPROCESS_PLAN.md`,
+             BUILT and verified on the RPi5, 2026-08-11) for genuine
+             parallelism — see `ARCHITECTURE.md` §3 Core Decision; soft-cut
+             latency fix (vad.soft_cut_enabled, default off — see
+             `BENCHMARK.md`); MOONSHINE_ORT_SINGLE_THREAD=1 defaulted in cli
+             and the systemd unit; webui console rebuilt as a two-panel
+             sidebar+chat layout with static console.js/console.css
+             (2026-08-30/31); install.sh device-bootstrap script + reworked
+             README install/run docs; partial transcripts
+             (vad.partial_interval_s, on by default), rms_gate_enabled
+             flipped back on (RPi5 queue clogging), live mic capture over
+             MQTT + `edge-voice --mic`, systemd crash-loop protection.
 Next action: Milestone 8's remaining gaps — unit tests for `config`
              validation and `observability/logging.py`, and unit tests for
              VAD segmentation / router correctness (today only the
              integration fixture covers those). CI itself already runs
              lint + format + mypy + the default suite on push and PR.
-Blocked on: nothing for ms 8. Two scoped features are parked:
+Blocked on: nothing for ms 8. One scoped feature is parked:
              docs/deferred/STREAMING_STT_PLAN.md is on hold deliberately (2026-08-06,
              possibly indefinitely) — benchmarking showed no throughput win,
-             see the doc's own status line — and docs/deferred/CALL_LIFECYCLE_PLAN.md
-             awaits a decision to start.
+             see the doc's own status line. docs/deferred/CALL_LIFECYCLE_PLAN.md
+             also awaits a decision to start. STT multiprocessing (formerly
+             parked here) is done — see above.
 ```
 
 ---
@@ -198,6 +205,7 @@ configs.
 
 ## Milestone 2 — Real audio ingestion + channel routing ✅ Done
 
+```text
 WavSource process
         |
         | MQTT publish
@@ -222,6 +230,7 @@ PacketCopier
         |                               FakeSTT
         v
 audio_ingest/audio_dump.py
+```
 
 1. `audio_ingest/mqtt_client.py`
    - Subscribes to per-channel MQTT topics
@@ -277,6 +286,14 @@ see `tests/test_pipeline_integration.py`.
 
 ## Milestone 4 — Real shared Moonshine STT ✅ Done
 
+**Reversed since — see `ARCHITECTURE.md` §3 Core Decision.** The "one shared
+`Transcriber`" design below didn't survive contact with the RPi5: it couldn't
+sustain real-time dual-channel throughput, so STT moved to one decoder per
+channel, then to one OS process per channel
+(`docs/archived/STT_MULTIPROCESS_PLAN.md`, built 2026-08-11). Kept here for
+the original (now-superseded) reasoning, same as Milestone 3's own reversal
+note below it.
+
 1. `stt/stt_worker.py`
    - One shared `Transcriber` across *all* channels, not one per channel —
      `start()`/`stop()` fully resets Moonshine's decoder state (verified
@@ -286,10 +303,9 @@ see `tests/test_pipeline_integration.py`.
      (~175MB/channel not held open) and matches the turn-taking nature of
      the audio.
    - Language + model arch configurable (`STTSettings.language`,
-     `STTSettings.model_arch`). **Superseded 2026-08-04:** the original
-     `feed_windows=64` windowed feeding is gone — each segment is now fed in
-     one `add_audio()` call (~2.7x faster, no boundary duplication), and the
-     setting no longer exists.
+     `STTSettings.model_arch`). **Superseded 2026-08-04** by one
+     `add_audio()` call per segment instead of windowed feeding — see
+     "Unplanned work that landed" below for the numbers.
    - Repetitive-output guard: falls back to the best partial line when the
      decoder loops on itself (beam-search collapse at awkward boundaries)
 2. Swapped fake STT for `stt/stt_worker.py` inside `pipeline/orchestrator.py`.
@@ -400,110 +416,21 @@ supervision on.
 (`systemctl kill -s SIGSTOP`), and a real power-cut leaving the previous dump
 WAV intact. The `.service` file documents both procedures.
 
-**Runs unattended on a no-internet edge box — no one is coming to SSH in and
-restart it.** That constraint means two independent layers, because each
-catches a failure mode the other structurally cannot:
-
-- **In-process supervision** (1–2) only works if the process is still
-  scheduling threads at all. It cannot rescue a deadlock, a hang inside a
-  native call (torch/silero/moonshine), or an OOM — the supervisor is
-  wedged right along with everything else in that case.
-- **OS-level watchdog** (3) is the layer underneath that catches exactly
-  that case, restarting the whole process from outside it.
-
-1. `pipeline/supervisor.py` — restarts `audio_ingest`/`channel`/`vad`/`stt`
-   worker threads on unexpected exit, tracks restart counts, flags
-   "degraded" after N repeated failures within a window (§5). Must
-   distinguish an intentional `stop_event`-triggered exit (from
-   `orchestrator.stop()`) from a genuine crash — only the latter restarts.
-   Once a worker is flagged degraded, stop hot-restarting it in-process —
-   repeated restarts without backoff just burn CPU on a constrained board —
-   and let layer 3 below (a full process restart) be the recovery path
-   instead. `orchestrator.py` builds the workers and hands them to
-   `supervisor.py` to watch — `supervisor` itself stays generic ("a thread
-   died, restart it") rather than knowing what a VAD worker is.
-   - **Also covers stalls, not just exits.** Exit-based detection alone
-     misses a worker that deadlocks or blocks forever without crashing —
-     that's invisible to both this layer (nothing exits) and layer 3 below
-     (the rest of the process, including the watchdog heartbeat thread,
-     keeps ticking fine). Each worker exposes a last-activity timestamp
-     (updated once per packet/segment handled); `supervisor` polls it
-     alongside `is_alive()` and treats "no activity for M seconds while
-     upstream is still feeding it work" the same as an exit.
-   - **Restarting `VADWorker` loses whatever segment was in progress** for
-     the channel that was active — full recovery isn't realistically
-     possible from a thread that just crashed unpredictably (its internal
-     state is already suspect). Instead of losing this silently, before
-     discarding the dead instance, inspect its `_channels` for any
-     non-empty `segment_chunks` and log the loss explicitly (channel,
-     seconds of audio) as its own distinct event — not folded into the
-     generic "worker restarted" log line — so a crash that ate a live
-     utterance is auditable after the fact, the same way the Milestone 3
-     fixture work made channel state corruption auditable via segment
-     counts.
-2. Fault isolation: malformed packet / inference exception → log + drop,
-   never kill the worker loop. **Largely already true** —
-   `VADWorker.run()` and `STTWorker.run()` already wrap per-item handling
-   in `try/except Exception: logger.exception(...)` and continue; this
-   item is now an audit to confirm `MqttAudioIngest`/`ChannelRouter` have
-   the same guard, not new code.
-3. OS-level watchdog (systemd `WatchdogSec=`, or a hardware watchdog if the
-   board has one): the app calls `sd_notify("WATCHDOG=1")` periodically. If
-   the process hangs, deadlocks, or is OOM-killed — none of which item 1
-   can detect from inside the same wedged process — systemd restarts it.
-   This is the layer that actually delivers "restarts itself with nobody
-   watching." **Lives on `Supervisor`'s own tick, not the UI's poll cadence**
-   — `Supervisor` is itself a `threading.Thread` (same shape as
-   `VADWorker`/`STTWorker`), started/stopped by `orchestrator.start()`/
-   `stop()` like any other worker, so it has a consistent home whether
-   `cli.py` is running headless (`run_with_timer()`) or hosting the kiosk
-   UI (blocks in `uvicorn.run()` instead — neither path ticks the other).
-   The ping must not share a code path with the (slower) worker-rebuild
-   work in item 1 — a slow model reload delaying the ping could trigger a
-   spurious watchdog restart on top of an already-in-progress one.
-4. Flesh out the `get_status()` seam stubbed in Milestone 1 so it reports
-   real per-worker state (running/restarting/degraded) sourced from
-   `supervisor`, not from grepping logs.
-5. Kiosk pill gets a third **degraded** state, distinct from live/stopped,
-   sourced from item 4. **Correction to the Milestone 5 assumption** that
-   the status panel "picks this up automatically" — checked
-   `console.html`: `setRunning()` only branches on the boolean `.running`,
-   so a degraded-but-still-running pipeline today renders identically to a
-   fully healthy one. Deliberately scoped to just this one pill state, not
-   a general fallback-screen system — this app has no sensors or
-   peripherals to show fallback states for, only the pipeline itself.
-6. Atomic writes for the two local file writers that run continuously by
-   default on a power-loss-prone device — `SegmentAudioDumpWorker`
-   (enabled by default) and `AudioDumpWorker` (opt-in) both call
-   `sf.write()` straight to the destination path. Write to a temp path in
-   the same directory and `os.replace()` onto the final filename instead,
-   so a power cut mid-write leaves the previous file intact rather than a
-   torn WAV. Deliberately **not** a database/WAL layer — there's no
-   database anywhere in this app, and transcript persistence is already
-   out of scope (see bottom of this doc); these two debug dump workers are
-   the only continuous local writes that exist, and losing one in-flight
-   file is already contained to that one file, not a shared store.
-7. Wire up the "restart worker" control left out of scope in Milestone 5,
-   now that `supervisor.py` exists for it to call into. Lower priority
-   than 1–6 — the point of this milestone is *not* needing a human at the
-   console — keep only if a manual override is still wanted for debugging.
-   **Still not built as of 2026-08-06**, and nothing has needed it: the
-   supervisor's automatic restarts plus the systemd layer have covered every
-   failure seen so far.
-
-**Scope, sized against `test_orchestrator.py` (236 lines) as the closest
-existing precedent** — comparable to a full earlier milestone (VAD or STT),
-not a small patch:
-
-| Piece | Scope |
-|---|---|
-| `pipeline/supervisor.py` (new) | Largest, most novel piece — thread lifecycle, per-worker restart/backoff/degraded tracking, liveness polling, the VAD-loss logging special case |
-| `orchestrator.py` changes | Moderate — touches the shutdown-ordering logic that was already subtly buggy once (Milestone 4/PR #7), so needs care, not just volume |
-| Small additions to 4 worker files | Small each — a last-activity timestamp stamp per item handled |
-| systemd unit + `sd_notify` helper | Small code (stdlib socket write), but **can't be fully verified off-device** — the socket call is unit-testable here; "`kill -9` → systemd actually restarts it" only proves out on the real box, same as Milestone 8 already treats perf validation (manual, on-device) |
-| `console.html` | Small — one CSS class, one JS branch |
-| Atomic writes (2 dump workers) | Small — one shared helper, two call sites |
-| Tests | The other major chunk — a new `test_supervisor.py` in the same range as `test_orchestrator.py`, plus updates to the existing orchestrator/status tests |
+**Design rationale, condensed — full detail in `RELIABILITY.md`:** the app
+runs unattended on a no-internet edge box, so recovery has to be automatic.
+Two independent layers, because each catches a failure the other structurally
+cannot — in-process supervision (crash + stall detection via a per-worker
+last-activity timestamp, `VADWorker`'s in-progress-segment loss logged
+explicitly rather than silently dropped, degraded state after a restart
+budget is exhausted) can't rescue a deadlock, a hang inside a native call, or
+an OOM; the OS-level watchdog underneath (`sd_notify`, ticking on the
+supervisor's own thread so a slow worker-rebuild can't delay the heartbeat)
+is what catches that case, restarting the whole unit via systemd. Fault
+isolation (malformed packet / inference exception → log + drop, never kill
+the worker loop) and atomic writes for the two dump workers round out the
+shipped scope. One control was scoped but never built: a manual "restart
+worker" UI action — not needed, since automatic restarts plus the systemd
+layer have covered every failure seen so far.
 
 **Done when:**
 - Deliberately raising inside `stt/worker.py` mid-run gets logged, the
@@ -557,18 +484,13 @@ doesn't mention them):
   the status strip, which is more than the "render at least one of each"
   the Done-when asked for.
 
-**Two decisions recorded while building, worth not re-litigating:**
-
-- **Health is query-driven, not a thread.** `metrics.py` and `supervisor.py`
-  are tick-driven pushers; health assembles synchronously per request, with
-  no cadence of its own. That's why it takes plain values rather than the
-  callables those two take.
-- **Deliberate omissions from the payload**: the snapshot's per-worker
-  `state` (live worker state already ships in `workers`, one tick fresher)
-  and the scalar `stt_last_latency_s` (the per-channel `stt` map is already
-  there, and the two legitimately disagree). Two similar-looking numbers of
-  different ages in one payload is the exact trap the router-vs-VAD clock
-  decision avoided.
+**Two decisions recorded while building** (full rationale now in
+`HEALTH.md`'s "Why health is its own thing"): health is query-driven, not a
+tick-driven pusher like `metrics.py`/`supervisor.py`, which is why it takes
+plain values rather than their callables; and the payload deliberately omits
+the snapshot's per-worker `state` (already in `workers`, one tick fresher)
+and the scalar `stt_last_latency_s` (the per-channel `stt` map is already
+there, and the two legitimately disagree).
 
 **Starting point, not a blank slate:** `config/settings.py` already has two
 stubs anticipating this milestone that nothing reads today —
@@ -604,20 +526,11 @@ sections for logging format / staleness threshold.
   the carried tail gets a new one). `_finalize_segment` reads
   `state.segment_id` instead of generating one.
 - **Per-channel freshness uses `ChannelRouter.get_freshness()` only**, not
-  `VADWorker`'s internal `last_packet_at`. Both exist, but they're
-  different clocks for different jobs: the router's is wall-clock and
-  answers "is this channel still sending audio" (exactly what health
-  reporting needs, and it's already public — built in Milestone 2). VAD's
-  is monotonic and purely drives `idle_flush_s`. Surfacing both would give
-  the health object two similar-looking numbers that can legitimately
-  disagree, with no clean way to explain why.
-- **STT latency means pure inference time**, not queue-to-transcript.
-  Queue depth (tracked separately, see below) already answers "is there a
-  backlog"; measuring latency end-to-end would just fold that same signal
-  into a second metric. `STTWorker` times its own transcribe call
-  (`time.monotonic()` around the existing call site) and reports that
-  duration — isolates model/inference performance, which is what you'd
-  actually act on differently (model size vs. queue size) if it regressed.
+  `VADWorker`'s internal `last_packet_at` — full rationale (two different
+  clocks answering different questions) now in `ARCHITECTURE.md` §7.
+- **STT latency means pure inference time**, not queue-to-transcript —
+  queue depth already answers "is there a backlog"; full rationale now in
+  `ARCHITECTURE.md` §7 Metrics.
 
 **New plumbing this milestone required** (all four landed):
 1. ✅ `orchestrator.py` — a `queue_depths() -> dict[str, int]` method calling
@@ -688,22 +601,9 @@ sections for logging format / staleness threshold.
    needs new DOM/JS to actually render queue depths, MQTT state, and
    per-channel freshness, not just a richer payload nobody looks at.
 
-**Scope as estimated before building** (sized against Milestone 6, where a
-new package from scratch, `pipeline/supervisor.py`, was the largest piece;
-here it was two new packages, `observability/` and `health/`, both empty or
-nonexistent at the time). Kept for calibration — it held up, except that
+**Still-open test gap from this milestone** (carries into Milestone 8):
 `test_observability_logging.py` was never written, so the JSON formatter and
-stage adapter are covered only incidentally by everything that logs. That gap
-carries into Milestone 8:
-
-| Piece | Scope |
-|---|---|
-| Plumbing additions (queue_depths, mqtt.connected, supervisor budget accessor, VAD segment_id-at-start) | Small each, but four separate call sites across four files — same shape as Milestone 6's "last-activity timestamp per worker" item |
-| `observability/logging.py` + `cli.py` wiring | Moderate — new JSON formatter is small, but touching ~30 call sites to pass `extra={channel_id, segment_id, stage}` is the bulk of the diff |
-| `observability/metrics.py` (new) | Moderate — new worker thread + `MetricsSettings`, but each metric it aggregates already has a source once the plumbing above lands |
-| `health/reporting.py` (new) | Small — mostly assembly of `get_status()` + `metrics.py`'s snapshot + `get_freshness()`, no new computation of its own |
-| `webui/app.py` + `console.html` | Moderate — endpoint change is small, but rendering queue/MQTT/freshness state in the UI is new JS, not a repoint |
-| Tests | New `test_observability_logging.py`, `test_metrics.py`, `test_health_reporting.py`, plus updates to `test_orchestrator.py`/`test_webui_app.py` for the richer status shape |
+stage adapter are covered only incidentally by everything that logs.
 
 **Done when:**
 - Deliberately tracing one segment through a live run — `audio_ingest`
@@ -849,22 +749,9 @@ milestones above.
   and would decide whether the rest proceeds. English test audio is no longer
   missing (`wav/obama_2012.wav`), though it's a studio-quality monologue, not
   two-party telephone audio.
-- **`docs/STT_MULTIPROCESS_PLAN.md`** — **approved for build (2026-08-10),
-  decisions settled, not yet started.** The doc is written as an ordered,
-  step-by-step build plan with per-step acceptance criteria; start at its
-  Step 0. Per-channel `STTWorker` threads (shipped) fixed unbounded queue
-  growth but not genuine parallelism: confirmed on the RPi5 both on the real
-  pipeline (decode calls alternate in lockstep between channels) and in
-  isolation (`scratch/probe_gil_release.py`: 1.02x speedup from two threads —
-  no benefit). The GIL serializes decode compute regardless of thread/core
-  count. Current fix works by keeping total demand under budget (~65%
-  measured), a margin not a guarantee. Plan: one OS process per channel's STT
-  worker (cores 2/3), ingest+router+VAD staying as threads (cores 0-1), mp
-  queues at the STT boundary only — `vad_worker.py` needs zero changes since
-  `mp.Queue` duck-types `queue.Queue`. **Step 0 is a hard gate:** adapt
-  `probe_gil_release.py` to `multiprocessing.Process` and confirm ≥1.7x
-  speedup in isolation before touching `src/`; if it comes back ~1.0x the
-  plan's premise is wrong and the build should stop.
+
+(STT multiprocessing was parked here previously — it's done; see "Unplanned
+work that landed" above and `ARCHITECTURE.md` §3.)
 
 ---
 
