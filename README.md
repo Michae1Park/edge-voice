@@ -1,6 +1,6 @@
 # edge-voice
 
-Real-time, dual-channel (Rx/Tx) transcription for edge devices using Silero VAD for speech segmentation and Moonshine for STT. Built for any two-party audio source, where each party's audio arrives as its own MQTT stream and is transcribed independently, in order, with channel attribution preserved throughout.
+Real-time, dual-channel (Rx/Tx) transcription for edge devices using Silero VAD for speech segmentation and Moonshine for STT. Light enough to run on a CPU — no GPU or NPU required — with partial (streaming) transcripts emitted before a turn finishes speaking. Built for any two-party audio source, where each party's audio arrives as its own MQTT stream and is transcribed independently, in order, with channel attribution preserved throughout.
 
 ## Demo
 
@@ -26,6 +26,7 @@ Two logically separate pieces talk only over MQTT; everything after ingestion ru
 
 ## Requirements
 
+- **Tested on Ubuntu 24.04 and RPi5** — other Linux distributions likely work but aren't verified
 - **Python 3.12**
 - **An MQTT broker**, reachable by the pipeline (`localhost:1883` by default — see [Configuration](#configuration)) — audio ingestion is MQTT-only, there's no direct-mic-to-pipeline path in production
   - Debian/Raspberry Pi OS: `make install` / `install.sh` installs and starts [Mosquitto](https://mosquitto.org/) via `apt`
