@@ -215,7 +215,7 @@ def test_bridge_falls_back_to_worker_last_activity_when_cpu_is_flat(monkeypatch)
 def test_child_process_transcribes_a_segment_end_to_end():
     """Spawns a real child, which loads a real model. Also records the
     start->ready time, which is what sizes the orchestrator's readiness
-    timeout (see docs/STT_MULTIPROCESS_PLAN.md §5.6)."""
+    timeout (see docs/archived/STT_MULTIPROCESS_PLAN.md §5.6)."""
     ctx = new_mp_context()
     segment_queue = ctx.Queue()
     handle = STTProcessHandle(

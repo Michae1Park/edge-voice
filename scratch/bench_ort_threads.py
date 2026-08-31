@@ -13,12 +13,12 @@ Must set EDGE_VOICE_STT__USE_PROCESSES=false when running this -- since
 settings.stt.use_processes defaults True, without the override this goes
 through two STT *processes* (rx/tx) instead of the single in-process decoder
 this script is meant to isolate, conflating this question with the
-multiprocess one (see docs/STT_MULTIPROCESS_PLAN.md §3).
+multiprocess one (see docs/archived/STT_MULTIPROCESS_PLAN.md §3).
 
 Dev-box pre-check (x86, 32 cores, 2026-08-11) DID show the effect clearly --
 unset/=0 spread the decode across ~all 32 cores and ran slower (1.55s/1.34s
 total latency); =1 stayed on 1 core and ran faster (0.94s). See
-docs/STT_MULTIPROCESS_PLAN.md §3.1 for the full numbers. That corrects the
+docs/archived/STT_MULTIPROCESS_PLAN.md §3.1 for the full numbers. That corrects the
 assumption below this note used to make (that a 32-core box couldn't show a
 4-core-relevant effect) -- it can, and did. Still run this on the RPi5
 before trusting the *magnitude* for the deployed config: 4 ARM cores with

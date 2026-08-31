@@ -2,7 +2,7 @@
 """Do two STT *processes* decode in parallel, where two threads did not?
 
 The multiprocessing counterpart to scratch/probe_gil_release.py, and
-**Step 0 / the hard gate of docs/STT_MULTIPROCESS_PLAN.md**: run this
+**Step 0 / the hard gate of docs/archived/STT_MULTIPROCESS_PLAN.md**: run this
 before writing any src/ code. Same two-Transcriber workload, same
 start/add_audio/stop cycle stt_worker.py's _transcribe() uses -- the only
 variable changed is threading.Thread -> multiprocessing.Process.

@@ -79,7 +79,7 @@ class PipelineOrchestrator:
         # Process-mode only (settings.stt.use_processes). None in thread mode.
         # The mp context, the shared child->parent log queue and its listener,
         # and one receiver thread per channel draining that channel's
-        # transcript queue. See docs/STT_MULTIPROCESS_PLAN.md.
+        # transcript queue. See docs/archived/STT_MULTIPROCESS_PLAN.md.
         self._mp_ctx: Any = None
         self._log_queue: Any = None
         self._log_listener: Any = None
@@ -276,7 +276,7 @@ class PipelineOrchestrator:
             # holding undelivered transcripts cannot exit, so stopping the
             # drain first would make the joins above block for their full
             # timeout and then falsely report zombies. Confirmed behaviour,
-            # not caution -- see docs/STT_MULTIPROCESS_PLAN.md section 5.7.
+            # not caution -- see docs/archived/STT_MULTIPROCESS_PLAN.md section 5.7.
             if self._settings.stt.use_processes:
                 self._stop_stt_receivers()
                 self._stop_log_listener()
@@ -923,7 +923,7 @@ class PipelineOrchestrator:
 
         See docs/ARCHITECTURE.md for why STT is per-channel at all (one
         sequential decoder cannot sustain real-time dual-channel
-        transcription on the RPi5), and docs/STT_MULTIPROCESS_PLAN.md for
+        transcription on the RPi5), and docs/archived/STT_MULTIPROCESS_PLAN.md for
         why per-channel *threads* were not enough: moonshine's native decode
         holds the GIL, so two threads serialize (1.02x) where two processes
         overlap (1.70x).

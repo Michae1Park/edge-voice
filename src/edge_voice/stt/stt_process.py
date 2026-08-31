@@ -6,7 +6,7 @@ Moonshine's native decode does not release the GIL, so two STTWorker
 *threads* serialize: measured 1.02x speedup from two threads on the RPi5
 (scratch/probe_gil_release.py), i.e. no benefit at all. Separate processes
 do overlap -- 84% of decode time genuinely concurrent, 1.70x throughput
-(scratch/probe_mp_speedup.py). See docs/STT_MULTIPROCESS_PLAN.md for the
+(scratch/probe_mp_speedup.py). See docs/archived/STT_MULTIPROCESS_PLAN.md for the
 full evidence and the design decisions this module implements.
 
 What it does NOT change

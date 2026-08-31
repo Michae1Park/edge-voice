@@ -175,7 +175,7 @@ class STTSettings(BaseModel):
     # thread. True is the deployed configuration: moonshine's native decode
     # does not release the GIL, so two STT *threads* serialize (measured 1.02x
     # speedup on the RPi5 -- i.e. none), while two processes genuinely overlap
-    # (84% of decode time concurrent, 1.70x). See docs/STT_MULTIPROCESS_PLAN.md.
+    # (84% of decode time concurrent, 1.70x). See docs/archived/STT_MULTIPROCESS_PLAN.md.
     #
     # False keeps the original thread-backed path. Tests default to it so the
     # suite stays fast and synchronous instead of spawning interpreters and
