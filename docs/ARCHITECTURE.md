@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Version** | v0.3 |
+| **Version** | v0.5.0 |
 | **Owner** | Michae1Park |
-| **Last updated** | 2026-08-06 |
+| **Last updated** | 2026-08-31 |
 | **Status** | Describes the system as built. Anything not built says so inline, and §11 lists what's deferred. |
 
 ## System Overview
@@ -37,8 +37,6 @@ MQTT audio channels
   reporting assembles that plus live pipeline state per request (§7).
 ```
 
-
-
 ## 1. Problem Statement
 
 `edge-voice` transcribes two-party audio in near real time on a resource-constrained edge device. Phone calls are the reference workload, but nothing in the design is phone-specific — any two-party source where each party's audio arrives as its own stream fits (walkie-talkie/PTT links, radio bridges, two-mic meeting capture). Korean is the default language; Moonshine also supports Arabic, English, Spanish, Japanese, Ukrainian, Vietnamese, and Chinese, selected via configuration.
@@ -69,7 +67,6 @@ that was never set.
 | Memory | TBD ceiling | Known components: ~30-60MB per Moonshine `Transcriber` (varies by language/checkpoint, measured directly on RPi5 — see `docs/BENCHMARK.md` and `scratch/probe_decoder_memory.py`), one per channel, ~4MB per channel for Silero, plus bounded queues |
 | CPU headroom | TBD | The RMS gate removes ~52% of Silero forward passes on duplex call audio, ~74% on a mostly-idle channel |
 
-
 ## 2. Non-Goals
 
 The following remain intentionally out of scope:
@@ -79,8 +76,6 @@ The following remain intentionally out of scope:
 - Multi-tenant deployments.
 - Speaker diarization beyond channel attribution.
 - Transcript persistence beyond logs and live streaming.
-
-
 
 ## 3. Architecture
 
@@ -100,6 +95,7 @@ packages onto the milestones that built them.
 | `channel/router.py` | Validates `channel_id`, tracks per-channel last-seen wall-clock time (the freshness signal in §7), re-packetizes to the fixed frame size VAD expects, forwards to the routed queue. |
 | `vad/vad_worker.py` | Per-channel Silero segmentation: own model instance and state machine per channel, preroll, idle flush, soft/hard length cuts, `segment_id` minted at segment *start*, and the optional in-progress partials (§3). Emits each channel's segments to that channel's own segment queue. |
 | `stt/stt_worker.py` | One dedicated instance per channel, each against its own Moonshine `Transcriber` — one `add_audio()` call per segment, repetitive-output guard, per-call and per-channel latency, partial handling and shedding. |
+| `stt/stt_process.py` | Runs an `STTWorker` in its own OS process (one per channel) when `settings.stt.use_processes` (default `True`); `STTProcessHandle` presents a thread-shaped interface so orchestrator/supervisor code doesn't need to know the difference. |
 | **Composition & lifecycle** | |
 | `pipeline/orchestrator.py` | Builds every queue and worker from `Settings` and owns start/stop ordering; the single seam exposing `get_status()`, `queue_depths()`, `channel_freshness()`, and `health()`. |
 | `pipeline/models.py` | The shared vocabulary — `AudioPacket`, `SpeechSegment`, `TranscriptEvent` — so stages import one common type set rather than each other. |
@@ -116,7 +112,8 @@ packages onto the milestones that built them.
 | `health/reporting.py` | Assembles the `/api/status` object per request from live pipeline state, the last metrics snapshot, and router freshness — labelling which fields came from which clock. |
 | **Web UI** (§8) | |
 | `webui/app.py` | FastAPI app: `/api/status`, start/stop, the SSE transcript stream, and transcript clear. Runs in-process with the orchestrator; no MQTT anywhere in it. |
-| `webui/templates/console.html` | The kiosk console page — transcript feed, status pill and strip, per-module chips, static legend bar. |
+| `webui/templates/console.html` | The kiosk console page markup — sidebar (status, channels, per-module pipeline chips) and chat-style transcript feed. No inline JS/CSS. |
+| `webui/static/console.js`, `webui/static/console.css` | Console behavior (status polling, SSE transcript stream, `renderModules()`/`renderStrip()`) and the two-panel dark layout, served as static assets rather than inlined. |
 | **Dev/test tooling** (separate processes, never imported by the pipeline) | |
 | `utils/audio_generation/wav_source_raw.py` | Replays `.wav` files at real-time pace as raw PCM over MQTT — the wire format ingest actually consumes; used by the integration fixture. |
 | `utils/audio_generation/wav_source.py` | Same replay, but publishing a JSON envelope — the shape `docs/deferred/CALL_LIFECYCLE_PLAN.md` would standardize on (§11). |
@@ -161,8 +158,6 @@ Every model is loaded at worker construction, not lazily on the first packet
 or segment: a model load on the real-time path would show up as a multi-second
 stall in exactly the moment the pipeline is meant to be responsive, and it
 would also register as a stall to the supervisor (§5).
-
-
 
 ### Partial (Revisable) Transcripts
 
@@ -400,17 +395,16 @@ Structured JSON logs are the primary operational interface.
   append-only stream where a power cut costs at most the line mid-write.
 - JSON output does not escape non-ASCII (`ensure_ascii=False`) — the default
   language is Korean and every transcript line passes through here.
-
-Every pipeline-stage module logs through an adapter that tags records with
-`stage`, merging in whatever `channel_id`/`segment_id` a call site supplies.
-(The stdlib's own `LoggerAdapter` *overwrites* rather than merges, which would
-silently drop exactly those two fields.)
-
-This is what makes a segment's lifecycle traceable end to end: filter the JSON
-log on one `segment_id` and you get VAD trigger → finalize → STT → the
-terminal `TRANSCRIPT` line (which also carries that segment's own inference
-latency). Packets logged before VAD triggers are necessarily `channel_id`-only
-— no segment exists yet to attribute them to.
+- **Stage tagging, end-to-end traceable.** Every pipeline-stage module logs
+  through an adapter that tags records with `stage`, merging in whatever
+  `channel_id`/`segment_id` a call site supplies (the stdlib's own
+  `LoggerAdapter` *overwrites* rather than merges, which would silently drop
+  exactly those two fields). This is what makes a segment's lifecycle
+  traceable end to end: filter the JSON log on one `segment_id` and you get
+  VAD trigger → finalize → STT → the terminal `TRANSCRIPT` line (which also
+  carries that segment's own inference latency). Packets logged before VAD
+  triggers are necessarily `channel_id`-only — no segment exists yet to
+  attribute them to.
 
 ### Metrics
 
@@ -462,8 +456,6 @@ disagree.
 
 For the full `GET /api/status` payload, when each field is null, and how to
 read the kiosk's status rows, see `HEALTH.md`.
-
-
 
 ## 8. Web UI
 
@@ -566,30 +558,17 @@ validation — performance is still verified manually, on target hardware.
   is currently split — `wav_source.py` publishes a JSON envelope while
   `wav_source_raw.py` and `mic_source.py` publish raw PCM, and only raw PCM is
   what ingest actually consumes today.
-- **STT multiprocessing** (`STT_MULTIPROCESS_PLAN.md`) — **BUILT (2026-08-10);
-  the RPi5 before/after measurement is the one piece still outstanding.** The per-channel
-  `STTWorker` *threads* (this section, above) fixed unbounded queue growth but
-  not genuine parallelism: confirmed on the RPi5, both on the real pipeline
-  (decode calls alternate in lockstep between channels) and in isolation
-  (`scratch/probe_gil_release.py`: two threads, two independent `Transcriber`
-  instances, 1.02x speedup — no benefit). The GIL serializes decode compute
-  regardless of thread/core count, and free-threaded Python is not yet a way
-  out (ONNX Runtime force re-enables the GIL on 3.13t builds). The current fix
-  works by keeping total demand under budget (~65% measured), which is a
-  margin, not a capacity guarantee. The plan moves each channel's `STTWorker`
-  to its own OS process — one per channel, cores 2 and 3, with ingest/router/
-  VAD staying as threads on cores 0-1. Recomputed per core, the same RPi5 run
-  would put the busiest STT core at ~40%, i.e. real headroom rather than a
-  margin. VAD deliberately stays a thread and gets re-measured afterwards: it
-  is currently GIL-blocked for the duration of every decode, so moving STT out
-  speeds VAD up for free, and measuring it beforehand would measure
-  contention that is about to disappear.
-
 Resolved since the last revision of this document:
 
+- **STT multiprocessing** — **BUILT and verified on the RPi5 (2026-08-11)**,
+  closed via three RPi5 measurements in lieu of a literal before/after
+  against a reverted thread-backed build (no longer a live deployment
+  option). This is the decision explained in §3's Core Decision section
+  above — the full build record, including the GIL/lockstep measurements
+  that motivated it, is in `docs/archived/STT_MULTIPROCESS_PLAN.md`.
 - **Threads vs. asyncio** — decided as a hybrid, not exclusively one or the
-other: every pipeline worker (including the supervisor) is a
-`threading.Thread`; asyncio is used only at the FastAPI/web UI boundary,
-bridging into the thread-based pipeline via a thread pool for any call that
-blocks (e.g. stopping the pipeline).
+  other: every pipeline worker (including the supervisor) is a
+  `threading.Thread`; asyncio is used only at the FastAPI/web UI boundary,
+  bridging into the thread-based pipeline via a thread pool for any call that
+  blocks (e.g. stopping the pipeline).
 

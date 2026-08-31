@@ -11,11 +11,37 @@ each worker does. This covers *how* they start, run, and stop.
 - `join()` just **waits** for a thread to finish; it does **not** cause it to.
 - Shutdown flow: *signal → worker notices on its own → cleans up → exits →
   orchestrator's `join()` unblocks.*
-- A worker that never notices the flag becomes an unkillable zombie — only a
-  full process restart (OS watchdog) recovers it.
+- A worker that never notices the flag becomes a zombie. For a genuine
+  thread-backed worker, only a full process restart (OS watchdog) recovers
+  it. A process-backed worker (`STTProcessHandle`, the default for STT) is
+  reclaimed directly — `_join()` kills the OS process and re-joins (Rule 3).
 - Not all workers notice equally fast: queue-driven ones notice only when
   their `queue.get()` next times out; the tick-driven `MetricsCollector`
   notices **immediately** (Rule 2).
+
+---
+
+## Where this lives
+
+Every citation below refers back to this table by function name only, so it
+isn't repeated inline throughout the doc.
+
+| Symbol | Location |
+|---|---|
+| `PipelineOrchestrator.__init__` | `orchestrator.py:69-78` |
+| `build()` | `orchestrator.py:122` |
+| `_build_vad()` (constructs `VADWorker`) | `orchestrator.py:829` |
+| `start()` | `orchestrator.py:178-208` |
+| `stop()` | `orchestrator.py:238-283` |
+| `run()` (the orchestrator's own loop, §Rule 2 Variant) | `orchestrator.py:444-458` |
+| `get_status()` | `orchestrator.py:364` |
+| `_signal()` | `orchestrator.py:331` |
+| `_join()` | `orchestrator.py:338-362` |
+| `_restart()` | `orchestrator.py:728-753` |
+| `_stop_stt_receivers()` | `orchestrator.py:281`, `:610` |
+| `VADWorker`'s queue timeout (0.5s) | `vad_worker.py:258` |
+| `STTWorker`'s `QUEUE_GET_TIMEOUT_S` (0.2s) | `stt_worker.py:99` |
+| `MetricsCollector` class / `run()` | `observability/metrics.py:67` / `:111` |
 
 ---
 
@@ -26,13 +52,13 @@ each worker does. This covers *how* they start, run, and stop.
 | `MqttAudioIngest` | Pulls audio in from MQTT | No |
 | `ChannelRouter` | Re-packetizes, routes by channel | No |
 | `VADWorker` | Segments speech per channel | No |
-| `STTWorker-<channel>` | Runs transcription, one per channel. **A separate OS process, not a thread**, when `stt.use_processes` (the default) — see `STT_MULTIPROCESS_PLAN.md`. The orchestrator drives it through `STTProcessHandle`, which presents the same Thread-shaped surface, so everything in this doc still applies. | No |
+| `STTWorker-<channel>` | Runs transcription, one per channel. **A separate OS process, not a thread**, when `stt.use_processes` (the default) — see `docs/archived/STT_MULTIPROCESS_PLAN.md`. The orchestrator drives it through `STTProcessHandle`, which presents the same Thread-shaped surface, so everything in this doc still applies. | No |
 | `STTReceiver-<channel>` | Drains one STT child's transcript queue and republishes into `TranscriptHub`. Process mode only. Must outlive its child on shutdown — an undrained queue keeps the child alive. | `stt.use_processes` |
 | `Supervisor` | Watches the four above, restarts on crash/stall | `reliability.enabled` |
 | `MetricsCollector` | Aggregates queue depth / STT latency / restart budget / MQTT status on a timer | `metrics.enabled` |
 | `AudioDumpWorker` / `SegmentAudioDumpWorker` | Debug-only raw/segment audio capture | `dump.enabled` / `segment_dump.enabled` |
 
-Owned by `PipelineOrchestrator` (`orchestrator.py:252-268`). The **main
+Owned by `PipelineOrchestrator.__init__`. The **main
 thread** only runs `PipelineOrchestrator.run()` (build/start/wait/stop) — no
 pipeline work, which is why tuning its idle-loop sleep isn't a lever for
 transcription speed.
@@ -45,7 +71,7 @@ mistaken for one.
 
 ## Diagram: start/stop call chains
 
-`build()` (`orchestrator.py:84`) only constructs — no threads exist yet:
+`build()` only constructs — no threads exist yet:
 
 ```text
 _build_mqtt_subscriber() → MqttAudioIngest(...)   ┐
@@ -58,7 +84,7 @@ _build_supervisor()      → Supervisor(...)          (if reliability.enabled)
 _build_metrics()         → MetricsCollector(...)    (if metrics.enabled)
 ```
 
-**`start()`** (`orchestrator.py:122`) — workers first, observers layered on
+**`start()`** — workers first, observers layered on
 after, each depending on the thing before it being alive:
 
 ```text
@@ -69,9 +95,8 @@ if supervisor: supervisor.start() ──▶ Supervisor.run()        # after work
 if metrics:    metrics.start()    ──▶ MetricsCollector.run()  # after supervisor exists
 ```
 
-**`stop()`** (`orchestrator.py:140`) — observers unwind first, then workers
-upstream-first; each `_signal`/`_join` pair (`orchestrator.py:184-198`)
-drives one thread through its own exit path:
+**`stop()`** — observers unwind first, then workers
+upstream-first; each `_signal`/`_join` pair drives one thread through its own exit path:
 
 ```text
 1. _signal(metrics)    ─▶ MetricsCollector.stop() ─▶ sets _stop_event
@@ -86,17 +111,23 @@ drives one thread through its own exit path:
 
    finally: _signal(w) again, every worker   # backstop if a 2nd Ctrl-C
                                               # interrupts step 3 mid-loop
+
+4. finally: _stop_stt_receivers()   # process mode only — stop each
+                                     # STTReceiver-<channel> after its STT
+                                     # child is gone
 ```
 
 ### Worked example: exact call order for `VADWorker`
 
-"One at a time" in step 3 means VAD isn't touched until ingest and router
-have each *fully* stopped — not just signalled. Full order, orchestrator
-calls and `VADWorker`'s own calls interleaved:
+Step 3 above is one line per worker; this expands that line for `VADWorker`
+specifically, showing why "one at a time" matters. "One at a time" means VAD
+isn't touched until ingest and router have each *fully* stopped — not just
+signalled. Full order, orchestrator calls and `VADWorker`'s own calls
+interleaved:
 
 ```text
  1. orchestrator.build()          → self._vad = self._build_vad()
-                                     → VADWorker.__init__()            (orchestrator.py:106)
+                                     → VADWorker.__init__()
  2. orchestrator.start()          → self._vad.start()
                                      → threading.Thread.start()  (stdlib)
                                      → VADWorker.run() begins on its own OS thread
@@ -156,15 +187,15 @@ def run(self) -> None:
 - **The loop can't react until `queue.get()` returns** — blocked there, not
   polling `_stop_event`. It only rechecks `while` when an item arrives or
   the timeout raises `queue.Empty`. So worst-case notice delay = that
-  worker's queue timeout: `VADWorker` 0.5s (`vad_worker.py:176`), `STTWorker`
-  0.2s (`QUEUE_GET_TIMEOUT_S`, `stt_worker.py:59`).
+  worker's queue timeout: `VADWorker` 0.5s, `STTWorker` 0.2s
+  (`QUEUE_GET_TIMEOUT_S`).
 
 (Without the loop, this machinery would be dead code — the thread would just
 run once and exit, `_stop_event` never consulted.)
 
 ### Variant: tick-driven workers (no queue)
 
-`MetricsCollector` (`observability/metrics.py:52-90`) has no queue — it
+`MetricsCollector` has no queue — it
 wakes on a fixed interval and uses `_stop_event` itself as the sleep:
 
 ```python
@@ -184,7 +215,7 @@ an incoming item.
 ### Variant: the orchestrator's own loop
 
 `PipelineOrchestrator` isn't a `threading.Thread` — its `run()`
-(`orchestrator.py:231-245`) executes on whichever thread calls it (normally
+executes on whichever thread calls it (normally
 the CLI's main thread), not a dedicated one:
 
 ```python
@@ -201,7 +232,7 @@ while self._running:
   interval speeds up transcription — it can't, since it does no pipeline
   work.)
 - **Gated on `_running`, not the event.** `stop()` sets both, but
-  `get_status()` (`:201`) and `_restart`'s guard (`:387`) read `_running`
+  `get_status()` and `_restart`'s running guard read `_running`
   directly, not `_stop_event`.
 - **Usually cross-thread.** A web UI handler calling `orchestrator.stop()`
   wakes the main thread out of `wait(1.0)` from a different thread entirely
@@ -212,7 +243,7 @@ while self._running:
 
 ## Rule 3 — `join()` is a spectator, not an actor
 
-`PipelineOrchestrator._signal` / `_join` (`orchestrator.py:184-198`):
+`PipelineOrchestrator._signal` / `_join`:
 
 - **`_signal(worker)`** — calls `worker.stop()`, swallowing `AttributeError`
   defensively.
@@ -239,11 +270,18 @@ _join(w) → w.join(timeout=10)  ───────► unblocks here, or afte
 
 **Failure mode:** a worker that never notices the flag (wedged in a
 no-timeout blocking call, an infinite loop, etc.) becomes a **zombie** —
-`join()` times out, warns, and nothing in this process can kill it.
-`_restart` (`orchestrator.py:363-388`) only swaps the *attribute* to a fresh
-worker; the old thread keeps running orphaned if still alive. The OS-level
+`join()` times out and warns. For a genuine thread, nothing in this process
+can then kill it: `_restart` only swaps the *attribute* to a fresh worker;
+the old thread keeps running orphaned if still alive, and the OS-level
 watchdog (§5 Reliability, `ARCHITECTURE.md`) is the real remedy — a full
 process restart.
+
+For a **process-backed** worker (`STTProcessHandle`, the default for STT),
+`_join()` itself reclaims it directly: any worker exposing `.kill` gets
+killed and re-joined right there, before `_restart` ever runs — no need to
+wait for the OS watchdog. This is generic to `_join()` itself, not something
+`_restart_dict_worker` adds on top (`RELIABILITY.md`'s worked example for
+`STTWorker-rx` points back here rather than re-deriving it).
 
 ---
 
@@ -253,7 +291,7 @@ Two distinct ordering concerns, two distinct reasons.
 
 ### 4a. Pipeline workers: producer before consumer
 
-`stop()` (`orchestrator.py:140-175`) signals and joins the four pipeline
+`stop()` signals and joins the four pipeline
 workers **upstream-first**, draining each stage before the next. Load-
 bearing: `VADWorker.run()` calls `self.flush("shutdown")` on exit to emit
 any in-progress segment rather than drop it (same failure class as
@@ -270,8 +308,8 @@ the four workers in opposite order on each side:
 
 | Phase | Order |
 |---|---|
-| **start()** (`orchestrator.py:122-138`) | 4 workers → `Supervisor` → `MetricsCollector` |
-| **stop()** (`orchestrator.py:140-175`) | `MetricsCollector` → `Supervisor` → 4 workers (upstream-first) |
+| **start()** | 4 workers → `Supervisor` → `MetricsCollector` |
+| **stop()** | `MetricsCollector` → `Supervisor` → 4 workers (upstream-first) |
 
 - **Start last** — `Supervisor` shouldn't scan before the workers it watches
   are running (else "not started yet" reads as "crashed"). `MetricsCollector`
@@ -297,5 +335,5 @@ the four workers in opposite order on each side:
 | What actually ends a thread? | Its own `run()` returning |
 | Max delay: `stop()` → loop notices | Worker's `queue.get` timeout (0.2–0.5s here); `MetricsCollector` is near-instant |
 | Max delay: `stop()` → `_join` gives up | `WORKER_JOIN_TIMEOUT_S` = 10s |
-| Can a wedged thread be force-killed? | No — only a full process restart (OS watchdog) |
+| Can a wedged thread be force-killed? | No — only a full process restart (OS watchdog). Exception: a process-backed worker (`STTProcessHandle`, default for STT) is killed directly by `_join()` |
 | Stop order across all threads | `MetricsCollector` → `Supervisor` → workers, upstream-first |

@@ -39,7 +39,7 @@ piece of data actually lives, and what runs on which thread.
 | Why exit-detection alone misses stalls | n/a | Nothing exits; the OS watchdog is also blind to it, since the rest of the process (this heartbeat included) keeps ticking fine |
 | False-positive guard | n/a | `input_pending()` — a worker with an empty queue is simply idle, never flagged |
 
-An intentional stop (`is_stopping()` is `True`) is never treated as either — that's the orchestrator tearing the pipeline down on purpose (`supervisor.py:156-173`, `_failure_reason`).
+An intentional stop (`is_stopping()` is `True`) is never treated as either — that's the orchestrator tearing the pipeline down on purpose (`supervisor.py:165-182`, `_failure_reason`).
 
 ### `SupervisedTarget` — the generic interface (`supervisor.py:60-81`)
 
@@ -56,7 +56,7 @@ class SupervisedTarget:
     stall_detection: bool = True
 ```
 
-Fields are named for **the question `Supervisor` needs answered**, not for something that necessarily exists on the worker by that name. Each one's real source, per worker, wired in `PipelineOrchestrator._build_supervisor_targets()` (`orchestrator.py:263-306`):
+Fields are named for **the question `Supervisor` needs answered**, not for something that necessarily exists on the worker by that name. The table below is what each field *means*; each one's real source, per worker, is wired in `PipelineOrchestrator._build_supervisor_targets()` (`orchestrator.py:639-674`):
 
 | Field | Real source | Notes |
 |---|---|---|
@@ -68,7 +68,7 @@ Fields are named for **the question `Supervisor` needs answered**, not for somet
 | `pending_loss` | Only `VADWorker` has a real `pending_loss()` method; every other target leaves the default `lambda: None` | Reports in-progress segment audio a restart would discard |
 | `stall_detection` | Plain `bool`, not callable — `False` only for `MqttAudioIngest` | Its liveness contract isn't "consume a queue" |
 
-Per-worker wiring summary:
+And this is the actual per-worker wiring — which concrete callable each field resolves to, target by target:
 
 | Target | `input_pending` checks | `pending_loss` | `stall_detection` | rebuilt via |
 |---|---|---|---|---|
@@ -100,7 +100,7 @@ class _TargetState:
 
 `_scan()`'s very first check is `if ts.degraded or ts.restarting: continue` — these two booleans are the actual control-flow gates; `state` is display-only.
 
-### The tick loop (`supervisor.py:124-142`)
+### The tick loop (`supervisor.py:133-150`)
 
 ```python
 if self._watchdog_enabled:
@@ -116,7 +116,7 @@ self._await_restarts()
 
 Same `Event.wait()`-as-sleep idiom used throughout this codebase's worker loops: `wait()` returns `False` on a normal timeout (keep looping), `True` the instant `stop()` is called (exit). The ping happens **before** `_scan()`, deliberately — detection/dispatch must never be able to delay the heartbeat past `WatchdogSec`.
 
-### `_scan()` → `_failure_reason()` → `_trigger_restart()` (`supervisor.py:146-173`)
+### `_scan()` → `_failure_reason()` → `_trigger_restart()` (`supervisor.py:155-163`, `:165-182`, `:186`)
 
 ```python
 def _scan(self) -> None:
@@ -132,7 +132,7 @@ def _scan(self) -> None:
 
 One `now` per scan, shared across all targets. The lock scope is deliberately tiny — just the boolean gate read — so a slow `_failure_reason()` call (it invokes arbitrary orchestrator-supplied callables) never blocks other threads from touching `_TargetState`.
 
-### `_trigger_restart` — budget check, then dispatch (`supervisor.py:177-214`)
+### `_trigger_restart` — budget check, then dispatch (`supervisor.py:186-223`)
 
 Runs entirely on the **tick thread**. Two phases:
 
@@ -160,7 +160,7 @@ t.start()
 
 `self._restart_threads` holds references to these **agent threads** (the ones doing the restarting), not the pipeline workers themselves. It exists purely so `_await_restarts()` can find and bound-join them on shutdown — nothing ever prunes finished entries from it.
 
-### `_restart_worker` — the actual work, on its own thread (`supervisor.py:216-241`)
+### `_restart_worker` — the actual work, on its own thread (`supervisor.py:225-250`)
 
 ```python
 try:
@@ -192,12 +192,14 @@ restart=lambda: self._restart("_vad", self._build_vad),
 
 ---
 
-## `PipelineOrchestrator._restart` — the kill/rebuild mechanics (`orchestrator.py:308-333`)
+## `PipelineOrchestrator._restart` — the kill/rebuild mechanics (`orchestrator.py:728-753`)
 
 ```python
 old = getattr(self, attr)
 self._signal(old)                  # old.stop() — sets old's own _stop_event
-self._join(old)                    # old.join(timeout=10) — WAITS, forces nothing
+self._join(old)                    # old.join(timeout=10); if old still exposes
+                                    # .kill and is still alive, _join kills it
+                                    # and re-joins (orchestrator.py:338-362)
 if old.is_alive():
     logger.warning(...)            # zombie: joined timed out, still running
 new = build_fn()                   # brand-new instance, SAME queues
@@ -239,17 +241,19 @@ _restart_dict_worker(self._stt, "rx", lambda: self._build_stt("rx"))
 
 **This is the one place a wedged worker is genuinely recoverable.** In the
 deployed configuration (`stt.use_processes`, the default) an STT worker is a
-child *process*, not a thread — so when it ignores the graceful stop,
-`_restart_dict_worker` escalates to `kill()` and the OS reclaims it.
-Verified against a `SIGSTOP`-ped child: graceful stop times out, `kill()`
-returns it with `exitcode=-9`. Every other supervised target in this
-document is a thread and still degrades to the zombie case below, because
-Python cannot kill a thread.
+child *process*, not a thread — so when it ignores the graceful stop, the
+shared `_join()` helper (`orchestrator.py:338-362`) escalates to `kill()`
+and the OS reclaims it. `THREADS.md` Rule 3 has the general mechanism (it's
+generic to `_join()`, not something specific to this worked example);
+verified here against a `SIGSTOP`-ped child: graceful stop times out,
+`kill()` returns it with `exitcode=-9`. Every other supervised target in
+this document is a thread and still degrades to the zombie case below,
+because Python cannot kill a thread.
 
 `new.wait_ready(...)` is not optional politeness: a replacement child has to
 load its model (3.6-7.3s on the RPi5, plus spawn), and the supervisor's
 `stall_timeout_s` is 10s. Without gating on readiness, the load itself looks
-like a stall, and the restart loops. See `STT_MULTIPROCESS_PLAN.md` §5.6.
+like a stall, and the restart loops. See `docs/archived/STT_MULTIPROCESS_PLAN.md` §5.6.
 
 The reason this actually fixes the stall: `self._segment_queues["rx"]` is never recreated. Whatever segments piled up (the very thing `input_pending()` detected) are still sitting there, untouched — the new worker's `run()` loop starts consuming them the moment it starts. The "restart" only ever changes *who's reading that channel's queue*, never the queue itself, and never touches `self._stt["tx"]`.
 
@@ -314,23 +318,3 @@ Install placeholders that must be edited before copying to `/etc/systemd/system/
 | `reliability.watchdog_enabled` | `True` | Whether `sd_notify` pings are sent at all |
 | `WatchdogSec` (unit file) | `10s` | systemd's own countdown; independent of the config above |
 | `RestartSec` (unit file) | `3s` | Delay before systemd relaunches after a kill |
-
----
-
-## Named patterns, for communicating this design
-
-Useful for code review / design-doc language — calibrated honestly, not force-fit:
-
-| Pattern | Where | Fit |
-|---|---|---|
-| **Supervisor / "let it crash"** (Erlang/OTP) | The whole kill-and-rebuild-fresh mechanic | Strong — this is literally what the class is named for |
-| **Circuit Breaker** | `max_restarts`/`restart_window_s` → `degraded` | Strong |
-| **Dependency Injection** | `Supervisor(targets: list[SupervisedTarget], ...)` | Strong |
-| **Command** | `restart` field — a fully-bound action, invoked without the caller knowing what it does | Strong |
-| **Adapter** | The lambdas bridging each worker's concrete interface into `SupervisedTarget`'s generic one | Strong |
-| **Null Object** | `input_pending`/`pending_loss` defaults (`lambda: False` / `lambda: None`) | Strong |
-| **Factory Method** | `_build_vad`/`_build_stt`/etc., passed around as first-class `build_fn` values | Strong |
-| **Strategy** | `input_pending` (real check vs. always-`False`) | Genuine fit |
-| **Strategy** | `is_alive`/`is_stopping`/`last_activity` | **Weak** — same operation every time, just closed over a different object; this is plain closures/DI, not a real family of algorithms |
-
-For an SRE/distributed-systems audience specifically, the more precise and more immediately legible vocabulary is usually better than GoF names: the tick loop is a **reconciliation/control loop**; `is_alive`/`is_stopping` are a **liveness probe**; the stall check is a **progress/health probe**; `degraded` is **crash-loop backoff**; the two-layer design is **defense in depth** — the same idea as a kubelet failing and the cluster control plane catching it a level up.

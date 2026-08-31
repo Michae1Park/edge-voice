@@ -22,18 +22,23 @@ and keeps `Supervisor` free to stay generic (its docstring commits to knowing
 
 ## Reading the kiosk
 
-Three rows, each answering a different question:
+The console is a two-panel layout: a chat-style transcript feed on the right,
+and a status sidebar on the left. The sidebar answers a different question in
+each section:
 
-| Row | What it shows | Health signal |
+| Sidebar section | What it shows | Health signal |
 |---|---|---|
-| **Header** (top right) | `● LIVE` pill | **Overall verdict** — green `live` / amber `degraded` or `mqtt down` / grey `stopped` |
-| **Strip 1** | `mqtt ok · q ingest:0 routed:0 segment:0 · rx 7.4s tx 7.4s · metrics 3s ago` | MQTT connectivity, backpressure, channel freshness, snapshot age |
-| **Strip 2** | `● ingest · ● router 6µs · ● vad 225µs · ● stt 190ms` | **Per-module health** — the dot before each name |
+| **`side-top`** (clock + pill) | `● live` / `● degraded` / `mqtt down` / `● stopped` | **Overall verdict** |
+| **System** | MQTT `connected`/`down`; Queues (`ingest`, `routed`, `segment_rx`, `segment_tx` depths); Metrics (`Ns ago`, or `waiting`/`off`) | MQTT connectivity, backpressure, snapshot age |
+| **Channels** | `RX channel` / `TX channel`, each with its freshness in seconds | Per-channel staleness |
+| **Pipeline** | One row per worker, dot + label + latency | **Per-module health** |
 
-### Per-module status (strip 2)
+### Per-module status (Pipeline section)
 
-The dot before each module name *is* the health status. Easy to miss when
-everything is running, since all four are then the same green.
+Six rows: `Ingest`, `Router`, `VAD`, `STT RX`, `STT TX`, `Supervisor` — STT is
+split per channel so one channel's latency never masks the other's. The dot
+before each module name *is* the health status. Easy to miss when everything
+is running, since all six are then the same green.
 
 | Dot | Worker state | Meaning |
 |---|---|---|
@@ -231,5 +236,5 @@ need call-state awareness, which nothing in the pipeline tracks today.
 | Payload assembly | `src/edge_voice/health/reporting.py` |
 | Orchestrator accessors | `PipelineOrchestrator.health()` / `.metrics_snapshot()` / `.channel_freshness()` |
 | Endpoint | `src/edge_voice/webui/app.py` — `GET /api/status` |
-| Kiosk rendering | `src/edge_voice/webui/templates/console.html` — `renderStrip()` / `renderModules()` |
+| Kiosk rendering | `src/edge_voice/webui/static/console.js` — `renderStrip()` / `renderModules()` |
 | Tests | `tests/test_health_reporting.py` (unit), `tests/test_webui_app.py` (endpoint) |
