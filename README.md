@@ -2,6 +2,15 @@
 
 Real-time, dual-channel (Rx/Tx) transcription for edge devices using Silero VAD for speech segmentation and Moonshine for STT. Built for any two-party audio source, where each party's audio arrives as its own MQTT stream and is transcribed independently, in order, with channel attribution preserved throughout.
 
+## Demo
+
+<table>
+<tr>
+<td align="center" width="50%"><b>English</b><br><img src="docs/video/en_partial.gif" width="100%"></td>
+<td align="center" width="50%"><b>Korean (multilingual)</b><br><img src="docs/video/ko_partial.gif" width="100%"></td>
+</tr>
+</table>
+
 ## Architecture
 
 Two logically separate pieces talk only over MQTT; everything after ingestion runs in-process on worker threads connected by bounded queues:
