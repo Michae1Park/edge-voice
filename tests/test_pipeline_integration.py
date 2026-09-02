@@ -30,7 +30,7 @@ RX_WAV = REPO_ROOT / "wav" / "rx_recorded_1.wav"
 TX_WAV = REPO_ROOT / "wav" / "tx_recorded_1.wav"
 
 # Both fixture files are exactly 30s. The CLI needs time to connect to MQTT
-# and load the Silero model before wav_source_raw starts publishing (or
+# and load the Silero model before wav_source starts publishing (or
 # early chunks are lost), plus a settle buffer at the end so the last
 # segment's min_silence_duration_ms has time to flush through VADWorker
 # before we stop the CLI and count files.
@@ -91,7 +91,7 @@ def test_pipeline_produces_expected_segment_counts(tmp_path):
             [
                 sys.executable,
                 "-m",
-                "edge_voice.utils.audio_generation.wav_source_raw",
+                "edge_voice.utils.audio_generation.wav_source",
                 "--wav",
                 str(RX_WAV),
                 str(TX_WAV),
@@ -105,7 +105,7 @@ def test_pipeline_produces_expected_segment_counts(tmp_path):
             timeout=AUDIO_DURATION_S + 15,
         )
         assert source.returncode == 0, (
-            f"wav_source_raw failed:\nstdout:\n{source.stdout}\nstderr:\n{source.stderr}"
+            f"wav_source failed:\nstdout:\n{source.stdout}\nstderr:\n{source.stderr}"
         )
 
         time.sleep(SETTLE_BUFFER_S)  # let the trailing segment flush through VADWorker

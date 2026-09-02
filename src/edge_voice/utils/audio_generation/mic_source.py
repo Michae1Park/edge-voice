@@ -3,7 +3,7 @@ pipeline.
 
 Captures from a system microphone, splits into 20ms chunks, and publishes
 each frame as raw PCM bytes (no envelope) to the configured MQTT topics --
-same wire format as wav_source_raw.py, which MqttAudioIngest consumes
+same wire format as wav_source.py, which MqttAudioIngest consumes
 directly as PCM samples (audio_ingest/mqtt_client.py:_on_message). This is
 what lets edge-voice (run via cli.py, listening on stt/audio_chunks_*)
 simply receive and transcribe whatever this script captures.
@@ -14,7 +14,7 @@ Run as a separate process, alongside the real edge-voice pipeline:
 
 Not imported by cli.py/orchestrator.py -- a live mic is a single ongoing
 capture, not something the pipeline itself owns; it's a separate process
-publishing over MQTT, just like a real call leg (or wav_source_raw.py) would.
+publishing over MQTT, just like a real call leg (or wav_source.py) would.
 `edge-voice --mic` spawns this file as a subprocess for convenience; it
 still runs and shuts down as its own process, not in-process capture.
 """
@@ -144,7 +144,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     try:
         while True:
             # A blocking read paces this loop at real time on its own --
-            # unlike wav_source_raw.py, which reads a file near-instantly
+            # unlike wav_source.py, which reads a file near-instantly
             # and has to throttle itself to match.
             raw, _overflowed = stream.read(native_chunk)
             data = np.frombuffer(bytes(raw), dtype=np.int16)

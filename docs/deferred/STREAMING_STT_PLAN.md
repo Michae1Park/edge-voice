@@ -345,7 +345,7 @@ no longer gated on obtaining English audio.
 
 Caveats that cost real time during scoping and still apply:
 
-- It is **stereo, 44.1kHz** — `wav_source_raw.py` refuses stereo against a
+- It is **stereo, 44.1kHz** — `wav_source.py` refuses stereo against a
   single MQTT channel. Downmix first:
   `ffmpeg -i wav/obama_2012.wav -ac 1 -ar 16000 wav/obama_2012_mono.wav`.
 - **Never run an English model against Korean audio** (or vice versa). It

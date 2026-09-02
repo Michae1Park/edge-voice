@@ -55,7 +55,7 @@ def _load_audio(path: str, sample_rate: int) -> np.ndarray:
     if data.ndim > 1:
         data = data[:, 0]
     if file_sr != sample_rate:
-        # Same resample path wav_source_raw.py/bench_ort_threads.py use --
+        # Same resample path wav_source.py/bench_ort_threads.py use --
         # the wav/*.wav fixtures aren't all natively at the pipeline's
         # configured rate.
         import torch

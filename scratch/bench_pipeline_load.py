@@ -5,7 +5,7 @@ bench_streaming_cost.py.
 
 Builds and starts the real PipelineOrchestrator in-process (same pattern as
 demo_supervisor.py), then repeatedly replays a dual-channel WAV pair through
-it via wav_source_raw.py (real-time paced, same as a live feed) to simulate
+it via wav_source.py (real-time paced, same as a live feed) to simulate
 sustained mic input on both channels for --duration-s total.
 
 Why segment length isn't swept like bench_streaming_cost.py's 1s..10s buffer
@@ -151,7 +151,7 @@ from dataclasses import dataclass, fields
 
 from edge_voice.config.settings import Settings
 from edge_voice.pipeline.orchestrator import PipelineOrchestrator
-from edge_voice.utils.audio_generation import wav_source_raw
+from edge_voice.utils.audio_generation import wav_source
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
 logger = logging.getLogger("bench_pipeline_load")
@@ -602,7 +602,7 @@ def main() -> None:
     loops = 0
     try:
         while time.monotonic() - started < args.duration_s:
-            wav_source_raw.main(["--wav", *args.wav, "--channels", *args.channels])
+            wav_source.main(["--wav", *args.wav, "--channels", *args.channels])
             loops += 1
     except KeyboardInterrupt:
         logger.info("Interrupted -- wrapping up")

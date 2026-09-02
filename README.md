@@ -97,7 +97,7 @@ python -m edge_voice.utils.audio_generation.mic_source --device 2 --channels rx
 
 ```bash
 # one file per channel, e.g. two call legs
-python -m edge_voice.utils.audio_generation.wav_source_raw \
+python -m edge_voice.utils.audio_generation.wav_source \
     --wav wav/rx_recorded_1.wav wav/tx_recorded_1.wav --channels rx tx
 ```
 

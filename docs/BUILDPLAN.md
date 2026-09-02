@@ -1,6 +1,6 @@
 # edge-voice Build Plan
 
-**Companion to:** `ARCHITECTURE.md` (v0.3)
+**Companion to:** `ARCHITECTURE.md` (v0.5.0)
 **Purpose:** answer "what do I type next?" in under 10 seconds after time away.
 
 ---
@@ -185,11 +185,11 @@ yet.
    `pipeline`, `cli`, or `orchestrator`. **Completed 2026-08-05:** the MQTT
    publish was a stub print until then; it now captures at the device's
    native rate, resamples to the target, and publishes raw PCM frames —
-   same wire format as `wav_source_raw.py`, which is what
+   same wire format as `wav_source.py`, which is what
    `MqttAudioIngest` consumes.
-6. `src/edge_voice/utils/audio_generation/wav_source.py` — reads `.wav`,
+6. `src/edge_voice/utils/audio_generation/wav_source_json.py` — reads `.wav`,
    resamples, streams at a 20ms real-time pace. Now publishes over MQTT as a
-   JSON envelope (`{"samples_b64": ..., "timestamp": ...}`); `wav_source_raw.py`
+   JSON envelope (`{"samples_b64": ..., "timestamp": ...}`); `wav_source.py`
    is the raw-PCM variant used against the real pipeline, since raw PCM is
    what ingest consumes today. The envelope form is the shape
    `docs/deferred/CALL_LIFECYCLE_PLAN.md` would standardize on.
@@ -197,7 +197,7 @@ yet.
    `pipeline`, `cli`, or `orchestrator` imports.
 
 **Done when:** `edge-voice` console script starts the pipeline using real
-`Settings`, AND `wav_source.py` (standalone) produces correctly-paced audio
+`Settings`, AND `wav_source_json.py` (standalone) produces correctly-paced audio
 packets, covering resampling, stereo-to-mono, queue-full drop, and custom
 configs.
 
@@ -312,7 +312,7 @@ note below it.
    Full pipeline is now real, end to end: `audio_generation` (separate
    process, test-only) → `audio_ingest` → `channel` → `vad` → `stt`.
 
-**Done when:** a real two-channel `.wav`/MQTT fixture (via `wav_source_raw.py`,
+**Done when:** a real two-channel `.wav`/MQTT fixture (via `wav_source.py`,
 its own process) produces correct Korean transcripts in order, attributed
 to the right channel. Verified against `wav/rx_recorded_1.wav` +
 `wav/tx_recorded_1.wav`.
@@ -731,7 +731,7 @@ milestones above.
   deferred `VADWorker.reset_channel()` question — plain reset on call-start,
   flush-then-reset on call-end — and the re-packetizer's silent timestamp
   drift across a discontinuity. Note the wire format is currently split:
-  `wav_source.py` publishes a JSON envelope, while `wav_source_raw.py` and
+  `wav_source_json.py` publishes a JSON envelope, while `wav_source.py` and
   `mic_source.py` publish raw PCM, which is all `MqttAudioIngest` consumes
   today.
 - **`docs/deferred/STREAMING_STT_PLAN.md`** — **on hold (2026-08-06), deliberately, no
