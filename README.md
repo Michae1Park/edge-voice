@@ -28,6 +28,7 @@ Two logically separate pieces talk only over MQTT; everything after ingestion ru
 
 - **Tested on Ubuntu 24.04 and RPi5** — other Linux distributions likely work but aren't verified
 - **Python 3.12**
+- **Internet access during installation** — `pip install` fetches dependencies and model weights (Silero VAD, Moonshine); no network access is needed at runtime afterward
 - **An MQTT broker**, reachable by the pipeline (`localhost:1883` by default — see [Configuration](#configuration)) — audio ingestion is MQTT-only, there's no direct-mic-to-pipeline path in production
   - Debian/Raspberry Pi OS: `make install` / `install.sh` installs and starts [Mosquitto](https://mosquitto.org/) via `apt`
   - Other platforms: install and run a broker yourself
