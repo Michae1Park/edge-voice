@@ -13,9 +13,10 @@ Optional signals
 ─────────────────
 Two of the four aggregated metrics are optional, following the same
 duck-typed pattern the BUILDPLAN calls for:
-  - MQTT connectivity: `mqtt_connected` returns None when the configured
-    audio source isn't MQTT-based (WavSource/MicSource in dev/test), not a
-    hard requirement.
+  - MQTT connectivity: `mqtt_connected` returns None only if the audio source
+    has no `.connected` attribute at all -- WavSource/MicSource in dev/test
+    still publish real MQTT into the broker, so they report a real
+    connected/disconnected state, not None. Not a hard requirement either way.
   - Restart budget: `supervisor` returns None when ReliabilitySettings.enabled
     is False, i.e. no Supervisor exists at all.
 

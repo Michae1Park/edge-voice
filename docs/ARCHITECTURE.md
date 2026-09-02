@@ -4,7 +4,7 @@
 |---|---|
 | **Version** | v0.5.0 |
 | **Owner** | Michae1Park |
-| **Last updated** | 2026-08-31 |
+| **Last updated** | 2026-09-02 |
 | **Status** | Describes the system as built. Anything not built says so inline, and §11 lists what's deferred. |
 
 ## System Overview
@@ -58,14 +58,14 @@ committed**: they need a measurement pass on the target board, and until then
 this table records what's known and what isn't, rather than implying a budget
 that was never set.
 
-| Dimension | Target | Status |
-|---|---|---|
-| End-to-end latency, speech end → final transcript | TBD | Not yet measured as a single number; per-stage latency *is* collected (§7), so the pieces exist to sum |
-| Time to first visible text on a turn | TBD | Measured for the partial-cadence tuning only: first text lands ~1.1s earlier than the final at the shipped defaults (see `configs/default.yaml`) |
-| Sustained real-time factor (audio consumed ÷ wall clock, per channel) | ≥ 1.0 sustained across both channels | Not directly measured; queue depth (§7) is the current proxy — a growing routed or segment queue means the target is being missed |
-| Concurrent channels | 2 (one per party) | Measured on the RPi5 target (see `docs/BENCHMARK.md`): a single shared STT decoder cannot sustain real-time dual-channel transcription (queue backlog grows unbounded), which is why STT moved to one dedicated decoder per channel — see §3 Tradeoffs |
-| Memory | TBD ceiling | Known components: ~30-60MB per Moonshine `Transcriber` (varies by language/checkpoint, measured directly on RPi5 — see `docs/BENCHMARK.md` and `scratch/probe_decoder_memory.py`), one per channel, ~4MB per channel for Silero, plus bounded queues |
-| CPU headroom | TBD | The RMS gate removes ~52% of Silero forward passes on duplex call audio, ~74% on a mostly-idle channel |
+| Dimension | Target | Unit (what it answers) | Measurement |
+|---|---|---|---|
+| End-to-end latency, speech end → final transcript | TBD | sec/event — latency, time to one result | Not yet measured as a single number; per-stage latency *is* collected (§7), so the pieces exist to sum |
+| Time to first visible text on a turn | TBD | sec/event — latency, time to one result | Measured for the partial-cadence tuning only: first text lands ~1.1s earlier than the final at the shipped defaults (see `configs/default.yaml`) |
+| Sustained real-time factor (audio consumed ÷ wall clock, per channel) | ≥ 1.0 sustained across both channels | ratio/call — throughput, keeps up over time, not per event | Not directly measured; queue depth (§7) is the current proxy — a growing routed or segment queue means the target is being missed |
+| Concurrent channels | 2 (one per party) | pass/fail — throughput holds at target count | Validated on the RPi5 target (see `docs/BENCHMARK.md`): a single shared STT decoder fails this (queue backlog grows unbounded at 2 channels); per-channel decoders pass — see §3 Tradeoffs |
+| Memory | TBD ceiling | MB | Known components: ~30-60MB per Moonshine `Transcriber` (varies by language/checkpoint, measured directly on RPi5 — see `docs/BENCHMARK.md` and `scratch/probe_decoder_memory.py`), one per channel, ~4MB per channel for Silero, plus bounded queues |
+| CPU headroom | TBD | % of budget | The RMS gate removes ~52% of Silero forward passes on duplex call audio, ~74% on a mostly-idle channel |
 
 ## 2. Non-Goals
 
@@ -115,8 +115,8 @@ packages onto the milestones that built them.
 | `webui/templates/console.html` | The kiosk console page markup — sidebar (status, channels, per-module pipeline chips) and chat-style transcript feed. No inline JS/CSS. |
 | `webui/static/console.js`, `webui/static/console.css` | Console behavior (status polling, SSE transcript stream, `renderModules()`/`renderStrip()`) and the two-panel dark layout, served as static assets rather than inlined. |
 | **Dev/test tooling** (separate processes, never imported by the pipeline) | |
-| `utils/audio_generation/wav_source_raw.py` | Replays `.wav` files at real-time pace as raw PCM over MQTT — the wire format ingest actually consumes; used by the integration fixture. |
-| `utils/audio_generation/wav_source.py` | Same replay, but publishing a JSON envelope — the shape `docs/deferred/CALL_LIFECYCLE_PLAN.md` would standardize on (§11). |
+| `utils/audio_generation/wav_source.py` | Replays `.wav` files at real-time pace as raw PCM over MQTT — the wire format ingest actually consumes; used by the integration fixture. |
+| `utils/audio_generation/wav_source_json.py` | Same replay, but publishing a JSON envelope — the shape `docs/deferred/CALL_LIFECYCLE_PLAN.md` would standardize on (§11). |
 | `utils/audio_generation/mic_source.py` | Captures a live mic at the device's native rate, resamples, publishes raw PCM over MQTT exactly like a real call leg. |
 | `utils/audio_generation/fake_source.py` | Synthetic packet generator that skips MQTT entirely, from the pre-MQTT skeleton; kept for exercising the worker graph without audio. |
 | `audio_ingest/audio_dump.py`, `audio_ingest/segment_audio_dump.py` | Optional debug workers writing raw and post-VAD audio to WAV, for inspecting VAD boundaries against the original recording. Off by default. |
@@ -129,7 +129,7 @@ The system runs one Silero VAD model instance per channel, and one dedicated Moo
 
 This differs from earlier prototypes that ran fully independent pipelines per audio source, and from earlier versions of this design that used one shared VAD instance for all channels, and — until this decision was reversed — one shared STT instance for all channels too.
 
-**VAD is per-channel, not shared.** A single shared model was tried first and reverted: `VADIterator` only holds the segmentation state machine, the LSTM hidden state used for inference lives inside the model instance itself. Two channels interleaving packets against one shared model corrupted each other's hidden state — measured as doubled, garbage segment counts against recorded call fixtures. Each channel therefore gets its own model instance (one `VADIterator` + one Silero model per `channel_id`), which also removes any need for cross-channel locking since a channel's state is only ever touched by that channel's packets. The extra cost (~4MB, ~0.06s load) per channel is negligible next to correctness.
+**VAD is per-channel, not shared.** A single shared model was tried first and reverted: `VADIterator` only holds the segmentation state machine — the LSTM hidden state lives inside the model instance itself, as a mutable attribute Silero doesn't expose through its public API. Two channels interleaving packets against one shared model corrupted each other's hidden state — measured as doubled, garbage segment counts against recorded call fixtures. Avoiding that without duplicating the model would mean reaching into those undocumented internals to swap per-channel state in and out around every call — not impossible, but not worth the fragility it'd introduce. Each channel instead gets its own model instance (one `VADIterator` + one Silero model per `channel_id`), which also removes any need for cross-channel locking since a channel's state is only ever touched by that channel's packets. The extra cost (~4MB, ~0.06s load) per channel is negligible next to correctness.
 
 **STT is per-channel too, not shared.** This was originally the opposite decision: one shared decoder, on the reasoning that Moonshine's `Transcriber.start()`/`stop()` fully resets decoder state between segments (verified byte-for-byte against a fresh instance per segment, still true), that a single worker thread meant "there is no concurrent access to isolate," and that sharing avoided a second copy of the model in memory (~175MB estimated). Measured on the actual RPi5 target hardware (`docs/BENCHMARK.md`, `scratch/bench_pipeline_load.py`), that reasoning didn't hold up:
 
@@ -321,9 +321,13 @@ a worker restart, and never goes through the supervisor above (conflating the
 two would make restart-count metrics noisy and meaningless).
 
 Connection status is exposed through the health object (§7) as a tri-state:
-connected, disconnected, or **unknown** — the last meaning the configured
-audio source isn't MQTT-based at all (a `WavSource`/`MicSource` in dev/test).
-Unknown is deliberately not treated as a fault anywhere.
+connected, disconnected, or **unknown**. No current audio source actually
+reaches unknown: `WavSource`/`MicSource`/`wav_source.py` all publish real
+MQTT packets into the broker like a real call leg, so the orchestrator's own
+`MqttAudioIngest` reports a genuine connected/disconnected state regardless of
+what's upstream. Unknown exists as a fallback for an audio source with no
+`.connected` attribute at all, and is deliberately not treated as a fault
+anywhere.
 
 ### Fault Isolation
 
@@ -555,10 +559,11 @@ validation — performance is still verified manually, on target hardware.
   discards in-progress audio (right for a reconnect gap, wrong for a call end,
   which needs flush-then-reset), and the re-packetizer drifts timestamps
   silently across a discontinuity if it isn't reset too. Note the wire format
-  is currently split — `wav_source.py` publishes a JSON envelope while
-  `wav_source_raw.py` and `mic_source.py` publish raw PCM, and only raw PCM is
+  is currently split — `wav_source_json.py` publishes a JSON envelope while
+  `wav_source.py` and `mic_source.py` publish raw PCM, and only raw PCM is
   what ingest actually consumes today.
-Resolved since the last revision of this document:
+
+**Resolved since the last revision of this document:**
 
 - **STT multiprocessing** — **BUILT and verified on the RPi5 (2026-08-11)**,
   closed via three RPi5 measurements in lieu of a literal before/after

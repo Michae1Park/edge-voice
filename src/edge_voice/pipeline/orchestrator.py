@@ -617,8 +617,11 @@ class PipelineOrchestrator:
         self._stt_receivers.clear()
 
     def _mqtt_connected(self) -> bool | None:
-        """None when the configured audio source isn't MQTT-based (e.g. a
-        WavSource/MicSource in dev/test) -- see MetricsCollector's docstring."""
+        """None only if `_audio_source` lacks a `.connected` attribute -- not
+        reachable via WavSource/MicSource/wav_source.py, which all publish
+        real MQTT into the broker like a real call leg, so the ingest side is
+        still a genuine MqttAudioIngest either way. See MetricsCollector's
+        docstring."""
         return getattr(self._w("_audio_source"), "connected", None)
 
     def _w(self, attr: str) -> Any:

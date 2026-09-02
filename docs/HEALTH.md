@@ -163,7 +163,7 @@ an ever-growing `age_s` is the only thing that would reveal it.
 | `channels` | Never — falls back to configured channel ids before `build()`, so UI rows don't appear/disappear |
 | `channels[*].freshness_s` | Channel never seen — including before start, **and right after a `ChannelRouter` restart** (its last-seen table is per-instance) |
 | `metrics.age_s` | `metrics.state != "ok"` |
-| `mqtt_connected` | metrics not ok, **or** the audio source isn't MQTT-based (`WavSource`/`MicSource` in dev) |
+| `mqtt_connected` | metrics not ok, **or** the audio source has no `.connected` attribute (not triggered by `WavSource`/`MicSource`/`wav_source.py` — they publish real MQTT, same as a call leg) |
 | `restarts` | metrics not ok, **or** `reliability.enabled: false` (no supervisor exists) |
 | `latencies` | metrics not ok |
 
@@ -184,8 +184,9 @@ warn  ← running AND (degraded OR mqtt_connected is False)
 ok    ← otherwise
 ```
 
-- `mqtt_connected is None` (unknown / non-MQTT source) does **not** warn —
-  unknown is not broken.
+- `mqtt_connected is None` (unknown — audio source with no `.connected`
+  attribute; no current source triggers this) does **not** warn — unknown is
+  not broken.
 - `metrics.state` never affects the verdict — a kiosk that goes amber for the
   first ten seconds of every boot teaches operators to ignore amber.
 - **Channel staleness never affects the verdict.** On a phone-call box every
