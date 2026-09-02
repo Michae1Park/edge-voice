@@ -24,6 +24,10 @@ dependencies = [
     "soundfile",
     "numpy",
     "silero-vad",
+    "onnxruntime",
+    # Lets silero-vad's resource loader use importlib_resources.files()
+    # instead of falling back to the deprecated importlib.resources.path().
+    "importlib_resources",
     # Streaming Moonshine (Transcriber/start-add_audio-stop + listener events).
     # Ships its own ONNX runtime in the wheel, so no separate onnxruntime dep.
     "moonshine-voice",

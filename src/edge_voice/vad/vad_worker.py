@@ -599,13 +599,12 @@ class VADWorker(threading.Thread):
 
     @staticmethod
     def _load_model() -> Any:
-        model, _ = torch.hub.load(
-            repo_or_dir="snakers4/silero-vad",
-            model="silero_vad",
-            force_reload=False,
-            trust_repo=True,
-        )
-        return model
+        # Bundled with the silero-vad wheel (no torch.hub network fetch/cache
+        # needed) and runs on onnxruntime instead of the deprecated
+        # torch.jit.load path -- matches the STT worker's ONNX backend.
+        from silero_vad import load_silero_vad
+
+        return load_silero_vad(onnx=True)
 
     def _new_vad_iterator(self, model: Any):
         from silero_vad.utils_vad import VADIterator  # adjust import to your install
