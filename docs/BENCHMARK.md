@@ -90,6 +90,97 @@ gap is entirely upstream, in Useful Sensors' per-language checkpoints.
 
 ---
 
+## VAD backend: torch.hub vs onnxruntime — why Silero got faster on RPi5
+
+**Date:** 2026-09-03
+**Hardware:** Raspberry Pi 5
+**Script:** `[scratch/probe_vad_backend.py](../scratch/probe_vad_backend.py)`
+**Config:** `torch.set_num_threads(1)`, fresh model instance per thread
+(matches `VADWorker`'s one-model-per-channel design), models loaded from
+the existing local cache (`~/.cache/torch/hub/snakers4_silero-vad_master`
+and the `silero-vad` wheel's bundled ONNX file) — no network fetch in the
+timed portion
+
+### Why this needed measuring
+
+`vad_worker.py` switched its VAD backend from `torch.hub.load(...)` to
+`silero_vad.load_silero_vad(onnx=True)` (`1b3a3bf`). Inference sped up
+noticeably on the RPi5 afterward. Two candidate explanations going in: (1)
+onnxruntime's per-call inference is just faster than torch eager/JIT for
+this tiny (512-sample) window size, or (2) torch's forward pass was
+GIL-bound and blocking some other thread from making progress, and
+onnxruntime releases the GIL more cleanly. Worth noting before measuring
+either: `VADWorker` has been single-threaded since `6e7ce03` (one thread
+demultiplexes both channels off `routed_queue`, own model per channel, no
+`vad_lock`) — so there's no VAD-internal channel parallelism today to have
+lost or gained. The concurrency question is still worth measuring directly
+as a general property of the two backends, the same way `probe_gil_release.py`
+settled it for the STT decoder.
+
+### Method
+
+Two levels, mirroring `probe_gil_release.py`'s approach: no orchestrator,
+no queues, just the model calls themselves, on random 512-sample windows.
+
+1. **Solo single-thread latency** — one model instance, 500 timed calls
+   after 20 warmup calls, per backend.
+2. **Two-thread concurrent scaling** — two independent model instances per
+   backend (own LSTM state each, same as production), run for 3s solo
+   (sequential) and 3s concurrent (two threads at once); scaling is
+   concurrent-sum throughput divided by solo-sum throughput.
+
+```bash
+python scratch/probe_vad_backend.py
+```
+
+### Results
+
+**(1) Pure single-thread latency:**
+
+| backend | mean | median | p95 |
+| --- | ---: | ---: | ---: |
+| torch.hub (old) | 2.547 ms | 2.187 ms | 6.141 ms |
+| onnxruntime (new) | **0.718 ms** | **0.683 ms** | **1.385 ms** |
+
+**~3.5x faster per call.** torch's p95 tail (6.1ms) is especially bad — the
+kind of thing that causes queue-clogging behavior under load.
+
+**(2) Two-thread concurrent scaling:**
+
+| backend | solo sum (2 instances, sequential) | concurrent sum (2 threads at once) | scaling |
+| --- | ---: | ---: | ---: |
+| torch.hub | 917/s | 859/s | 0.94x |
+| onnxruntime | 3911/s | 1769/s | 0.45x |
+
+### Notes
+
+- **Hypothesis (1) is the real story.** The ~3.5x drop in per-call latency
+is large enough on its own to explain the RPi5 speedup, especially under
+load where cheaper VAD calls leave more CPU headroom for everything else
+on a 4-core box.
+- **Hypothesis (2) doesn't apply, but not for the reason it was initially
+framed.** It's not that torch was "losing" parallelism to the GIL between
+two VAD channels — there's only ever been one `VADWorker` thread since the
+July refactor, so that parallelism never existed to lose. And empirically,
+neither backend gives real multi-core scaling from plain Python threading
+here: torch was already essentially fully GIL-serialized at the solo level
+(0.94x — a second thread adds ~nothing), and onnxruntime scales *worse*
+(0.45x) despite each session being configured single-threaded internally
+(`inter_op_num_threads=1`, `intra_op_num_threads=1` in `silero_vad`'s
+`OnnxWrapper` — confirmed by reading `utils_vad.py`, so this isn't ORT
+thread-pool oversubscription). Most likely explanation: onnx's native
+compute is so cheap (0.7ms) that the Python-level glue around each call
+(tensor prep, state bookkeeping) — which does hold the GIL — becomes a
+proportionally larger, and now contended, share of wall time under
+back-to-back concurrent calls at ~2000/s.
+- Practical implication: this is further confirmation (alongside
+`probe_gil_release.py`'s STT numbers) that plain Python threading isn't a
+path to real multi-core parallelism for either of this pipeline's model
+backends — consistent with STT's existing `use_processes=true` default and
+with `VADWorker`'s single-thread design.
+
+---
+
 ## Pipeline end-to-end: dual-channel conversational audio (post-multiprocessing)
 
 **Date:** 2026-08-10
