@@ -90,7 +90,7 @@ def bench_hub_load_overhead():
         trust_repo=True,
     )
     dt = time.perf_counter() - t0
-    print(f"\n=== torch.hub.load() end-to-end (cached repo) ===")
+    print("\n=== torch.hub.load() end-to-end (cached repo) ===")
     print(f"{dt * 1000:.1f} ms")
 
 
@@ -99,7 +99,7 @@ if __name__ == "__main__":
     onnx_lat = bench("onnxruntime (new backend)", _load_onnx)
 
     speedup = jit_lat.mean() / onnx_lat.mean()
-    print(f"\n=== summary ===")
+    print("\n=== summary ===")
     print(f"onnxruntime is {speedup:.2f}x faster per call (mean) on this machine")
 
     bench_hub_load_overhead()
