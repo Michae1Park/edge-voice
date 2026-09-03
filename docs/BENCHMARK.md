@@ -90,7 +90,7 @@ gap is entirely upstream, in Useful Sensors' per-language checkpoints.
 
 ---
 
-## VAD backend: torch.hub vs onnxruntime — why Silero got faster on RPi5
+## VAD backend: PyTorch TorchScript vs onnxruntime — why Silero got faster on RPi5
 
 **Date:** 2026-09-03
 **Hardware:** Raspberry Pi 5
@@ -105,7 +105,14 @@ timed portion
 
 `vad_worker.py` switched its VAD backend from `torch.hub.load(...)` to
 `silero_vad.load_silero_vad(onnx=True)` (`1b3a3bf`). Inference sped up
-noticeably on the RPi5 afterward. Two candidate explanations going in: (1)
+noticeably on the RPi5 afterward. Note `torch.hub` itself is just a
+model-fetching utility, not an inference engine — the old path's
+`hubconf.py` ends up calling `torch.jit.load(...)` (`silero_vad/utils_vad.py`'s
+`init_jit_model`), handing back a real `torch.jit.ScriptModule` executed by
+PyTorch's own TorchScript interpreter. So the actual comparison below is
+PyTorch's TorchScript interpreter vs onnxruntime — two engines, both
+executing on the same trained weights — not "torch.hub vs onnxruntime."
+Two candidate explanations going in: (1)
 onnxruntime's per-call inference is just faster than torch eager/JIT for
 this tiny (512-sample) window size, or (2) torch's forward pass was
 GIL-bound and blocking some other thread from making progress, and
@@ -139,7 +146,7 @@ python scratch/probe_vad_backend.py
 
 | backend | mean | median | p95 |
 | --- | ---: | ---: | ---: |
-| torch.hub (old) | 2.547 ms | 2.187 ms | 6.141 ms |
+| PyTorch TorchScript (old) | 2.547 ms | 2.187 ms | 6.141 ms |
 | onnxruntime (new) | **0.718 ms** | **0.683 ms** | **1.385 ms** |
 
 **~3.5x faster per call.** torch's p95 tail (6.1ms) is especially bad — the
@@ -149,7 +156,7 @@ kind of thing that causes queue-clogging behavior under load.
 
 | backend | solo sum (2 instances, sequential) | concurrent sum (2 threads at once) | scaling |
 | --- | ---: | ---: | ---: |
-| torch.hub | 917/s | 859/s | 0.94x |
+| PyTorch TorchScript | 917/s | 859/s | 0.94x |
 | onnxruntime | 3911/s | 1769/s | 0.45x |
 
 ### Notes
