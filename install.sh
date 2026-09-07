@@ -28,7 +28,7 @@ fi
 
 echo "==> Installing system packages (apt)"
 sudo apt-get update
-sudo apt-get install -y libportaudio2 mosquitto mosquitto-clients
+sudo apt-get install -y libportaudio2 mosquitto mosquitto-clients python3.12-venv
 
 echo "==> Creating virtualenv (venv/)"
 test -d venv || python3.12 -m venv venv
