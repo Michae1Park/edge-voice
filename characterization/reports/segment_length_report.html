@@ -1,0 +1,352 @@
+<title>Segment Length Scaling</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface:        #f6f8f7;
+    --surface-raised: #ffffff;
+    --surface-sunken: #eceeec;
+    --ink:            #12181a;
+    --ink-secondary:  #4c5960;
+    --ink-muted:      #7c8a8f;
+    --line:           #d7dcda;
+    --line-strong:    #b7c0bd;
+    --accent:         #a8690a;
+    --accent-soft:    #f3e3cd;
+    --good:           #0ca30c;
+    --warning:        #b9790a;
+    --serious:        #c1531f;
+    --critical:       #d03b3b;
+    --seq-250: #86b6ef; --seq-550: #1c5cab;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface:        #17191a;
+      --surface-raised: #1e2224;
+      --surface-sunken: #101213;
+      --ink:            #f0f2f1;
+      --ink-secondary:  #b7c2c4;
+      --ink-muted:      #8b979a;
+      --line:           #33393b;
+      --line-strong:    #454d4f;
+      --accent:         #e3a237;
+      --accent-soft:    #3a2f18;
+      --good:           #35c25a;
+      --warning:        #fab219;
+      --serious:        #ec835a;
+      --critical:       #e66767;
+      --seq-250: #184f95; --seq-550: #6da7ec;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface:        #17191a;
+    --surface-raised: #1e2224;
+    --surface-sunken: #101213;
+    --ink:            #f0f2f1;
+    --ink-secondary:  #b7c2c4;
+    --ink-muted:      #8b979a;
+    --line:           #33393b;
+    --line-strong:    #454d4f;
+    --accent:         #e3a237;
+    --accent-soft:    #3a2f18;
+    --good:           #35c25a;
+    --warning:        #fab219;
+    --serious:        #ec835a;
+    --critical:       #e66767;
+    --seq-250: #184f95; --seq-550: #6da7ec;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    padding-inline: max(16px, calc((100vw - 980px) / 2));
+    padding-block: 44px 64px;
+  }
+  h1, h2 { font-family: var(--mono); font-weight: 600; text-wrap: balance; margin: 0; }
+  p { margin: 0; }
+  .tabular { font-variant-numeric: tabular-nums; }
+
+  header {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-bottom: 28px;
+    margin-bottom: 32px;
+    border-bottom: 1px solid var(--line);
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  h1 { font-size: clamp(26px, 4vw, 36px); letter-spacing: -0.01em; }
+  header p.dek { font-size: 16px; color: var(--ink-secondary); max-width: 62ch; }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .badge {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-secondary);
+    background: var(--surface-raised);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 4px 9px;
+    white-space: nowrap;
+  }
+
+  section { margin-bottom: 32px; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-raised); }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; }
+  caption { caption-side: bottom; text-align: left; padding: 12px 16px; font-size: 12.5px; color: var(--ink-muted); line-height: 1.6; }
+  thead th {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    font-weight: 500;
+    text-align: left;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line-strong);
+    background: var(--surface-sunken);
+  }
+  thead th.cond { text-align: left; color: var(--ink); font-size: 15px; text-transform: none; letter-spacing: 0; }
+  tbody th {
+    text-align: left;
+    padding: 13px 16px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink-secondary);
+    font-weight: 500;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--line);
+  }
+  tbody td {
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+    font-family: var(--mono);
+    font-size: 13.5px;
+  }
+  tbody tr:last-child th, tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td, tbody tr:hover th { background: var(--surface-sunken); }
+  .stats { color: var(--ink-secondary); }
+  .stats b { color: var(--ink); font-weight: 600; }
+
+  .bar-track { position: relative; height: 16px; background: var(--surface-sunken); border-radius: 3px; overflow: hidden; margin-bottom: 4px; width: 130px; }
+  .bar-fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: linear-gradient(90deg, var(--seq-250), var(--seq-550)); }
+  .bar-label { font-size: 13px; }
+
+  .cer-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 100px;
+  }
+  .cer-chip .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: currentColor; }
+  .cer-chip[data-level="warning"] { color: var(--warning); background: color-mix(in srgb, var(--warning) 16%, transparent); }
+
+  .note {
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    border-radius: 8px;
+    padding: 16px 20px;
+    font-size: 14px;
+    color: var(--ink-secondary);
+    max-width: 72ch;
+  }
+  .note b { color: var(--ink); }
+
+  section > h2.section-label {
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin-bottom: 16px;
+  }
+  .takeaway {
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    border-radius: 8px;
+    padding: 20px 22px;
+    margin-bottom: 28px;
+  }
+  .takeaway .eyebrow { margin-bottom: 8px; display: block; }
+  .takeaway p { font-size: 16px; color: var(--ink); max-width: 68ch; }
+  .takeaway p + p { margin-top: 10px; }
+  .findings { display: flex; flex-direction: column; gap: 22px; }
+  .finding { display: grid; grid-template-columns: minmax(170px, 210px) 1fr; gap: 20px; }
+  .finding h3 { font-family: var(--mono); font-size: 15px; color: var(--ink); font-weight: 600; }
+  .finding .sub { font-family: var(--sans); font-size: 12px; color: var(--ink-muted); margin-top: 4px; }
+  .finding p { color: var(--ink-secondary); max-width: 62ch; font-size: 15px; }
+  .finding p + p { margin-top: 8px; }
+  .finding b { color: var(--ink); font-weight: 600; }
+  .finding code { font-family: var(--mono); font-size: 0.92em; background: var(--surface-sunken); padding: 1px 5px; border-radius: 3px; }
+  @media (max-width: 720px) { .finding { grid-template-columns: 1fr; gap: 6px; } }
+
+  footer { border-top: 1px solid var(--line); padding-top: 18px; }
+  footer p { font-size: 12.5px; color: var(--ink-muted); max-width: 78ch; }
+  footer p b { color: var(--ink-secondary); }
+</style>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<header>
+  <span class="eyebrow">edge-voice &middot; characterization</span>
+  <h1>Segment Length Scaling</h1>
+  <p class="dek">How E2E latency, decode efficiency, and resource usage scale as the base utterance itself gets longer &mdash; 2s, 4s, and 7s recordings, each tiled to 60% speech occupancy.</p>
+  <div class="badges">
+    <span class="badge">Raspberry Pi 5 &middot; 4 core</span>
+    <span class="badge">Moonshine tiny-ko, single-threaded ORT</span>
+    <span class="badge">single channel (rx)</span>
+    <span class="badge">occupancy fixed 60%</span>
+    <span class="badge">5 repeats / condition</span>
+  </div>
+</header>
+
+<section>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th class="cond">2s</th>
+          <th class="cond">4s</th>
+          <th class="cond">7s</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>E2E latency (ms)<br><span style="font-weight:400;">mean/std/p50/p95/p99</span></th>
+          <td class="stats tabular"><b>605</b> / 68 / 581 / 743 / 754</td>
+          <td class="stats tabular"><b>1891</b> / 22 / 1887 / 1919 / 1932</td>
+          <td class="stats tabular"><b>2731</b> / 28 / 2732 / 2772 / 2772</td>
+        </tr>
+        <tr>
+          <th>STT decode (ms)<br><span style="font-weight:400;">mean/std/p50/p95/p99</span></th>
+          <td class="stats tabular"><b>585</b> / 69 / 557 / 730 / 741</td>
+          <td class="stats tabular"><b>1878</b> / 22 / 1874 / 1906 / 1918</td>
+          <td class="stats tabular"><b>2706</b> / 25 / 2711 / 2742 / 2742</td>
+        </tr>
+        <tr>
+          <th>Decode efficiency<br><span style="font-weight:400;">audio-s / decode-s</span></th>
+          <td>
+            <div class="bar-track"><div class="bar-fill" style="width:84%"></div></div>
+            <span class="bar-label tabular">3.36&times;</span>
+            <div class="stats tabular" style="font-size:11.5px;margin-top:2px;">std 0.36 &middot; p95 3.72</div>
+          </td>
+          <td>
+            <div class="bar-track"><div class="bar-fill" style="width:54%"></div></div>
+            <span class="bar-label tabular">2.16&times;</span>
+            <div class="stats tabular" style="font-size:11.5px;margin-top:2px;">std 0.03 &middot; p95 2.20</div>
+          </td>
+          <td>
+            <div class="bar-track"><div class="bar-fill" style="width:68%"></div></div>
+            <span class="bar-label tabular">2.71&times;</span>
+            <div class="stats tabular" style="font-size:11.5px;margin-top:2px;">std 0.07 &middot; p95 2.80</div>
+          </td>
+        </tr>
+        <tr>
+          <th>CER</th>
+          <td><span class="cer-chip" data-level="warning"><span class="dot"></span>13.7%</span></td>
+          <td><span class="cer-chip" data-level="warning"><span class="dot"></span>6.7%</span></td>
+          <td><span class="cer-chip" data-level="warning"><span class="dot"></span>7.1%</span></td>
+        </tr>
+        <tr>
+          <th>Throughput (content-s/wall-s)</th>
+          <td class="tabular">0.53&times;</td>
+          <td class="tabular">0.52&times;</td>
+          <td class="tabular">0.52&times;</td>
+        </tr>
+        <tr>
+          <th>Throughput (jobs/s)</th>
+          <td class="tabular">0.27/s</td>
+          <td class="tabular">0.13/s</td>
+          <td class="tabular">0.10/s</td>
+        </tr>
+        <tr>
+          <th>CPU mean</th>
+          <td class="tabular">19.3%</td>
+          <td class="tabular">28.0%</td>
+          <td class="tabular">22.5%</td>
+        </tr>
+        <tr>
+          <th>RSS mean / peak</th>
+          <td class="tabular">778 / 778 MB</td>
+          <td class="tabular">839 / 840 MB</td>
+          <td class="tabular">901 / 902 MB</td>
+        </tr>
+      </tbody>
+      <caption>RPi5, 5 repeats per condition, single channel, 60% occupancy held fixed across all three lengths. CER/throughput/CPU/RSS are per-run means (n=5); latency and decode-efficiency stats are pooled across repeats.</caption>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2 class="section-label">Interpretation</h2>
+
+  <div class="takeaway">
+    <span class="eyebrow">Bottom line</span>
+    <p><b>This experiment can't cleanly isolate segment length, and that's the main finding.</b> 2s.wav, 4s.wav, and 7s.wav are three <i>different</i> real recordings with different sentences &mdash; not the same content stretched to different lengths, unlike the speaking-rate test. So any pattern here is length and content entangled together, not length alone.</p>
+    <p>What it does show cleanly: the pipeline has comfortable decode headroom across this whole range (worst case still 2.16&times; real-time), and latency scales with real audio duration exactly as expected. Nothing here indicates a length-driven capacity risk between 2s and 7s.</p>
+  </div>
+
+  <div class="findings">
+    <div class="finding">
+      <div>
+        <h3>Latency tracks duration cleanly</h3>
+        <div class="sub">the one unsurprising number</div>
+      </div>
+      <div>
+        <p>605&nbsp;&rarr;&nbsp;1891&nbsp;&rarr;&nbsp;2731&nbsp;ms tracks each recording's real length, consistent with the earlier 3s-vs-7s comparison: more audio to encode costs more decode time. No anomalies here.</p>
+      </div>
+    </div>
+    <div class="finding">
+      <div>
+        <h3>4s is an outlier, not a midpoint</h3>
+        <div class="sub">decode efficiency 2.16&times; (lowest) &middot; CPU 28.0% (highest)</div>
+      </div>
+      <div>
+        <p>If duration alone drove these numbers, 4s should sit between 2s and 7s on every metric. Instead it's the <b>worst</b> on both decode efficiency and CPU &mdash; the most likely explanation is that 4s.wav's specific sentence is more demanding for the model or its VAD segmentation, not that 4 seconds is an intrinsically harder length. Unconfirmed without the raw per-segment data for this run.</p>
+      </div>
+    </div>
+    <div class="finding">
+      <div>
+        <h3>Throughput stayed flat because there was headroom to spare</h3>
+        <div class="sub">0.53&times; / 0.52&times; / 0.52&times;</div>
+      </div>
+      <div>
+        <p>Occupancy was held fixed at 60% for all three lengths &mdash; the same control used in the speaking-rate test &mdash; so throughput is mechanically pinned near that target regardless of length. It would only have degraded if decode efficiency dropped toward 1&times; and a backlog started forming; it never got close (2.16&times; even at its worst).</p>
+      </div>
+    </div>
+    <div class="finding">
+      <div>
+        <h3>CER likely isn't measuring recognition difficulty</h3>
+        <div class="sub">13.7% / 6.7% / 7.1% &mdash; worst at the <i>shortest</i> utterance</div>
+      </div>
+      <div>
+        <p>In the earlier 7s-only run, this same order-of-magnitude CER was traced entirely to a known warm-up-boundary artifact in the test harness &mdash; every real utterance there decoded at 0% error. CER being <i>highest</i> at 2s (the shortest reference) is exactly the pattern you'd expect if a fixed-size garbled artifact fragment dilutes more against a shorter reference text &mdash; not evidence that short utterances are harder to recognize. Not yet individually confirmed for 2s/4s.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p><b>Latency definition.</b> End-to-end = time from an utterance's audio finishing ingest to its final transcript being published (VAD &rarr; STT &rarr; publish).</p>
+  <p><b>RSS caveat.</b> Resident memory has previously been shown to climb smoothly across sequential runs within a single harness process regardless of test condition &mdash; treat the RSS row here as informational, not a length-driven finding, unless checked chronologically against run order.</p>
+</footer>
