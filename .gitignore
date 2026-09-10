@@ -221,3 +221,6 @@ __marimo__/
 wav/
 dumped_audio/
 dumped_vad_segments/
+
+*.json
+*.wav
