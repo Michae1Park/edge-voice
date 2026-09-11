@@ -142,6 +142,7 @@ import csv
 import logging
 import os
 import queue
+import re
 import statistics
 import threading
 import time
@@ -260,6 +261,18 @@ def _parse_cores(spec: str) -> set[int]:
     return {int(x) for x in spec.split(",") if x.strip()}
 
 
+def _parse_core_map(spec: str) -> dict[str, set[int]]:
+    """Parse 'rx=2,tx=3' or 'rx=2+3,tx=4' into {'rx': {2}, 'tx': {3}}."""
+    result: dict[str, set[int]] = {}
+    for pair in spec.split(","):
+        pair = pair.strip()
+        if not pair:
+            continue
+        channel, _, cores = pair.partition("=")
+        result[channel.strip()] = {int(c) for c in cores.split("+") if c.strip()}
+    return result
+
+
 def _pin_worker(worker: Any, cores: set[int], label: str) -> None:
     """Pin a worker to `cores`, whether it's a thread or an STT process.
 
@@ -314,6 +327,77 @@ class _SttLatencyCapture(logging.Handler):
         stt_latency_s = getattr(record, "stt_latency_s", None)
         if segment_id is not None and stt_latency_s is not None:
             self.by_segment[segment_id] = stt_latency_s
+
+
+SEGMENT_ID_RE = re.compile(r"^[a-z]+-([0-9]+\.[0-9]+)-([0-9]+)$")
+# 3+ consecutive segments this far past their own STT decode time before
+# calling it a plateau, not a blip -- same rule already validated in
+# characterization/scripts/analyze_boundary_run.py's backlog_fail check.
+PLATEAU_LATENCY_MULT = 3.0
+PLATEAU_CONSECUTIVE = 3
+# Merge-event fingerprint: a segment-start-to-segment-start gap this far past
+# one atomic cycle means a burst got silently fused into the prior segment --
+# see characterization/scripts/analyze_boundary_run.py's module docstring for
+# the root-caused mechanism (dropped silence-gap packet -> VAD never fires
+# end/start there).
+MERGE_THRESHOLD_MULT = 1.3
+
+
+class EarlyStopWatchdog:
+    """Detects a genuine plateau or merge event live, during the run, so a
+    cell that's already failing doesn't have to burn its full --duration-s.
+
+    Deliberately NOT triggered by a single slow segment -- a one-off queueing
+    hiccup (the benign 10s-segment split found in the original boundary
+    search) recovers on its own and shouldn't cut a run short. Only two
+    signals count, both already validated as "real, sustained" rather than
+    noise in analyze_boundary_run.py:
+      1. pre_stt_latency_ms > PLATEAU_LATENCY_MULT x that segment's own
+         stt_latency_ms, for PLATEAU_CONSECUTIVE consecutive segments.
+      2. A segment-start gap > MERGE_THRESHOLD_MULT x atomic_cycle_s
+         (only checked if the caller knows the cell's atomic cycle length).
+    """
+
+    def __init__(self, atomic_cycle_s: float | None) -> None:
+        self._atomic_cycle_s = atomic_cycle_s
+        self._consecutive = 0
+        self._last_start_by_channel: dict[str, float] = {}
+        self.trigger_time: float | None = None
+        self.trigger_reason: str | None = None
+
+    def _fire(self, reason: str) -> None:
+        if self.trigger_time is None:
+            self.trigger_time = time.monotonic()
+            self.trigger_reason = reason
+
+    def observe(self, record: "SegmentRecord") -> None:
+        if self.trigger_time is not None:
+            return  # already triggered, nothing left to detect
+
+        if record.stt_latency_ms and record.pre_stt_latency_ms is not None:
+            if record.pre_stt_latency_ms > PLATEAU_LATENCY_MULT * record.stt_latency_ms:
+                self._consecutive += 1
+                if self._consecutive >= PLATEAU_CONSECUTIVE:
+                    self._fire(
+                        f"sustained latency plateau ({self._consecutive} consecutive segments "
+                        f"with pre_stt > {PLATEAU_LATENCY_MULT:.0f}x stt latency)"
+                    )
+                    return
+            else:
+                self._consecutive = 0
+
+        if self._atomic_cycle_s:
+            m = SEGMENT_ID_RE.match(record.segment_id)
+            if m:
+                start_ts = float(m.group(1))
+                prev = self._last_start_by_channel.get(record.channel_id)
+                self._last_start_by_channel[record.channel_id] = start_ts
+                if prev is not None and (start_ts - prev) > MERGE_THRESHOLD_MULT * self._atomic_cycle_s:
+                    self._fire(
+                        f"merge event detected (segment-start gap {start_ts - prev:.2f}s > "
+                        f"{MERGE_THRESHOLD_MULT:.1f}x atomic cycle {self._atomic_cycle_s:.2f}s) "
+                        f"on channel={record.channel_id}"
+                    )
 
 
 @dataclass
@@ -448,8 +532,24 @@ def main() -> None:
         "--stt-cores",
         default=None,
         metavar="C,C,...",
-        help="Pin STTWorker to these CPU cores, e.g. '2,3' (default: unpinned). "
-        "Combine with MOONSHINE_ORT_SINGLE_THREAD -- see docstring.",
+        help="Pin every channel's STTWorker to this SAME core set, e.g. '2,3' "
+        "(default: unpinned). This does not give each channel an exclusive "
+        "core -- sched_setaffinity({2,3}) lets the kernel schedule either "
+        "worker onto either core, so concurrent decodes still contend within "
+        "the set. Use --stt-core-map instead for strict one-core-per-channel "
+        "isolation. Combine with MOONSHINE_ORT_SINGLE_THREAD -- see docstring.",
+    )
+    parser.add_argument(
+        "--stt-core-map",
+        default=None,
+        metavar="CH=C[+C...],CH=C[+C...],...",
+        help="Pin each channel's STTWorker to its OWN disjoint core(s), e.g. "
+        "'rx=2,tx=3' (one core each) or 'rx=2+3,tx=4' (rx gets two cores, "
+        "tx one). Unlike --stt-cores (one shared set for ALL STT workers, "
+        "which the kernel is then free to schedule either worker onto), this "
+        "gives each channel exclusive use of its own listed core(s) for a "
+        "true no-contention isolation test. Overrides --stt-cores if both "
+        "are given.",
     )
     parser.add_argument(
         "--other-cores",
@@ -475,6 +575,16 @@ def main() -> None:
         "override both together for single-channel, e.g. --channels rx --wav wav/rx_recorded_1.wav)",
     )
     parser.add_argument(
+        "--speed",
+        type=float,
+        default=1.0,
+        help="WAV replay speed multiplier -- 1.0 is real-time (default, matches a "
+        "live feed). Values > 1.0 publish audio faster than real-time, for finding "
+        "the pipeline's throughput ceiling: push --speed up until the queue-depth "
+        "verdict below flips from 'flat/draining' to 'GROWING', which is the point "
+        "the full pipeline (ingest through STT) can no longer keep up.",
+    )
+    parser.add_argument(
         "--grace-s",
         type=float,
         default=5.0,
@@ -483,9 +593,79 @@ def main() -> None:
     parser.add_argument(
         "--csv-out", default=None, help="Optional path to write one row per segment as CSV"
     )
+    parser.add_argument(
+        "--disable-reliability", action="store_true",
+        help="Stress-testing only: turn off vad.segment_limits_enabled, vad.idle_flush_s, and "
+        "reliability.enabled (script-level override, configs/default.yaml untouched) so a "
+        "genuine clog/freeze can manifest instead of being silently recovered from. Combine "
+        "with a long --duration-s and a looped WAV to actually build sustained backlog -- a "
+        "single short clip has nothing to pile up behind a stuck segment.",
+    )
+    parser.add_argument(
+        "--token-budget-multiplier", type=float, default=1.0,
+        help="Multiplies stt.max_tokens_per_second by this factor -- use e.g. 2.0 when --wav "
+        "is itself a time-scale-modified (TSM) clip at 2x speed, so the decoder's token budget "
+        "matches the compressed audio's actual content instead of starving on it (see "
+        "characterization/scripts/run_experiment.py for why this matters). Default 1.0 = no change.",
+    )
+    parser.add_argument(
+        "--early-stop", action="store_true",
+        help="Stop the run early once a genuine plateau or merge event is detected (see "
+        "EarlyStopWatchdog), instead of always running the full --duration-s. Lets a "
+        "multi-cell sweep move on from an already-failing cell without burning its whole "
+        "budget re-confirming what's already clear. Off by default -- existing callers that "
+        "want the full duration unconditionally are unaffected.",
+    )
+    parser.add_argument(
+        "--early-stop-grace-s", type=float, default=10.0,
+        help="Once --early-stop triggers, keep running this much longer (to capture a bit of "
+        "post-trigger confirmation) before actually stopping (default 10s). Actual overshoot "
+        "can exceed this by up to one more full loop of --wav, since the feed loop only checks "
+        "between loops, not mid-playback (wav_source.py's playback call isn't interruptible).",
+    )
+    parser.add_argument(
+        "--merge-atomic-cycle-s", type=float, default=None,
+        help="Atomic segment cycle length (atomic_segment_duration_s + gap_s) for --early-stop's "
+        "merge-event detection -- the same figure characterization/scripts/build_boundary_audio.py "
+        "records per cell in its metadata. Omit to disable merge-event detection (plateau "
+        "detection alone still runs if --early-stop is set).",
+    )
+    parser.add_argument(
+        "--min-silence-duration-ms", type=int, default=None,
+        help="Diagnostic override for vad.min_silence_duration_ms (default: whatever's in "
+        "configs/default.yaml, currently 100ms). Tests whether Silero's end-of-speech "
+        "detection becomes reliable again once the threshold is well below the audio's own "
+        "gap length, vs. the gap being only ~2x the threshold. Script-level override only.",
+    )
     args = parser.parse_args()
 
     settings = Settings.load()
+
+    # Restrict the orchestrator's own channel set to the ones actually being
+    # replayed. Without this, PipelineOrchestrator.build() spins up an STT
+    # worker process per channel_id in settings.mqtt.channels regardless of
+    # --channels here -- so e.g. --channels rx alone still builds a second,
+    # permanently-idle STTWorker-tx process. That made "single-channel"
+    # resource numbers (RSS in particular) actually measure two decoder
+    # processes the whole time, not one -- confirmed via `ps` showing both
+    # multiprocessing-fork children present even with one channel replayed.
+    configured_ids = {c.channel_id for c in settings.mqtt.channels}
+    requested_ids = set(args.channels)
+    unknown = requested_ids - configured_ids
+    if unknown:
+        raise SystemExit(
+            f"--channels {sorted(unknown)} not in configs/default.yaml's mqtt.channels "
+            f"({sorted(configured_ids)})"
+        )
+    if requested_ids != configured_ids:
+        dropped = configured_ids - requested_ids
+        logger.info(
+            "Restricting orchestrator to channel(s) %s -- not building STT worker(s) for "
+            "%s, so this is a true %d-process isolation test, not %d channels with %s idle",
+            sorted(requested_ids), sorted(dropped), len(requested_ids), len(configured_ids), sorted(dropped),
+        )
+        settings.mqtt.channels = [c for c in settings.mqtt.channels if c.channel_id in requested_ids]
+
     max_segment_s = settings.vad.max_segment_s
     segment_limits_enabled = settings.vad.segment_limits_enabled
     if not segment_limits_enabled:
@@ -495,6 +675,33 @@ def main() -> None:
             "on natural pauses / idle-flush only, however long that takes)",
             max_segment_s,
         )
+    if args.disable_reliability:
+        settings.vad.segment_limits_enabled = False
+        settings.vad.idle_flush_s = 0.0
+        settings.reliability.enabled = False
+        logger.warning(
+            "RELIABILITY DISABLED: segment_limits_enabled=False, idle_flush_s=0, "
+            "reliability.enabled=False -- a segment or worker can now hang indefinitely, "
+            "bounded only by --duration-s + --grace-s"
+        )
+    if args.token_budget_multiplier != 1.0:
+        base_rate = float(settings.stt.max_tokens_per_second)
+        scaled_rate = base_rate * args.token_budget_multiplier
+        settings.stt.max_tokens_per_second = str(scaled_rate)
+        logger.info(
+            "Scaling max_tokens_per_second %.1f -> %.1f (multiplier=%.2gx)",
+            base_rate, scaled_rate, args.token_budget_multiplier,
+        )
+    if args.min_silence_duration_ms is not None:
+        old_ms = settings.vad.min_silence_duration_ms
+        settings.vad.min_silence_duration_ms = args.min_silence_duration_ms
+        logger.warning(
+            "Overriding vad.min_silence_duration_ms %d -> %d -- diagnostic only, tests "
+            "whether Silero's end-of-speech detection is unreliable at this file's own "
+            "gap length specifically, not a recommended production value",
+            old_ms, args.min_silence_duration_ms,
+        )
+
     orch = PipelineOrchestrator(settings)
     orch.build()
 
@@ -505,6 +712,7 @@ def main() -> None:
     sub = orch.transcripts.subscribe()
     drain_stop = threading.Event()
     run_started = time.monotonic()
+    watchdog = EarlyStopWatchdog(args.merge_atomic_cycle_s) if args.early_stop else None
 
     def _drain() -> None:
         while True:
@@ -541,6 +749,8 @@ def main() -> None:
                     q_segment=depths.get(f"segment_{ev.channel_id}", -1),
                 )
             )
+            if watchdog is not None:
+                watchdog.observe(records[-1])
 
     drain_thread = threading.Thread(target=_drain, daemon=True)
 
@@ -568,19 +778,33 @@ def main() -> None:
     sampler.start()
     time.sleep(0.5)  # let workers actually come up before publishing / before native_id exists
 
-    if args.stt_cores:
+    all_stt_cores: set[int] = set()
+    if args.stt_core_map:
+        # Strict per-channel isolation: each channel's STT worker gets its
+        # OWN disjoint core(s), so concurrent decodes can't contend for the
+        # same core the way a shared --stt-cores set allows.
+        core_map = _parse_core_map(args.stt_core_map)
+        for cid, stt_worker in orch._stt.items():
+            if cid not in core_map:
+                logger.warning("--stt-core-map has no entry for channel %s -- leaving unpinned", cid)
+                continue
+            _pin_worker(stt_worker, core_map[cid], f"STTWorker-{cid}")
+            all_stt_cores |= core_map[cid]
+    elif args.stt_cores:
         # orch._stt is now one dedicated worker per channel (dict), not a
         # single attribute -- pin every channel's STT worker to the same
         # core set, since "dedicate cores to STT" means all of them, not
-        # just one channel's.
+        # just one channel's. Note this is a SHARED set, not one core each --
+        # see --stt-core-map for strict per-channel isolation.
+        all_stt_cores = _parse_cores(args.stt_cores)
         for cid, stt_worker in orch._stt.items():
-            _pin_worker(stt_worker, _parse_cores(args.stt_cores), f"STTWorker-{cid}")
+            _pin_worker(stt_worker, all_stt_cores, f"STTWorker-{cid}")
     if args.other_cores:
         other_cores = _parse_cores(args.other_cores)
-        if args.stt_cores and _parse_cores(args.stt_cores) & other_cores:
+        if all_stt_cores & other_cores:
             logger.warning(
-                "--stt-cores and --other-cores overlap (%s) -- not a real dedication test",
-                _parse_cores(args.stt_cores) & other_cores,
+                "STT cores and --other-cores overlap (%s) -- not a real dedication test",
+                all_stt_cores & other_cores,
             )
         for label, worker in (
             ("MqttAudioIngest", orch._audio_source),
@@ -593,21 +817,47 @@ def main() -> None:
         _pin_main_thread(other_cores)
 
     logger.info(
-        "Replaying %s on channels %s in a loop for %.0fs (Ctrl-C to stop early)",
+        "Replaying %s on channels %s in a loop for %.0fs at %.1fx speed (Ctrl-C to stop early)",
         args.wav,
         args.channels,
         args.duration_s,
+        args.speed,
     )
+    # wav_source.py's --speed flag has been removed from the repo since this
+    # was written (a change outside this session, not this script's own
+    # edits) -- forwarding it unconditionally breaks even the 1.0x default.
+    # Only pass it when actually needed, so this degrades gracefully instead
+    # of hard-depending on a flag that may not exist; re-add unconditional
+    # forwarding once wav_source.py's --speed support is confirmed present.
+    wav_source_argv = ["--wav", *args.wav, "--channels", *args.channels]
+    if args.speed != 1.0:
+        wav_source_argv += ["--speed", str(args.speed)]
+
     started = time.monotonic()
     loops = 0
+    stopped_early = False
     try:
         while time.monotonic() - started < args.duration_s:
-            wav_source.main(["--wav", *args.wav, "--channels", *args.channels])
+            if (
+                watchdog is not None
+                and watchdog.trigger_time is not None
+                and time.monotonic() - watchdog.trigger_time >= args.early_stop_grace_s
+            ):
+                stopped_early = True
+                break
+            wav_source.main(wav_source_argv)
             loops += 1
     except KeyboardInterrupt:
         logger.info("Interrupted -- wrapping up")
 
     elapsed = time.monotonic() - started
+    if stopped_early:
+        logger.warning(
+            "EARLY STOP after %d loop(s) / %.0fs: %s (elapsed_s=%.1f), "
+            "%.0fs grace period elapsed -- skipping the rest of --duration-s=%.0fs",
+            loops, elapsed, watchdog.trigger_reason, watchdog.trigger_time - run_started,
+            args.early_stop_grace_s, args.duration_s,
+        )
     logger.info(
         "%d loop(s) done in %.0fs, waiting %.0fs for trailing decodes", loops, elapsed, args.grace_s
     )
@@ -699,11 +949,12 @@ def main() -> None:
     if full_ms:
         print("\n" + "-" * 96)
         print(
-            f"TL;DR: {len(records)} segments over {loops} loop(s) -- "
+            f"TL;DR: {len(records)} segments over {loops} loop(s) at {args.speed:.1f}x speed -- "
             f"latency p50={_percentile(full_ms, 50):.0f}ms p95={_percentile(full_ms, 95):.0f}ms "
             f"max={max(full_ms):.0f}ms  |  "
             f"RSS mean={statistics.mean(rss_values):.0f}MB peak={max(rss_values):.0f}MB  |  "
-            f"CPU mean={statistics.mean(sampler.cpu_pct_samples) if sampler.cpu_pct_samples else 0:.0f}%"
+            f"CPU mean={statistics.mean(sampler.cpu_pct_samples) if sampler.cpu_pct_samples else 0:.0f}%  |  "
+            f"queue trend: {_queue_depth_trend(records)}"
         )
         print("-" * 96)
 
