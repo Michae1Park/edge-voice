@@ -1,0 +1,193 @@
+2026-09-10 18:21:07,095 INFO    bench_pipeline_load: Restricting orchestrator to channel(s) ['rx'] -- not building STT worker(s) for ['tx'], so this is a true 1-process isolation test, not 2 channels with ['tx'] idle
+2026-09-10 18:21:07,095 WARNING bench_pipeline_load: RELIABILITY DISABLED: segment_limits_enabled=False, idle_flush_s=0, reliability.enabled=False -- a segment or worker can now hang indefinitely, bounded only by --duration-s + --grace-s
+2026-09-10 18:21:07,095 WARNING bench_pipeline_load: Overriding vad.min_silence_duration_ms 100 -> 50 -- diagnostic only, tests whether Silero's end-of-speech detection is unreliable at this file's own gap length specifically, not a recommended production value
+2026-09-10 18:21:07,200 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-09-10 18:21:07,201 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:1883)
+2026-09-10 18:21:07,201 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-09-10 18:21:07,208 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-09-10 18:21:07,208 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-09-10 18:21:08,654 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+[0;93m2026-09-10 18:21:08.670389362 [W:onnxruntime:MoonshineModel, device_discovery.cc:164 DiscoverDevicesForPlatform] GPU device discovery failed: device_discovery.cc:89 ReadFileContents Failed to open file: "/sys/class/drm/card1/device/vendor"[m
+2026-09-10 18:21:08,990 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-09-10 18:21:08,990 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-09-10 18:21:08,989 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-ab8c4363.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-09-10 18:21:08,990 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-09-10 18:21:09,490 INFO    bench_pipeline_load: Replaying ['characterization/testaudio/combo1.wav'] on channels ['rx'] in a loop for 300s at 1.0x speed (Ctrl-C to stop early)
+2026-09-10 18:21:09,542 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/combo1.wav'] 501156 samples → 1567 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-10 18:21:18,990 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=None mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={}
+2026-09-10 18:21:19,082 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032069.543-1 [1789032069.54-1789032076.14] latency=2.917s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:21:26,837 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032077.352-2 [1789032077.35-1789032083.94] latency=2.873s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:21:28,990 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.873 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.873}
+2026-09-10 18:21:34,736 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032085.191-3 [1789032085.19-1789032091.82] latency=2.891s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:21:38,991 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.891 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.891}
+2026-09-10 18:21:41,864 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1567 frames in 32.32s (1.0x real-time)
+2026-09-10 18:21:41,867 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/combo1.wav'] 501156 samples → 1567 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-10 18:21:42,336 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032093.032-4 [1789032093.03-1789032099.59] latency=2.732s '다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다'
+2026-09-10 18:21:48,991 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.732 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.732}
+2026-09-10 18:21:51,411 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032100.872-5 [1789032100.87-1789032108.48] latency=2.902s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:21:58,992 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.902 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.902}
+2026-09-10 18:21:59,132 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032109.696-6 [1789032109.70-1789032116.26] latency=2.863s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:22:06,924 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032117.504-7 [1789032117.50-1789032124.10] latency=2.815s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:22:08,992 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.815 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.815}
+2026-09-10 18:22:14,189 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1567 frames in 32.32s (1.0x real-time)
+2026-09-10 18:22:14,192 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/combo1.wav'] 501156 samples → 1567 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-10 18:22:14,822 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032125.344-8 [1789032125.34-1789032131.94] latency=2.851s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:22:18,992 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.851 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.851}
+2026-09-10 18:22:23,646 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032133.184-9 [1789032133.18-1789032140.76] latency=2.871s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:22:28,993 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.871 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.871}
+2026-09-10 18:22:31,560 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032142.009-10 [1789032142.01-1789032148.60] latency=2.946s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:22:38,998 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.946 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.946}
+2026-09-10 18:22:39,312 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032149.849-11 [1789032149.85-1789032156.41] latency=2.878s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:22:46,514 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1567 frames in 32.32s (1.0x real-time)
+2026-09-10 18:22:46,516 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/combo1.wav'] 501156 samples → 1567 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-10 18:22:46,983 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032157.657-12 [1789032157.66-1789032164.25] latency=2.709s '다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다'
+2026-09-10 18:22:48,998 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.709 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.709}
+2026-09-10 18:22:55,950 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032165.529-13 [1789032165.53-1789032173.07] latency=2.852s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:22:58,998 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.852 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.852}
+2026-09-10 18:23:03,772 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032174.322-14 [1789032174.32-1789032180.91] latency=2.833s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:23:08,999 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.833 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.833}
+2026-09-10 18:23:11,637 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032182.162-15 [1789032182.16-1789032188.75] latency=2.857s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:23:18,838 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1567 frames in 32.32s (1.0x real-time)
+2026-09-10 18:23:18,841 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/combo1.wav'] 501156 samples → 1567 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-10 18:23:18,999 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.857 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.857}
+2026-09-10 18:23:19,271 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032190.002-16 [1789032190.00-1789032196.56] latency=2.693s '다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다'
+2026-09-10 18:23:28,230 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032197.842-17 [1789032197.84-1789032205.39] latency=2.827s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:23:28,999 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.827 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.827}
+2026-09-10 18:23:35,947 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032206.666-18 [1789032206.67-1789032213.23] latency=2.704s '다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다'
+2026-09-10 18:23:39,000 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.704 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.704}
+2026-09-10 18:23:43,965 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032214.474-19 [1789032214.47-1789032221.07] latency=2.881s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:23:49,000 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.881 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.881}
+2026-09-10 18:23:51,163 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1567 frames in 32.32s (1.0x real-time)
+2026-09-10 18:23:51,166 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/combo1.wav'] 501156 samples → 1567 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-10 18:23:51,774 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032222.314-20 [1789032222.31-1789032228.87] latency=2.871s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:23:59,000 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.871 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.871}
+2026-09-10 18:24:00,622 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032230.154-21 [1789032230.15-1789032237.73] latency=2.874s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:24:08,491 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032238.982-22 [1789032238.98-1789032245.57] latency=2.903s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:24:09,001 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.903 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.903}
+2026-09-10 18:24:16,159 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032246.819-23 [1789032246.82-1789032253.41] latency=2.731s '다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다'
+2026-09-10 18:24:19,001 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.731 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.731}
+2026-09-10 18:24:23,490 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1567 frames in 32.32s (1.0x real-time)
+2026-09-10 18:24:23,494 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/combo1.wav'] 501156 samples → 1567 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-10 18:24:23,968 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032254.627-24 [1789032254.63-1789032261.22] latency=2.720s '다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다'
+2026-09-10 18:24:29,001 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.720 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.72}
+2026-09-10 18:24:32,828 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032262.499-25 [1789032262.50-1789032270.05] latency=2.751s '다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다'
+2026-09-10 18:24:39,002 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.751 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.751}
+2026-09-10 18:24:40,724 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032271.295-26 [1789032271.30-1789032277.86] latency=2.847s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:24:48,528 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032279.135-27 [1789032279.14-1789032285.70] latency=2.812s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관이 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:24:49,002 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.812 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.812}
+2026-09-10 18:24:55,817 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1567 frames in 32.32s (1.0x real-time)
+2026-09-10 18:24:55,869 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/combo1.wav'] 501156 samples → 1567 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-10 18:24:56,343 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032286.975-28 [1789032286.98-1789032293.57] latency=2.746s '다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다'
+2026-09-10 18:24:59,002 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.746 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.746}
+2026-09-10 18:25:05,261 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032294.816-29 [1789032294.82-1789032302.41] latency=2.830s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:25:09,002 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.830 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.83}
+2026-09-10 18:25:13,176 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032303.691-30 [1789032303.69-1789032310.28] latency=2.860s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:25:19,003 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.860 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.86}
+2026-09-10 18:25:20,817 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032311.498-31 [1789032311.50-1789032318.09] latency=2.706s '다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성을 확인하지 않았다 이렇게 설명을 했습니다'
+2026-09-10 18:25:28,191 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1567 frames in 32.32s (1.0x real-time)
+2026-09-10 18:25:28,195 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/combo1.wav'] 501156 samples → 1567 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-10 18:25:28,846 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032319.338-32 [1789032319.34-1789032325.90] latency=2.930s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:25:29,003 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.930 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.93}
+2026-09-10 18:25:37,563 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032327.179-33 [1789032327.18-1789032334.72] latency=2.826s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:25:39,003 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.826 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.826}
+2026-09-10 18:25:45,400 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032336.004-34 [1789032336.00-1789032342.56] latency=2.823s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:25:49,004 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.823 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.823}
+2026-09-10 18:25:53,276 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032343.844-35 [1789032343.84-1789032350.44] latency=2.818s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:25:59,004 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.818 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.818}
+2026-09-10 18:26:00,517 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1567 frames in 32.32s (1.0x real-time)
+2026-09-10 18:26:00,519 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/combo1.wav'] 501156 samples → 1567 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-10 18:26:00,994 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032351.684-36 [1789032351.68-1789032358.24] latency=2.736s '다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다'
+2026-09-10 18:26:09,004 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.736 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.736}
+2026-09-10 18:26:09,949 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032359.524-37 [1789032359.52-1789032367.10] latency=2.828s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:26:17,734 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032368.370-38 [1789032368.37-1789032374.93] latency=2.813s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:26:19,004 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.813 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.813}
+2026-09-10 18:26:25,618 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032376.182-39 [1789032376.18-1789032382.75] latency=2.856s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:26:29,005 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.856 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.856}
+2026-09-10 18:26:32,841 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1567 frames in 32.32s (1.0x real-time)
+2026-09-10 18:26:32,842 INFO    bench_pipeline_load: 10 loop(s) done in 323s, waiting 5s for trailing decodes
+2026-09-10 18:26:33,444 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789032383.997-40 [1789032384.00-1789032390.56] latency=2.863s '어~ 다만 이 지명관리청은 백신 접종 그리고 사망관에 직접적인 연관성은 확인되지 않았다 이렇게 설명을 했습니다.'
+2026-09-10 18:26:37,945 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-09-10 18:26:38,843 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-09-10 18:26:38,844 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-09-10 18:26:39,043 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-09-10 18:26:39,451 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+
+================================================================================================
+PER-SEGMENT -- 10 loop(s) x ['characterization/testaudio/combo1.wav'] on ['rx'], 40 final transcripts
+================================================================================================
+elapsed_s  ch  dur_s  cap  chars  full_ms   stt_ms   pre_ms   q(i/r/s)
+     11.9  rx   6.59          62   2946.5   2916.8     29.7   0/0/0
+     19.6  rx   6.59          62   2893.8   2872.5     21.3   0/0/0
+     27.5  rx   6.62          62   2920.6   2890.9     29.7   0/0/0
+     35.1  rx   6.56          58   2745.0   2731.9     13.1   0/0/0
+     44.2  rx   7.61          62   2931.7   2901.8     29.8   0/0/0
+     51.9  rx   6.56          62   2876.2   2862.9     13.2   0/0/0
+     59.7  rx   6.59          62   2828.6   2815.4     13.2   0/0/0
+     67.6  rx   6.59          62   2883.6   2850.5     33.1   0/0/0
+     76.4  rx   7.58          62   2884.9   2871.4     13.6   0/0/0
+     84.4  rx   6.59          62   2959.3   2946.2     13.1   0/0/0
+     92.1  rx   6.56          62   2903.4   2877.8     25.6   0/0/0
+     99.8  rx   6.59          58   2734.6   2709.4     25.2   0/0/0
+    108.7  rx   7.54          62   2876.7   2851.6     25.1   0/0/0
+    116.6  rx   6.59          62   2858.5   2833.4     25.1   0/0/0
+    124.4  rx   6.59          62   2883.8   2857.5     26.3   1/0/0
+    132.1  rx   6.56          58   2709.9   2692.5     17.3   0/0/0
+    141.0  rx   7.54          62   2844.2   2827.0     17.3   0/0/0
+    148.7  rx   6.56          58   2721.6   2704.3     17.3   0/0/0
+    156.8  rx   6.59          62   2899.1   2881.3     17.8   0/0/0
+    164.6  rx   6.56          62   2900.1   2870.9     29.1   0/0/0
+    173.4  rx   7.58          62   2891.9   2874.3     17.6   0/0/0
+    181.3  rx   6.59          62   2920.9   2903.3     17.6   0/0/0
+    189.0  rx   6.59          58   2748.1   2730.9     17.2   0/0/0
+    196.8  rx   6.59          58   2749.1   2720.0     29.1   0/0/0
+    205.6  rx   7.55          58   2780.9   2751.3     29.5   0/0/0
+    213.5  rx   6.56          62   2869.2   2847.4     21.8   0/0/0
+    221.3  rx   6.56          62   2832.8   2811.5     21.3   0/0/0
+    229.1  rx   6.59          58   2776.1   2746.3     29.8   0/0/0
+    238.1  rx   7.59          62   2851.1   2829.8     21.3   0/0/0
+    246.0  rx   6.59          62   2893.9   2860.2     33.6   0/0/0
+    253.6  rx   6.59          58   2727.3   2706.2     21.2   0/0/0
+    261.6  rx   6.56          62   2947.7   2929.7     18.1   0/0/0
+    270.4  rx   7.54          62   2839.7   2826.5     13.3   0/0/0
+    278.2  rx   6.56          62   2836.6   2823.5     13.2   0/0/0
+    286.1  rx   6.59          62   2839.9   2818.5     21.4   0/1/0
+    293.8  rx   6.56          58   2749.7   2736.4     13.3   0/0/0
+    302.7  rx   7.58          62   2848.7   2827.7     21.1   0/0/0
+    310.5  rx   6.56          62   2804.5   2812.9     -8.5   0/0/0
+    318.4  rx   6.57          62   2870.0   2856.2     13.8   0/0/0
+    326.2  rx   6.56          62   2887.9   2862.8     25.0   0/0/0
+
+Wrote 40 rows to characterization/results_limit_search/combo1.csv
+
+Note: RSS/CPU cover this process only -- the MQTT broker is a
+separate OS process (check with `ps aux | grep mosquitto` if needed).
+Note: queue depths are sampled when this script observes the transcript,
+not at the moment STT actually started decoding it -- context, not a
+precise at-decode-time reading.
+
+================================================================================================
+SUMMARY
+================================================================================================
+Full latency (mic-arrival -> transcript): n=40  min=2709.9ms  mean=2846.7ms  median=2863.8ms  p95=2946.5ms  max=2959.3ms  p99=2959.3ms
+  of which STT decode: n=40  min=2692.5ms  mean=2826.0ms  median=2840.4ms  p95=2916.8ms  max=2946.2ms  p99=2946.2ms
+  of which pre-STT (VAD wait + queueing): n=40  min=-8.5ms  mean=20.7ms  median=21.2ms  p95=29.8ms  max=33.6ms  p99=33.6ms
+RSS: n=1642  min=739.0MB  mean=755.3MB  median=755.6MB  p95=755.8MB  max=755.8MB  p99=755.8MB  (sampled every 0.2s)
+  peak: 755.8MB at elapsed_s=318.7
+CPU: n=328  min=0.0%  mean=38.8%  median=6.0%  p95=106.7%  max=107.8%  p99=106.8%  (4 cores available, 100%=1 core, averaged over 1.0s windows)
+
+By segment duration:
+                 5s+: n=40  full mean= 2846.7ms  stt mean= 2826.0ms
+
+By channel:
+                  rx: n=40  full mean= 2846.7ms  stt mean= 2826.0ms
+
+By hit_cap (max_segment_s=35.0, enforced in this config):
+               False: n=40  full mean= 2846.7ms  stt mean= 2826.0ms
+
+Queue depth trend (the 'running out of CPU' signal, not raw CPU%):
+    first half mean=0.05  second half mean=0.05  peak=1 at elapsed_s=124.4 (flat/draining -- no sign of falling behind)
+
+------------------------------------------------------------------------------------------------
+TL;DR: 40 segments over 10 loop(s) at 1.0x speed -- latency p50=2869ms p95=2947ms max=2959ms  |  RSS mean=755MB peak=756MB  |  CPU mean=39%  |  queue trend: first half mean=0.05  second half mean=0.05  peak=1 at elapsed_s=124.4 (flat/draining -- no sign of falling behind)
+------------------------------------------------------------------------------------------------

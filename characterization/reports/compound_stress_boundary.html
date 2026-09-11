@@ -1,0 +1,588 @@
+<title>Compound Stress Boundary</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface:        #f6f8f7;
+    --surface-raised: #ffffff;
+    --surface-sunken: #eceeec;
+    --ink:            #12181a;
+    --ink-secondary:  #4c5960;
+    --ink-muted:      #7c8a8f;
+    --line:           #d7dcda;
+    --line-strong:    #b7c0bd;
+    --accent:         #a8690a;
+    --accent-soft:    #f3e3cd;
+    --good:           #0ca30c;
+    --critical:       #d03b3b;
+    --warning:        #b5860b;
+    --seq-250: #86b6ef; --seq-550: #1c5cab;
+    --fail-row: #fbeaea;
+    --warn-row: #fbf3e2;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface:        #17191a;
+      --surface-raised: #1e2224;
+      --surface-sunken: #101213;
+      --ink:            #f0f2f1;
+      --ink-secondary:  #b7c2c4;
+      --ink-muted:      #8b979a;
+      --line:           #33393b;
+      --line-strong:    #454d4f;
+      --accent:         #e3a237;
+      --accent-soft:    #3a2f18;
+      --good:           #35c25a;
+      --critical:       #e66767;
+      --warning:        #dbb24c;
+      --seq-250: #184f95; --seq-550: #6da7ec;
+      --fail-row: #3a1f1f;
+      --warn-row: #362c18;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface:        #17191a;
+    --surface-raised: #1e2224;
+    --surface-sunken: #101213;
+    --ink:            #f0f2f1;
+    --ink-secondary:  #b7c2c4;
+    --ink-muted:      #8b979a;
+    --line:           #33393b;
+    --line-strong:    #454d4f;
+    --accent:         #e3a237;
+    --accent-soft:    #3a2f18;
+    --good:           #35c25a;
+    --critical:       #e66767;
+    --warning:        #dbb24c;
+    --seq-250: #184f95; --seq-550: #6da7ec;
+    --fail-row: #3a1f1f;
+    --warn-row: #362c18;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    padding-inline: max(16px, calc((100vw - 1180px) / 2));
+    padding-block: 44px 72px;
+  }
+  h1, h2, h3 { font-family: var(--mono); font-weight: 600; text-wrap: balance; margin: 0; }
+  p { margin: 0; }
+  .tabular { font-variant-numeric: tabular-nums; }
+
+  header {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-bottom: 28px;
+    margin-bottom: 32px;
+    border-bottom: 1px solid var(--line);
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  h1 { font-size: clamp(28px, 4vw, 40px); letter-spacing: -0.01em; }
+  header p.dek { font-size: 16px; color: var(--ink-secondary); max-width: 70ch; }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .badge {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-secondary);
+    background: var(--surface-raised);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 4px 9px;
+    white-space: nowrap;
+  }
+
+  section { margin-bottom: 44px; }
+  section > h2 {
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin-bottom: 6px;
+  }
+  section > p.section-dek { font-size: 14px; color: var(--ink-secondary); max-width: 76ch; margin-bottom: 16px; }
+
+  .method-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+  }
+  .method-card {
+    background: var(--surface-raised);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px 18px;
+  }
+  .method-card h3 { font-size: 13.5px; color: var(--ink); margin-bottom: 8px; }
+  .method-card p { font-size: 13.5px; color: var(--ink-secondary); }
+  .method-card p + p { margin-top: 6px; }
+  .method-card code { font-family: var(--mono); font-size: 0.92em; background: var(--surface-sunken); padding: 1px 5px; border-radius: 3px; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-raised); }
+  table { border-collapse: collapse; width: 100%; min-width: 900px; }
+  caption { caption-side: bottom; text-align: left; padding: 12px 16px; font-size: 12.5px; color: var(--ink-muted); line-height: 1.6; }
+  thead th {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    font-weight: 500;
+    text-align: left;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--line-strong);
+    background: var(--surface-sunken);
+  }
+  thead th.num { text-align: right; }
+  tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+    font-family: var(--mono);
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr.section-break td { padding: 6px 14px; background: var(--surface-sunken); font-family: var(--sans); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted); }
+  tbody tr.fail-row td { background: var(--fail-row); }
+  tbody tr.fail-row:hover td { background: var(--fail-row); }
+  tbody tr.warn-row td { background: var(--warn-row); }
+  tbody tr:not(.section-break):not(.fail-row):not(.warn-row):hover td { background: var(--surface-sunken); }
+  td.num { text-align: right; }
+  td.cell-label { font-weight: 600; font-size: 13.5px; }
+
+  .status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 100px;
+  }
+  .status-chip .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: currentColor; }
+  .status-chip[data-level="pass"] { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
+  .status-chip[data-level="fail"] { color: var(--critical); background: color-mix(in srgb, var(--critical) 18%, transparent); }
+
+  .flag { font-family: var(--sans); color: var(--ink-muted); font-size: 11.5px; }
+
+  .takeaway {
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    border-radius: 8px;
+    padding: 20px 22px;
+    margin-bottom: 28px;
+  }
+  .takeaway .eyebrow { margin-bottom: 8px; display: block; }
+  .takeaway p { font-size: 16px; color: var(--ink); max-width: 74ch; }
+  .takeaway p + p { margin-top: 10px; }
+
+  .findings { display: flex; flex-direction: column; gap: 22px; }
+  .finding { display: grid; grid-template-columns: minmax(190px, 230px) 1fr; gap: 20px; }
+  .finding h3 { font-size: 15px; color: var(--ink); }
+  .finding .sub { font-family: var(--sans); font-size: 12px; color: var(--ink-muted); margin-top: 4px; }
+  .finding p { color: var(--ink-secondary); max-width: 64ch; }
+  .finding p + p { margin-top: 8px; }
+  .finding b { color: var(--ink); font-weight: 600; }
+  .finding code { font-family: var(--mono); font-size: 0.92em; background: var(--surface-sunken); padding: 1px 5px; border-radius: 3px; }
+
+  .timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border-left: 2px solid var(--line-strong);
+    margin-left: 6px;
+  }
+  .timeline-step { position: relative; padding: 0 0 24px 24px; }
+  .timeline-step:last-child { padding-bottom: 0; }
+  .timeline-step::before {
+    content: "";
+    position: absolute;
+    left: -7px;
+    top: 3px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 2px solid var(--accent);
+  }
+  .timeline-step h3 { font-size: 14.5px; color: var(--ink); margin-bottom: 4px; }
+  .timeline-step .sub { font-family: var(--mono); font-size: 11.5px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  .timeline-step p { font-size: 13.5px; color: var(--ink-secondary); max-width: 78ch; }
+  .timeline-step code { font-family: var(--mono); font-size: 0.92em; background: var(--surface-sunken); padding: 1px 5px; border-radius: 3px; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  footer p { font-size: 12.5px; color: var(--ink-muted); max-width: 82ch; }
+  footer p b { color: var(--ink-secondary); }
+
+  @media (max-width: 720px) {
+    .finding { grid-template-columns: 1fr; gap: 6px; }
+  }
+</style>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<header>
+  <span class="eyebrow">edge-voice &middot; characterization</span>
+  <h1>Compound Stress Boundary</h1>
+  <p class="dek">Three successive sustained-load experiments, each designed to correct what the previous one got wrong. The headline result changed as the investigation went deeper: what first looked like a clean multi-dimensional capacity ceiling turned out to be a rare, content-triggered VAD/TSM interaction &mdash; not a predictable resource limit.</p>
+  <div class="badges">
+    <span class="badge">Raspberry Pi 5 &middot; 4 core</span>
+    <span class="badge">Moonshine tiny-ko, single-threaded ORT</span>
+    <span class="badge">single channel (rx)</span>
+    <span class="badge">reliability disabled</span>
+    <span class="badge">vad.min_silence_duration_ms=50</span>
+    <span class="badge">39 cells across 3 experiments</span>
+  </div>
+</header>
+
+<section>
+  <h2>Method</h2>
+  <div class="method-grid">
+    <div class="method-card">
+      <h3>Three variables, isolated</h3>
+      <p><b>Rate</b>: pitch-preserving TSM, capped at 2&times; &mdash; TSM's own audio quality degrades past that, which would confound "system can't keep up" with "audio became unintelligible."</p>
+      <p><b>Length</b>: real recordings, then (experiment 3) a single recording cropped to different durations &mdash; see below on why this changed.</p>
+      <p><b>Density</b>: silence-gap tiling, gaps always &ge;2.8&times; <code>vad.min_silence_duration_ms</code> to avoid re-triggering an already-fixed VAD-threshold bug from an earlier investigation.</p>
+    </div>
+    <div class="method-card">
+      <h3>Objective pass/fail</h3>
+      <p>A cell <b>fails</b> if segment capture rate drops below 95%, or <code>pre_stt_latency</code> exceeds 3&times; that segment's own decode time for 3+ consecutive segments (a plateau, not a one-off blip).</p>
+      <p>A third signal, <b>merge events</b> (added for experiments 2-3): a segment-start-to-segment-start gap &gt;1.3&times; the expected atomic cycle means VAD silently fused two bursts together &mdash; the earliest, most sensitive fingerprint of the failure, firing before capture rate visibly drops.</p>
+    </div>
+    <div class="method-card">
+      <h3>Early-stop (experiments 2-3)</h3>
+      <p>Once a cell shows a genuine plateau or a merge event, it runs 10 more seconds for confirmation, then moves on &mdash; instead of always burning its full 5-minute budget. One cell in experiment 3 stopped after 65s instead of 300s with an already-clear 25% capture rate.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>How the finding changed &mdash; three experiments</h2>
+  <p class="section-dek">Each step below was designed to test whether the previous step's conclusion actually held up. It didn't, twice.</p>
+  <div class="timeline">
+    <div class="timeline-step">
+      <div class="sub">Experiment 1 &middot; 11 cells &middot; escalate then combine</div>
+      <h3>A parametric corner appears: 97% density + 2&times; rate + 10s length</h3>
+      <p>Push density, rate, and length to their max one at a time (all pass cleanly), then combine pairs (all pass cleanly), then combine all three (35% capture, latency up 2 orders of magnitude). Looked like a clean three-way interaction effect &mdash; the natural conclusion was "this specific corner of (density, rate, length) space is where the system breaks."</p>
+    </div>
+    <div class="timeline-step">
+      <div class="sub">Experiment 2 &middot; 14 cells &middot; densify the grid around that corner</div>
+      <h3>The corner is real and sharp &mdash; but a new recording breaks it anyway, at milder settings</h3>
+      <p>10 new density&times;rate combinations at the same 10s length, filling in the gaps between the known PASS/FAIL points, all came back <b>completely clean</b> &mdash; confirming the failure is a genuinely sharp, isolated point, not a gradual surface. Then a new recording was added mid-investigation (<code>9s.wav</code>) at those SAME "safe" settings &mdash; and it failed at three different combinations, including ones two steps inside the boundary that was clean for the 10s recording. A control run ruled out "9s.wav is just a bad recording": at mild settings it was perfectly clean too. The failure needed both stress AND this specific content.</p>
+    </div>
+    <div class="timeline-step">
+      <div class="sub">Experiment 3 &middot; 14 cells &middot; one recording, cropped to 7 different lengths</div>
+      <h3>Decisive: the same recording fails non-monotonically as length varies</h3>
+      <p>To separate "duration" from "which recording" for good, one 17.152-second recording was truncated to 9 through 15 seconds (1s steps) &mdash; every length shares the identical leading audio, only the cutoff differs. At the worst combo (97%/2&times;), the result was <b>fail at 9s, clean at 10-14s, fail again at 15s</b>. A real capacity ceiling would fail once past some duration and stay failed. This didn't &mdash; it fails, recovers, and fails again, which only makes sense if the trigger is where the crop happens to land relative to this recording's own acoustic structure, not duration as a number.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Experiment 1 &mdash; escalation to the first boundary</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Cell</th>
+          <th class="num">Density</th>
+          <th class="num">Rate</th>
+          <th>Length</th>
+          <th class="num">Segments captured</th>
+          <th class="num">Full latency mean / max</th>
+          <th class="num">Pre-STT wait mean / max</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="section-break"><td colspan="8">Phase 1 &mdash; single axis escalated, other two held at baseline</td></tr>
+        <tr>
+          <td class="cell-label">baseline</td>
+          <td class="num tabular">85%</td>
+          <td class="num tabular">1.0&times;</td>
+          <td>6s</td>
+          <td class="num tabular">40 / 40</td>
+          <td class="num tabular">2867 / 2977 ms</td>
+          <td class="num tabular">24 / 49 ms</td>
+          <td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td>
+        </tr>
+        <tr>
+          <td class="cell-label">density &uarr;</td>
+          <td class="num tabular">95%</td>
+          <td class="num tabular">1.0&times;</td>
+          <td>6s</td>
+          <td class="num tabular">44 / 44</td>
+          <td class="num tabular">2870 / 2983 ms</td>
+          <td class="num tabular">23 / 33 ms</td>
+          <td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td>
+        </tr>
+        <tr>
+          <td class="cell-label">density &uarr;&uarr;</td>
+          <td class="num tabular">97%</td>
+          <td class="num tabular">1.0&times;</td>
+          <td>6s</td>
+          <td class="num tabular">44 / 44</td>
+          <td class="num tabular">2861 / 2939 ms</td>
+          <td class="num tabular">20 / 48 ms</td>
+          <td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td>
+        </tr>
+        <tr>
+          <td class="cell-label">rate &uarr;</td>
+          <td class="num tabular">85%</td>
+          <td class="num tabular">1.5&times;</td>
+          <td>6s</td>
+          <td class="num tabular">60 / 60</td>
+          <td class="num tabular">2741 / 2861 ms</td>
+          <td class="num tabular">19 / 33 ms</td>
+          <td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td>
+        </tr>
+        <tr>
+          <td class="cell-label">rate &uarr;&uarr;</td>
+          <td class="num tabular">85%</td>
+          <td class="num tabular">2.0&times;</td>
+          <td>6s</td>
+          <td class="num tabular">80 / 80</td>
+          <td class="num tabular">2571 / 2911 ms</td>
+          <td class="num tabular">22 / 49 ms</td>
+          <td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td>
+        </tr>
+        <tr>
+          <td class="cell-label">length &uarr;</td>
+          <td class="num tabular">85%</td>
+          <td class="num tabular">1.0&times;</td>
+          <td>7s</td>
+          <td class="num tabular">73 <span class="flag">(split&dagger;)</span></td>
+          <td class="num tabular">1476 / 2386 ms</td>
+          <td class="num tabular">22 / 31 ms</td>
+          <td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td>
+        </tr>
+        <tr>
+          <td class="cell-label">length &uarr;&uarr;</td>
+          <td class="num tabular">85%</td>
+          <td class="num tabular">1.0&times;</td>
+          <td>10s</td>
+          <td class="num tabular">51 <span class="flag">(split&dagger;)</span></td>
+          <td class="num tabular">2260 / 3426 ms</td>
+          <td class="num tabular">672 / 1582 ms</td>
+          <td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td>
+        </tr>
+        <tr class="section-break"><td colspan="8">Phase 2 &mdash; pairwise and triple combinations</td></tr>
+        <tr>
+          <td class="cell-label">rate+length</td>
+          <td class="num tabular">85%</td>
+          <td class="num tabular">2.0&times;</td>
+          <td>10s</td>
+          <td class="num tabular">50 / 50</td>
+          <td class="num tabular">3987 / 4757 ms</td>
+          <td class="num tabular">18 / 31 ms</td>
+          <td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td>
+        </tr>
+        <tr>
+          <td class="cell-label">density+rate</td>
+          <td class="num tabular">95%</td>
+          <td class="num tabular">2.0&times;</td>
+          <td>7s</td>
+          <td class="num tabular">80 / 80</td>
+          <td class="num tabular">2468 / 2636 ms</td>
+          <td class="num tabular">22 / 49 ms</td>
+          <td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td>
+        </tr>
+        <tr>
+          <td class="cell-label">density+length</td>
+          <td class="num tabular">97%</td>
+          <td class="num tabular">1.0&times;</td>
+          <td>10s</td>
+          <td class="num tabular">59 <span class="flag">(split&dagger;)</span></td>
+          <td class="num tabular">2257 / 3363 ms</td>
+          <td class="num tabular">723 / 1571 ms</td>
+          <td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td>
+        </tr>
+        <tr class="fail-row">
+          <td class="cell-label">ALL THREE &uarr;&uarr;&uarr;</td>
+          <td class="num tabular">97%</td>
+          <td class="num tabular">2.0&times;</td>
+          <td>10s</td>
+          <td class="num tabular">21 / 60 <span class="flag">(35%)</span></td>
+          <td class="num tabular">9401 / 17065 ms</td>
+          <td class="num tabular">5582 / 13536 ms</td>
+          <td><span class="status-chip" data-level="fail"><span class="dot"></span>FAIL</span></td>
+        </tr>
+      </tbody>
+      <caption>RPi5, single channel, 5 min sustained per cell, reliability disabled, <code>vad.min_silence_duration_ms=50</code>. &dagger; "split" = a benign, already-characterized artifact (the 7s/10s recordings occasionally split into a main body + short tail at a genuine internal pause) &mdash; captured-count exceeds the nominal expected count as a result; not a failure signature.</caption>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Experiment 2 &mdash; densifying the grid, then a content surprise</h2>
+  <p class="section-dek">10 new density&times;rate points at the same 10s length as the FAIL corner &mdash; all clean, confirming a sharp isolated boundary. Then <code>9s.wav</code> broke that story.</p>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Cell</th>
+          <th class="num">Density</th>
+          <th class="num">Rate</th>
+          <th>Length</th>
+          <th class="num">Capture rate</th>
+          <th class="num">Merge events</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="section-break"><td colspan="7">Rate sweep &mdash; density fixed 97%, length fixed 10s</td></tr>
+        <tr><td class="cell-label">fine_r125</td><td class="num tabular">97%</td><td class="num tabular">1.25&times;</td><td>10s</td><td class="num tabular">100%</td><td class="num tabular">0</td><td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td></tr>
+        <tr><td class="cell-label">fine_r150</td><td class="num tabular">97%</td><td class="num tabular">1.50&times;</td><td>10s</td><td class="num tabular">100%</td><td class="num tabular">0</td><td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td></tr>
+        <tr><td class="cell-label">fine_r175</td><td class="num tabular">97%</td><td class="num tabular">1.75&times;</td><td>10s</td><td class="num tabular">100%</td><td class="num tabular">0</td><td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td></tr>
+        <tr class="section-break"><td colspan="7">Density sweep &mdash; rate fixed 2.0&times;, length fixed 10s</td></tr>
+        <tr><td class="cell-label">fine_d90</td><td class="num tabular">90%</td><td class="num tabular">2.0&times;</td><td>10s</td><td class="num tabular">100%</td><td class="num tabular">0</td><td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td></tr>
+        <tr><td class="cell-label">fine_d93</td><td class="num tabular">93%</td><td class="num tabular">2.0&times;</td><td>10s</td><td class="num tabular">100%</td><td class="num tabular">0</td><td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td></tr>
+        <tr><td class="cell-label">fine_d95</td><td class="num tabular">95%</td><td class="num tabular">2.0&times;</td><td>10s</td><td class="num tabular">100%</td><td class="num tabular">0</td><td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td></tr>
+        <tr><td class="cell-label">fine_d96</td><td class="num tabular">96%</td><td class="num tabular">2.0&times;</td><td>10s</td><td class="num tabular">100%</td><td class="num tabular">0</td><td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td></tr>
+        <tr class="section-break"><td colspan="7">Interior / off-diagonal check</td></tr>
+        <tr><td class="cell-label">fine_int_d95_r150</td><td class="num tabular">95%</td><td class="num tabular">1.50&times;</td><td>10s</td><td class="num tabular">100%</td><td class="num tabular">0</td><td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td></tr>
+        <tr><td class="cell-label">fine_int_d95_r175</td><td class="num tabular">95%</td><td class="num tabular">1.75&times;</td><td>10s</td><td class="num tabular">100%</td><td class="num tabular">0</td><td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td></tr>
+        <tr><td class="cell-label">fine_int_d93_r175</td><td class="num tabular">93%</td><td class="num tabular">1.75&times;</td><td>10s</td><td class="num tabular">100%</td><td class="num tabular">0</td><td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td></tr>
+        <tr class="section-break"><td colspan="7">New recording added &mdash; 9s.wav, at settings clean for 10s.wav</td></tr>
+        <tr class="fail-row"><td class="cell-label">fine_len9_max</td><td class="num tabular">97%</td><td class="num tabular">2.0&times;</td><td>9s</td><td class="num tabular">76.7%</td><td class="num tabular">2</td><td><span class="status-chip" data-level="fail"><span class="dot"></span>FAIL</span></td></tr>
+        <tr class="fail-row"><td class="cell-label">fine_len9_r175</td><td class="num tabular">97%</td><td class="num tabular">1.75&times;</td><td>9s</td><td class="num tabular">89.1%</td><td class="num tabular">6</td><td><span class="status-chip" data-level="fail"><span class="dot"></span>FAIL</span></td></tr>
+        <tr class="fail-row"><td class="cell-label">fine_len9_d95</td><td class="num tabular">95%</td><td class="num tabular">2.0&times;</td><td>9s</td><td class="num tabular">83.3%</td><td class="num tabular">8</td><td><span class="status-chip" data-level="fail"><span class="dot"></span>FAIL</span></td></tr>
+        <tr><td class="cell-label">fine_len9_control</td><td class="num tabular">85%</td><td class="num tabular">1.0&times;</td><td>9s</td><td class="num tabular">100%</td><td class="num tabular">0</td><td><span class="status-chip" data-level="pass"><span class="dot"></span>PASS</span></td></tr>
+      </tbody>
+      <caption>The three <code>9s.wav</code> failures decode faster per second of audio than the clean 10s.wav cells right above them (0.62-0.67&times; realtime vs 0.54-0.70&times;) and show an oscillating, recovering latency pattern rather than a sustained runaway climb &mdash; unlike the original FAIL corner, this is not raw capacity exhaustion. The control row (mild settings, same recording) rules out "9s.wav is just VAD-hostile": clean at 100% capture, 0 merges.</caption>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Experiment 3 &mdash; one recording, seven lengths</h2>
+  <p class="section-dek"><code>testsegments/17s.wav</code> (17.152s, confirmed via an offline Silero VAD pass to be one continuous utterance with no internal pause the model itself detects) truncated to 9-15 seconds, 1s steps &mdash; every length is a strict prefix of every longer one, so content is held constant and only duration varies.</p>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Length</th>
+          <th class="num">97% density / 2.0&times; rate</th>
+          <th class="num">95% density / 1.75&times; rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="fail-row">
+          <td class="cell-label tabular">9s</td>
+          <td class="num tabular">FAIL &mdash; 25% capture <span class="flag">(early-stop, 65s)</span></td>
+          <td class="num tabular">PASS &mdash; 100% capture</td>
+        </tr>
+        <tr>
+          <td class="cell-label tabular">10s</td>
+          <td class="num tabular">PASS &mdash; 100% capture</td>
+          <td class="num tabular">PASS &mdash; 100% capture</td>
+        </tr>
+        <tr>
+          <td class="cell-label tabular">11s</td>
+          <td class="num tabular">PASS &mdash; 100%+ capture</td>
+          <td class="num tabular">PASS &mdash; 100% capture</td>
+        </tr>
+        <tr>
+          <td class="cell-label tabular">12s</td>
+          <td class="num tabular">PASS &mdash; 100% capture</td>
+          <td class="num tabular">PASS &mdash; 100% capture</td>
+        </tr>
+        <tr>
+          <td class="cell-label tabular">13s</td>
+          <td class="num tabular">PASS &mdash; 100% capture</td>
+          <td class="num tabular">PASS &mdash; 100% capture</td>
+        </tr>
+        <tr>
+          <td class="cell-label tabular">14s</td>
+          <td class="num tabular">PASS &mdash; 100% capture <span class="flag">(latency oscillates, never plateaus)</span></td>
+          <td class="num tabular">PASS &mdash; 100% capture</td>
+        </tr>
+        <tr class="fail-row">
+          <td class="cell-label tabular">15s</td>
+          <td class="num tabular">FAIL &mdash; 75% capture <span class="flag">(early-stop, 65s, merge at t=0)</span></td>
+          <td class="num tabular">PASS &mdash; 100% capture</td>
+        </tr>
+      </tbody>
+      <caption>14 cells, 2 early-stopped (saved ~235s each vs. the full 300s budget once a plateau/merge was confirmed). The 95%/1.75&times; combo is clean at every length. The 97%/2.0&times; combo is non-monotonic: fail &rarr; pass &times;5 &rarr; fail. A genuine capacity ceiling would fail once past some duration and stay failed &mdash; this pattern is inconsistent with duration being the causal variable at all.</caption>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Interpretation</h2>
+
+  <div class="takeaway">
+    <span class="eyebrow">The revised finding</span>
+    <p><b>There is no clean capacity ceiling in (density, rate, length) space.</b> Extreme stress &mdash; roughly &ge;95% density combined with &ge;1.75&times; rate &mdash; is a <i>necessary</i> condition: nothing failed at mild settings anywhere across all 39 cells run in this investigation. But it is not <i>sufficient</i>. Experiment 3 proves this directly: the identical recording, cropped to different lengths at the identical worst-case density/rate, fails at 9s, passes cleanly at 10-14s, and fails again at 15s. No smooth function of duration produces that shape.</p>
+    <p><b>The real trigger is content-specific.</b> Whether a given cell fails depends on where a segment's boundary happens to land relative to that audio's own trailing acoustic structure, once TSM-stretched and packed at high density. This is a rarer and more specific failure mode than "the pipeline runs out of capacity" &mdash; it's a VAD/TSM correctness interaction that only a minority of extreme-stress, specific-content combinations happen to trigger.</p>
+  </div>
+
+  <div class="findings">
+    <div class="finding">
+      <div>
+        <h3>Two visibly different failure signatures</h3>
+        <div class="sub">a genuine backlog vs. a content-triggered misdetection</div>
+      </div>
+      <div>
+        <p>The original experiment 1 FAIL corner (97%/2&times;/10s) shows sustained, ever-worsening latency (up to 17s) and decode-time-per-audio-second at or above 1.0&times; realtime &mdash; a genuine, compounding backlog. The experiment 2/3 failures (9s.wav, and the 9s/15s single-source crops) show <i>lower</i> decode-time-per-second than the clean cells right next to them, an oscillating (not climbing) latency pattern, and near-immediate onset (as early as t=0). These are not the same mechanism: one is capacity exhaustion, the other is VAD misjudging a specific acoustic boundary, independent of whether the system could otherwise keep up.</p>
+      </div>
+    </div>
+    <div class="finding">
+      <div>
+        <h3>Why a single recording per length was the right fix</h3>
+        <div class="sub">isolating the one variable that mattered</div>
+      </div>
+      <div>
+        <p>Experiments 1 and 2 each used a different real recording per length value, which meant "length" and "which sentence" were always confounded &mdash; a limitation stated explicitly at the time, not discovered later by accident. Experiment 2's <code>9s.wav</code> result made that confound impossible to ignore: identical density/rate, different content, opposite outcome. Experiment 3's crop-from-one-source design was built specifically to settle it, and did &mdash; content, not duration, is the dominant variable once density and rate are already extreme.</p>
+      </div>
+    </div>
+    <div class="finding">
+      <div>
+        <h3>The "split" artifact is real but not a failure</h3>
+        <div class="sub">7s/10s recordings occasionally split into two segments</div>
+      </div>
+      <div>
+        <p>Every experiment-1 cell using the 7s or 10s recording shows a captured-segment count noticeably above the nominal expected count (e.g. 51 vs. 27 for the 10s-length cell). This is a benign, already-characterized pattern: a long sentence's own internal pause occasionally causes VAD to split it into a ~9-10s main body plus a ~1.2s tail, which briefly queues behind the main segment's decode. It's bounded, it recurs identically, and it doesn't compound &mdash; a quirk of that recording's content, not a system limit.</p>
+      </div>
+    </div>
+    <div class="finding">
+      <div>
+        <h3>Why capture rate and merge events, not queue depth or CPU</h3>
+        <div class="sub">calibrated against known failures, not assumed</div>
+      </div>
+      <div>
+        <p>Queue depth and CPU% were both checked against the original confirmed failure before experiment 1 was designed, and both missed it: queue depth stayed at 0/0/0 throughout (it's sampled only when a transcript arrives, by which point the backlog has drained), and CPU looked statistically identical to a healthy run. Merge-event detection (added for experiments 2-3) turned out to be the most sensitive signal of all &mdash; it fires on the exact mechanism (a VAD-fused segment) rather than a downstream symptom, and fires early enough to drive the early-stop optimization that made a 39-cell investigation practical on a single Pi.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p><b>A design flaw was found and fixed mid-experiment-1.</b> The original plan controlled segment length synthetically &mdash; repeating a short clip back-to-back with zero gap so VAD would perceive one continuous longer segment. This failed empirically: VAD split the zero-gap splice back into separate segments every time, and at 1.5&times; rate it produced 100% garbage/repetitive decodes. The design was changed to real recordings at each target length, which reintroduces the content confound that experiments 2 and 3 ultimately had to resolve.</p>
+  <p><b>Reliability was disabled throughout</b> (<code>idle_flush_s</code>, <code>segment_limits_enabled</code>, the in-process supervisor all off), to find the raw capacity/correctness boundary of the decode/VAD pipeline itself. A production deployment runs with these enabled, which gives real additional margin beyond anything reported here &mdash; this is the floor, not the deployed behavior.</p>
+  <p><b>Early-stop mechanics.</b> A cell stops ~10s after the first sustained latency plateau (3+ consecutive segments with pre-STT wait &gt;3&times; that segment's own decode time) or merge event (a segment-start gap &gt;1.3&times; the expected atomic cycle), instead of always running the full 5-minute budget. Actual overshoot beyond that 10s can reach one more full loop of the WAV file, since the feed loop only checks between loops, not mid-playback.</p>
+  <p><b>Latency definition.</b> End-to-end = time from an utterance's audio finishing ingest to its final transcript being published (VAD &rarr; STT &rarr; publish), the same definition used throughout this project's benchmarks.</p>
+</footer>

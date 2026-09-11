@@ -1,0 +1,218 @@
+2026-09-11 12:07:55,063 INFO    bench_pipeline_load: Restricting orchestrator to channel(s) ['rx'] -- not building STT worker(s) for ['tx'], so this is a true 1-process isolation test, not 2 channels with ['tx'] idle
+2026-09-11 12:07:55,063 WARNING bench_pipeline_load: RELIABILITY DISABLED: segment_limits_enabled=False, idle_flush_s=0, reliability.enabled=False -- a segment or worker can now hang indefinitely, bounded only by --duration-s + --grace-s
+2026-09-11 12:07:55,063 INFO    bench_pipeline_load: Scaling max_tokens_per_second 18.0 -> 36.0 (multiplier=2x)
+2026-09-11 12:07:55,063 WARNING bench_pipeline_load: Overriding vad.min_silence_duration_ms 100 -> 50 -- diagnostic only, tests whether Silero's end-of-speech detection is unreliable at this file's own gap length specifically, not a recommended production value
+2026-09-11 12:07:55,177 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-09-11 12:07:55,178 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:1883)
+2026-09-11 12:07:55,178 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-09-11 12:07:55,185 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-09-11 12:07:55,186 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-09-11 12:07:56,652 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+[0;93m2026-09-11 12:07:56.668035689 [W:onnxruntime:MoonshineModel, device_discovery.cc:164 DiscoverDevicesForPlatform] GPU device discovery failed: device_discovery.cc:89 ReadFileContents Failed to open file: "/sys/class/drm/card1/device/vendor"[m
+2026-09-11 12:07:56,997 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-09-11 12:07:56,997 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-09-11 12:07:56,997 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-ab8c4363.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-09-11 12:07:56,997 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-09-11 12:07:57,498 INFO    bench_pipeline_load: Replaying ['characterization/testaudio/boundary_fine_d93.wav'] on channels ['rx'] in a loop for 300s at 1.0x speed (Ctrl-C to stop early)
+2026-09-11 12:07:57,550 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_fine_d93.wav'] 519432 samples → 1624 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 12:08:06,998 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=None mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={}
+2026-09-11 12:08:07,219 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096077.551-1 [1789096077.55-1789096082.70] latency=4.487s '이 사망사례들은 조금 전에 지역보고 천천히 안 배리고 또 이분들이 많이 백신 동원 특정했었거든요. 특정했었거든요. 특정했었거든요. 특정했었거든요. 또 재학과 국민들이 알죠.'
+2026-09-11 12:08:11,591 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096082.895-2 [1789096082.90-1789096088.14] latency=3.419s '어~ 이 삼한 사례들을 쭉 보면은 지역도 좀 천천히 안 배우고 또 이분들이 말씀하신 대로 특정해졌거든 특정해졌거든요 또 제가 아까 얘기하셔'
+2026-09-11 12:08:16,757 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096088.336-3 [1789096088.34-1789096093.52] latency=3.224s '이 사망 사례들을 보면 지역도 천천히 안 배우고 이분들이 많이 백신 동안 특정했었거든요. 특정했다니까. 또 제가 아까 얘기를 하셨죠.'
+2026-09-11 12:08:16,998 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.224 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.224}
+2026-09-11 12:08:22,880 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096093.743-4 [1789096093.74-1789096098.93] latency=3.929s '이 사망 사례들은 조금 여러 지역도 천천히 남아있고 또 이분들이 많이 백신 동안 특정해졌거든요. 특정해졌거든요. 특정해졌거든요. 너 제가 아까 고생이 나왔어요.'
+2026-09-11 12:08:26,998 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.929 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.929}
+2026-09-11 12:08:27,799 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096099.151-5 [1789096099.15-1789096104.34] latency=3.447s '이 사망 사례들을 보면 지역도 천천히 안 배우고 또 이분들이 마지막 백신 동안 특정해졌거나 특정해졌거나 특정해졌거나 또 제가 아까 고민을 하셨죠.'
+2026-09-11 12:08:31,012 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1624 frames in 33.46s (1.0x real-time)
+2026-09-11 12:08:31,014 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_fine_d93.wav'] 519432 samples → 1624 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 12:08:33,364 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096104.559-6 [1789096104.56-1789096109.78] latency=3.572s '이 사망 사례들을 쭉 보면은 지역도 좀 천천히 안 배리고 또 이분들이 마지막 백신 동안 특정해졌거나 특정해졌거나 특정해졌거나 또 재확한 의미가 있어.'
+2026-09-11 12:08:36,999 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.572 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.572}
+2026-09-11 12:08:41,007 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096109.967-7 [1789096109.97-1789096116.20] latency=4.791s '이 사망 사례들은 쭉 보면은 지역도 좀 천천히 안 배우고 또 이분들이 많이 백신 동원 특정했었거든요. 특정했었거든요. 특정했었거든요. 특정했었거든요. 그래서 제가 아까 고민을 하셨죠.'
+2026-09-11 12:08:45,066 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096116.360-8 [1789096116.36-1789096121.61] latency=3.429s '어~ 이 삼한 사례들을 쭉 보면은 지역도 좀 천천히 안 배우고 또 이분들이 말씀하신 대로 특정해졌거든 특정해졌거든요 또 제가 아까 얘기하셔'
+2026-09-11 12:08:46,999 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.429 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.429}
+2026-09-11 12:08:50,174 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096121.800-9 [1789096121.80-1789096126.98] latency=3.177s '이 사망 사례들을 보면 지역도 천천히 안 배우고 이분들이 많이 백신 동안 특정했었거든요. 특정했다니까. 또 제가 아까 얘기를 하셨죠.'
+2026-09-11 12:08:56,357 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096127.208-10 [1789096127.21-1789096132.39] latency=3.941s '이 사망 사례들은 조금 여러 지역도 천천히 남아있고 또 이분들이 많이 백신 동안 특정해졌거든요. 특정해졌거든요. 특정해졌거든요. 너 제가 아까 고생이 나왔어요.'
+2026-09-11 12:08:56,999 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.941 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.941}
+2026-09-11 12:09:01,237 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096132.616-11 [1789096132.62-1789096137.80] latency=3.420s '이 사망 사례들을 보면 지역도 천천히 안 배우고 또 이분들이 마지막 백신 동안 특정해졌거나 특정해졌거나 특정해졌거나 또 제가 아까 고민을 하셨죠.'
+2026-09-11 12:09:04,476 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1624 frames in 33.46s (1.0x real-time)
+2026-09-11 12:09:04,528 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_fine_d93.wav'] 519432 samples → 1624 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 12:09:06,788 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096138.024-12 [1789096138.02-1789096143.24] latency=3.531s '이 사망 사례들을 쭉 보면은 지역도 좀 천천히 안 배리고 또 이분들이 마지막 백신 동안 특정해졌거나 특정해졌거나 특정해졌거나 또 재확한 의미가 있어.'
+2026-09-11 12:09:06,999 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.531 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.531}
+2026-09-11 12:09:14,507 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096143.432-13 [1789096143.43-1789096149.71] latency=4.777s '이 사망 사례들은 쭉 보면은 지역도 좀 천천히 안 배우고 또 이분들이 많이 백신 동원 특정했었거든요. 특정했었거든요. 특정했었거든요. 특정했었거든요. 그래서 제가 아까 고민을 하셨죠.'
+2026-09-11 12:09:17,000 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.777 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.777}
+2026-09-11 12:09:18,576 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096149.874-14 [1789096149.87-1789096155.12] latency=3.425s '어~ 이 삼한 사례들을 쭉 보면은 지역도 좀 천천히 안 배우고 또 이분들이 말씀하신 대로 특정해졌거든 특정해졌거든요 또 제가 아까 얘기하셔'
+2026-09-11 12:09:23,665 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096155.314-15 [1789096155.31-1789096160.50] latency=3.154s '이 사망 사례들을 보면 지역도 천천히 안 배우고 이분들이 많이 백신 동안 특정했었거든요. 특정했다니까. 또 제가 아까 얘기를 하셨죠.'
+2026-09-11 12:09:27,000 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.154 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.154}
+2026-09-11 12:09:29,852 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096160.722-16 [1789096160.72-1789096165.91] latency=3.922s '이 사망 사례들은 조금 여러 지역도 천천히 남아있고 또 이분들이 많이 백신 동안 특정해졌거든요. 특정해졌거든요. 특정해졌거든요. 너 제가 아까 고생이 나왔어요.'
+2026-09-11 12:09:34,720 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096166.130-17 [1789096166.13-1789096171.31] latency=3.389s '이 사망 사례들을 보면 지역도 천천히 안 배우고 또 이분들이 마지막 백신 동안 특정해졌거나 특정해졌거나 특정해졌거나 또 제가 아까 고민을 하셨죠.'
+2026-09-11 12:09:37,001 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.389 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.389}
+2026-09-11 12:09:37,990 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1624 frames in 33.46s (1.0x real-time)
+2026-09-11 12:09:38,043 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_fine_d93.wav'] 519432 samples → 1624 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 12:09:40,311 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096171.538-18 [1789096171.54-1789096176.75] latency=3.541s '이 사망 사례들을 쭉 보면은 지역도 좀 천천히 안 배리고 또 이분들이 마지막 백신 동안 특정해졌거나 특정해졌거나 특정해졌거나 또 재확한 의미가 있어.'
+2026-09-11 12:09:47,001 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.541 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.541}
+2026-09-11 12:09:48,007 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096176.946-19 [1789096176.95-1789096183.23] latency=4.762s '이 사망 사례들은 쭉 보면은 지역도 좀 천천히 안 배우고 또 이분들이 많이 백신 동원 특정했었거든요. 특정했었거든요. 특정했었거든요. 특정했었거든요. 그래서 제가 아까 고민을 하셨죠.'
+2026-09-11 12:09:52,072 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096183.394-20 [1789096183.39-1789096188.64] latency=3.407s '어~ 이 삼한 사례들을 쭉 보면은 지역도 좀 천천히 안 배우고 또 이분들이 말씀하신 대로 특정해졌거든 특정해졌거든요 또 제가 아까 얘기하셔'
+2026-09-11 12:09:57,002 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.407 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.407}
+2026-09-11 12:09:57,205 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096188.829-21 [1789096188.83-1789096194.01] latency=3.179s '이 사망 사례들을 보면 지역도 천천히 안 배우고 이분들이 많이 백신 동안 특정했었거든요. 특정했다니까. 또 제가 아까 얘기를 하셨죠.'
+2026-09-11 12:10:03,386 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096194.237-22 [1789096194.24-1789096199.42] latency=3.941s '이 사망 사례들은 조금 여러 지역도 천천히 남아있고 또 이분들이 많이 백신 동안 특정해졌거든요. 특정해졌거든요. 특정해졌거든요. 너 제가 아까 고생이 나왔어요.'
+2026-09-11 12:10:07,002 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.941 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.941}
+2026-09-11 12:10:08,244 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096199.646-23 [1789096199.65-1789096204.83] latency=3.397s '이 사망 사례들을 보면 지역도 천천히 안 배우고 또 이분들이 마지막 백신 동안 특정해졌거나 특정해졌거나 특정해졌거나 또 제가 아까 고민을 하셨죠.'
+2026-09-11 12:10:11,505 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1624 frames in 33.46s (1.0x real-time)
+2026-09-11 12:10:11,508 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_fine_d93.wav'] 519432 samples → 1624 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 12:10:13,800 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096205.053-24 [1789096205.05-1789096210.27] latency=3.515s '이 사망 사례들을 쭉 보면은 지역도 좀 천천히 안 배리고 또 이분들이 마지막 백신 동안 특정해졌거나 특정해졌거나 특정해졌거나 또 재확한 의미가 있어.'
+2026-09-11 12:10:17,002 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.515 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.515}
+2026-09-11 12:10:21,470 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096210.461-25 [1789096210.46-1789096216.69] latency=4.760s '이 사망 사례들은 쭉 보면은 지역도 좀 천천히 안 배우고 또 이분들이 많이 백신 동원 특정했었거든요. 특정했었거든요. 특정했었거든요. 특정했었거든요. 그래서 제가 아까 고민을 하셨죠.'
+2026-09-11 12:10:25,541 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096216.853-26 [1789096216.85-1789096222.10] latency=3.411s '어~ 이 삼한 사례들을 쭉 보면은 지역도 좀 천천히 안 배우고 또 이분들이 말씀하신 대로 특정해졌거든 특정해졌거든요 또 제가 아까 얘기하셔'
+2026-09-11 12:10:27,003 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.411 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.411}
+2026-09-11 12:10:30,678 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096222.293-27 [1789096222.29-1789096227.48] latency=3.189s '이 사망 사례들을 보면 지역도 천천히 안 배우고 이분들이 많이 백신 동안 특정했었거든요. 특정했다니까. 또 제가 아까 얘기를 하셨죠.'
+2026-09-11 12:10:36,819 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096227.701-28 [1789096227.70-1789096232.88] latency=3.910s '이 사망 사례들은 조금 여러 지역도 천천히 남아있고 또 이분들이 많이 백신 동안 특정해졌거든요. 특정해졌거든요. 특정해졌거든요. 너 제가 아까 고생이 나왔어요.'
+2026-09-11 12:10:37,003 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.910 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.91}
+2026-09-11 12:10:41,704 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096233.109-29 [1789096233.11-1789096238.29] latency=3.394s '이 사망 사례들을 보면 지역도 천천히 안 배우고 또 이분들이 마지막 백신 동안 특정해졌거나 특정해졌거나 특정해졌거나 또 제가 아까 고민을 하셨죠.'
+2026-09-11 12:10:44,969 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1624 frames in 33.46s (1.0x real-time)
+2026-09-11 12:10:45,022 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_fine_d93.wav'] 519432 samples → 1624 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 12:10:47,003 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.394 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.394}
+2026-09-11 12:10:47,264 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096238.518-30 [1789096238.52-1789096243.73] latency=3.514s '이 사망 사례들을 쭉 보면은 지역도 좀 천천히 안 배리고 또 이분들이 마지막 백신 동안 특정해졌거나 특정해졌거나 특정해졌거나 또 재확한 의미가 있어.'
+2026-09-11 12:10:54,969 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096243.925-31 [1789096243.92-1789096250.21] latency=4.745s '이 사망 사례들은 쭉 보면은 지역도 좀 천천히 안 배우고 또 이분들이 많이 백신 동원 특정했었거든요. 특정했었거든요. 특정했었거든요. 특정했었거든요. 그래서 제가 아까 고민을 하셨죠.'
+2026-09-11 12:10:57,004 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.745 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.745}
+2026-09-11 12:10:59,073 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096250.367-32 [1789096250.37-1789096255.62] latency=3.406s '어~ 이 삼한 사례들을 쭉 보면은 지역도 좀 천천히 안 배우고 또 이분들이 말씀하신 대로 특정해졌거든 특정해졌거든요 또 제가 아까 얘기하셔'
+2026-09-11 12:11:04,167 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096255.811-33 [1789096255.81-1789096260.99] latency=3.140s '이 사망 사례들을 보면 지역도 천천히 안 배우고 이분들이 많이 백신 동안 특정했었거든요. 특정했다니까. 또 제가 아까 얘기를 하셨죠.'
+2026-09-11 12:11:07,004 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.140 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.14}
+2026-09-11 12:11:10,334 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096261.218-34 [1789096261.22-1789096266.40] latency=3.911s '이 사망 사례들은 조금 여러 지역도 천천히 남아있고 또 이분들이 많이 백신 동안 특정해졌거든요. 특정해졌거든요. 특정해졌거든요. 너 제가 아까 고생이 나왔어요.'
+2026-09-11 12:11:15,216 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096266.626-35 [1789096266.63-1789096271.81] latency=3.388s '이 사망 사례들을 보면 지역도 천천히 안 배우고 또 이분들이 마지막 백신 동안 특정해졌거나 특정해졌거나 특정해졌거나 또 제가 아까 고민을 하셨죠.'
+2026-09-11 12:11:17,004 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.388 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.388}
+2026-09-11 12:11:18,484 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1624 frames in 33.46s (1.0x real-time)
+2026-09-11 12:11:18,487 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_fine_d93.wav'] 519432 samples → 1624 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 12:11:20,776 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096272.039-36 [1789096272.04-1789096277.25] latency=3.508s '이 사망 사례들을 쭉 보면은 지역도 좀 천천히 안 배리고 또 이분들이 마지막 백신 동안 특정해졌거나 특정해졌거나 특정해졌거나 또 재확한 의미가 있어.'
+2026-09-11 12:11:27,005 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.508 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.508}
+2026-09-11 12:11:28,460 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096277.442-37 [1789096277.44-1789096283.67] latency=4.772s '이 사망 사례들은 쭉 보면은 지역도 좀 천천히 안 배우고 또 이분들이 많이 백신 동원 특정했었거든요. 특정했었거든요. 특정했었거든요. 특정했었거든요. 그래서 제가 아까 고민을 하셨죠.'
+2026-09-11 12:11:32,512 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096283.832-38 [1789096283.83-1789096289.08] latency=3.403s '어~ 이 삼한 사례들을 쭉 보면은 지역도 좀 천천히 안 배우고 또 이분들이 말씀하신 대로 특정해졌거든 특정해졌거든요 또 제가 아까 얘기하셔'
+2026-09-11 12:11:37,005 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.403 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.403}
+2026-09-11 12:11:37,610 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096289.272-39 [1789096289.27-1789096294.46] latency=3.141s '이 사망 사례들을 보면 지역도 천천히 안 배우고 이분들이 많이 백신 동안 특정했었거든요. 특정했다니까. 또 제가 아까 얘기를 하셨죠.'
+2026-09-11 12:11:43,786 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096294.680-40 [1789096294.68-1789096299.86] latency=3.898s '이 사망 사례들은 조금 여러 지역도 천천히 남아있고 또 이분들이 많이 백신 동안 특정해졌거든요. 특정해졌거든요. 특정해졌거든요. 너 제가 아까 고생이 나왔어요.'
+2026-09-11 12:11:47,005 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.898 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.898}
+2026-09-11 12:11:48,680 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096300.088-41 [1789096300.09-1789096305.27] latency=3.392s '이 사망 사례들을 보면 지역도 천천히 안 배우고 또 이분들이 마지막 백신 동안 특정해졌거나 특정해졌거나 특정해졌거나 또 제가 아까 고민을 하셨죠.'
+2026-09-11 12:11:51,949 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1624 frames in 33.46s (1.0x real-time)
+2026-09-11 12:11:52,001 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_fine_d93.wav'] 519432 samples → 1624 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 12:11:54,224 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096305.496-42 [1789096305.50-1789096310.71] latency=3.496s '이 사망 사례들을 쭉 보면은 지역도 좀 천천히 안 배리고 또 이분들이 마지막 백신 동안 특정해졌거나 특정해졌거나 특정해졌거나 또 재확한 의미가 있어.'
+2026-09-11 12:11:57,006 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.496 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.496}
+2026-09-11 12:12:01,900 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096310.906-43 [1789096310.91-1789096317.19] latency=4.692s '이 사망 사례들은 쭉 보면은 지역도 좀 천천히 안 배우고 또 이분들이 많이 백신 동원 특정했었거든요. 특정했었거든요. 특정했었거든요. 특정했었거든요. 그래서 제가 아까 고민을 하셨죠.'
+2026-09-11 12:12:06,041 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096317.350-44 [1789096317.35-1789096322.60] latency=3.394s '어~ 이 삼한 사례들을 쭉 보면은 지역도 좀 천천히 안 배우고 또 이분들이 말씀하신 대로 특정해졌거든 특정해졌거든요 또 제가 아까 얘기하셔'
+2026-09-11 12:12:07,006 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.394 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.394}
+2026-09-11 12:12:11,139 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096322.791-45 [1789096322.79-1789096327.97] latency=3.132s '이 사망 사례들을 보면 지역도 천천히 안 배우고 이분들이 많이 백신 동안 특정했었거든요. 특정했다니까. 또 제가 아까 얘기를 하셨죠.'
+2026-09-11 12:12:17,007 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.132 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.132}
+2026-09-11 12:12:17,320 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096328.198-46 [1789096328.20-1789096333.38] latency=3.917s '이 사망 사례들은 조금 여러 지역도 천천히 남아있고 또 이분들이 많이 백신 동안 특정해졌거든요. 특정해졌거든요. 특정해졌거든요. 너 제가 아까 고생이 나왔어요.'
+2026-09-11 12:12:22,210 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096333.607-47 [1789096333.61-1789096338.79] latency=3.406s '이 사망 사례들을 보면 지역도 천천히 안 배우고 또 이분들이 마지막 백신 동안 특정해졌거나 특정해졌거나 특정해졌거나 또 제가 아까 고민을 하셨죠.'
+2026-09-11 12:12:25,463 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1624 frames in 33.46s (1.0x real-time)
+2026-09-11 12:12:25,516 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_fine_d93.wav'] 519432 samples → 1624 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 12:12:27,007 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.406 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.406}
+2026-09-11 12:12:27,764 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096339.011-48 [1789096339.01-1789096344.23] latency=3.520s '이 사망 사례들을 쭉 보면은 지역도 좀 천천히 안 배리고 또 이분들이 마지막 백신 동안 특정해졌거나 특정해졌거나 특정해졌거나 또 재확한 의미가 있어.'
+2026-09-11 12:12:35,440 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096344.419-49 [1789096344.42-1789096350.70] latency=4.723s '이 사망 사례들은 쭉 보면은 지역도 좀 천천히 안 배우고 또 이분들이 많이 백신 동원 특정했었거든요. 특정했었거든요. 특정했었거든요. 특정했었거든요. 그래서 제가 아까 고민을 하셨죠.'
+2026-09-11 12:12:37,007 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.723 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.723}
+2026-09-11 12:12:39,558 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096350.861-50 [1789096350.86-1789096356.11] latency=3.421s '어~ 이 삼한 사례들을 쭉 보면은 지역도 좀 천천히 안 배우고 또 이분들이 말씀하신 대로 특정해졌거든 특정해졌거든요 또 제가 아까 얘기하셔'
+2026-09-11 12:12:44,637 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096356.301-51 [1789096356.30-1789096361.48] latency=3.139s '이 사망 사례들을 보면 지역도 천천히 안 배우고 이분들이 많이 백신 동안 특정했었거든요. 특정했다니까. 또 제가 아까 얘기를 하셨죠.'
+2026-09-11 12:12:47,008 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.139 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.139}
+2026-09-11 12:12:50,848 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096361.709-52 [1789096361.71-1789096366.89] latency=3.931s '이 사망 사례들은 조금 여러 지역도 천천히 남아있고 또 이분들이 많이 백신 동안 특정해졌거든요. 특정해졌거든요. 특정해졌거든요. 너 제가 아까 고생이 나왔어요.'
+2026-09-11 12:12:55,699 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096367.117-53 [1789096367.12-1789096372.30] latency=3.381s '이 사망 사례들을 보면 지역도 천천히 안 배우고 또 이분들이 마지막 백신 동안 특정해졌거나 특정해졌거나 특정해졌거나 또 제가 아까 고민을 하셨죠.'
+2026-09-11 12:12:57,008 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.381 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.381}
+2026-09-11 12:12:58,977 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1624 frames in 33.46s (1.0x real-time)
+2026-09-11 12:12:58,978 INFO    bench_pipeline_load: 9 loop(s) done in 301s, waiting 5s for trailing decodes
+2026-09-11 12:13:01,226 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789096372.525-54 [1789096372.53-1789096377.76] latency=3.447s '이 사망 사례들을 쭉 보면은 지역도 좀 천천히 안 배리고 또 이분들이 마지막 백신 동안 특정해졌거나 특정해졌거나 특정해졌거나 또 재확한 의미가 있어.'
+2026-09-11 12:13:04,226 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-09-11 12:13:04,980 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-09-11 12:13:04,981 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-09-11 12:13:05,180 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-09-11 12:13:05,631 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+
+================================================================================================
+PER-SEGMENT -- 9 loop(s) x ['characterization/testaudio/boundary_fine_d93.wav'] on ['rx'], 54 final transcripts
+================================================================================================
+elapsed_s  ch  dur_s  cap  chars  full_ms   stt_ms   pre_ms   q(i/r/s)
+     12.0  rx   5.15          96   4516.4   4487.1     29.3   0/0/0
+     16.4  rx   5.25          77   3448.0   3419.1     28.9   0/0/0
+     21.6  rx   5.18          74   3237.9   3224.4     13.6   0/0/0
+     27.7  rx   5.18          89   3953.7   3928.6     25.1   0/0/0
+     32.6  rx   5.18          81   3463.9   3446.8     17.1   0/0/0
+     38.2  rx   5.22          83   3588.9   3571.8     17.1   0/0/0
+     45.8  rx   6.23         102   4807.6   4790.6     17.0   0/0/0
+     49.9  rx   5.25          77   3458.7   3429.2     29.5   0/0/0
+     55.0  rx   5.18          74   3190.5   3177.3     13.2   0/0/0
+     61.2  rx   5.18          89   3966.0   3940.9     25.0   0/0/0
+     66.1  rx   5.18          81   3437.6   3420.3     17.3   0/0/0
+     71.6  rx   5.22          83   3548.6   3531.4     17.2   0/0/0
+     79.3  rx   6.28         102   4793.7   4776.7     17.1   0/0/0
+     83.4  rx   5.25          77   3454.3   3425.3     29.0   0/0/0
+     88.5  rx   5.18          74   3167.4   3154.2     13.1   0/0/0
+     94.7  rx   5.18          89   3946.7   3921.8     24.9   0/0/0
+     99.5  rx   5.18          81   3406.3   3389.4     17.0   0/0/0
+    105.1  rx   5.22          83   3557.7   3540.7     17.1   0/0/0
+    112.8  rx   6.28         102   4779.0   4761.8     17.2   0/0/0
+    116.9  rx   5.24          77   3435.6   3406.6     29.0   0/0/0
+    122.0  rx   5.18          74   3192.5   3179.5     13.0   0/1/0
+    128.2  rx   5.19          89   3964.5   3940.6     23.9   0/0/0
+    133.1  rx   5.18          81   3413.7   3397.3     16.5   0/0/0
+    138.6  rx   5.22          83   3531.7   3514.6     17.0   0/0/0
+    146.3  rx   6.23         102   4777.1   4760.0     17.0   0/0/0
+    150.4  rx   5.25          77   3440.3   3411.2     29.1   0/0/0
+    155.5  rx   5.18          74   3201.8   3188.7     13.1   0/0/0
+    161.6  rx   5.18          89   3934.9   3909.7     25.2   0/0/0
+    166.5  rx   5.18          81   3411.1   3394.1     17.1   0/0/0
+    172.1  rx   5.22          83   3531.4   3514.1     17.2   0/0/0
+    179.8  rx   6.28         102   4762.6   4745.3     17.4   0/0/0
+    183.9  rx   5.25          77   3454.6   3405.6     49.0   0/0/0
+    189.0  rx   5.18          74   3172.7   3140.3     32.3   0/0/0
+    195.2  rx   5.18          89   3932.2   3910.6     21.6   0/0/0
+    200.0  rx   5.18          81   3405.3   3388.3     17.0   0/0/0
+    205.6  rx   5.21          83   3525.8   3508.2     17.6   0/0/0
+    213.3  rx   6.23         102   4788.7   4771.7     17.0   0/0/0
+    217.3  rx   5.25          77   3432.3   3403.2     29.1   0/0/0
+    222.4  rx   5.18          74   3154.6   3141.5     13.2   0/0/0
+    228.6  rx   5.18          89   3923.1   3897.9     25.2   0/0/0
+    233.5  rx   5.18          81   3408.7   3391.6     17.0   0/0/0
+    239.0  rx   5.22          83   3512.7   3495.6     17.1   0/0/0
+    246.7  rx   6.28         102   4709.7   4692.0     17.7   0/0/0
+    250.9  rx   5.25          77   3443.4   3394.2     49.2   0/0/0
+    256.0  rx   5.18          74   3165.4   3132.5     32.9   0/0/0
+    262.1  rx   5.18          89   3937.9   3917.1     20.8   0/0/0
+    267.0  rx   5.18          81   3423.4   3406.3     17.1   0/0/0
+    272.6  rx   5.22          83   3537.4   3519.8     17.5   0/0/0
+    280.3  rx   6.28         102   4740.0   4722.9     17.1   0/0/0
+    284.4  rx   5.25          77   3450.1   3421.0     29.1   0/0/0
+    289.5  rx   5.18          74   3152.6   3139.5     13.1   0/0/0
+    295.7  rx   5.18          89   3955.9   3930.8     25.1   0/0/0
+    300.5  rx   5.18          81   3398.5   3381.4     17.1   0/0/0
+    306.0  rx   5.24          83   3463.8   3446.7     17.1   0/0/0
+
+Wrote 54 rows to characterization/results_boundary_fine/fine_d93.csv
+
+Note: RSS/CPU cover this process only -- the MQTT broker is a
+separate OS process (check with `ps aux | grep mosquitto` if needed).
+Note: queue depths are sampled when this script observes the transcript,
+not at the moment STT actually started decoding it -- context, not a
+precise at-decode-time reading.
+
+================================================================================================
+SUMMARY
+================================================================================================
+Full latency (mic-arrival -> transcript): n=54  min=3152.6ms  mean=3711.3ms  median=3463.8ms  p95=4779.0ms  max=4807.6ms  p99=4793.7ms
+  of which STT decode: n=54  min=3132.5ms  mean=3690.0ms  median=3446.7ms  p95=4761.8ms  max=4790.6ms  p99=4776.7ms
+  of which pre-STT (VAD wait + queueing): n=54  min=13.0ms  mean=21.3ms  median=17.2ms  p95=32.3ms  max=49.2ms  p99=49.0ms
+RSS: n=1533  min=738.8MB  mean=754.4MB  median=754.6MB  p95=754.8MB  max=754.8MB  p99=754.8MB  (sampled every 0.2s)
+  peak: 754.8MB at elapsed_s=302.0
+CPU: n=306  min=0.0%  mean=70.3%  median=98.8%  p95=107.8%  max=117.8%  p99=108.8%  (4 cores available, 100%=1 core, averaged over 1.0s windows)
+
+By segment duration:
+                 5s+: n=54  full mean= 3711.3ms  stt mean= 3690.0ms
+
+By channel:
+                  rx: n=54  full mean= 3711.3ms  stt mean= 3690.0ms
+
+By hit_cap (max_segment_s=35.0, enforced in this config):
+               False: n=54  full mean= 3711.3ms  stt mean= 3690.0ms
+
+Queue depth trend (the 'running out of CPU' signal, not raw CPU%):
+    first half mean=0.04  second half mean=0.00  peak=1 at elapsed_s=122.0 (flat/draining -- no sign of falling behind)
+
+------------------------------------------------------------------------------------------------
+TL;DR: 54 segments over 9 loop(s) at 1.0x speed -- latency p50=3464ms p95=4779ms max=4808ms  |  RSS mean=754MB peak=755MB  |  CPU mean=70%  |  queue trend: first half mean=0.04  second half mean=0.00  peak=1 at elapsed_s=122.0 (flat/draining -- no sign of falling behind)
+------------------------------------------------------------------------------------------------

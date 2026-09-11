@@ -1,0 +1,213 @@
+2026-09-11 13:38:42,982 INFO    bench_pipeline_load: Restricting orchestrator to channel(s) ['rx'] -- not building STT worker(s) for ['tx'], so this is a true 1-process isolation test, not 2 channels with ['tx'] idle
+2026-09-11 13:38:42,983 WARNING bench_pipeline_load: RELIABILITY DISABLED: segment_limits_enabled=False, idle_flush_s=0, reliability.enabled=False -- a segment or worker can now hang indefinitely, bounded only by --duration-s + --grace-s
+2026-09-11 13:38:42,983 INFO    bench_pipeline_load: Scaling max_tokens_per_second 18.0 -> 31.5 (multiplier=1.8x)
+2026-09-11 13:38:42,983 WARNING bench_pipeline_load: Overriding vad.min_silence_duration_ms 100 -> 50 -- diagnostic only, tests whether Silero's end-of-speech detection is unreliable at this file's own gap length specifically, not a recommended production value
+2026-09-11 13:38:43,104 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-09-11 13:38:43,105 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:1883)
+2026-09-11 13:38:43,105 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-09-11 13:38:43,113 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-09-11 13:38:43,113 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-09-11 13:38:44,578 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+[0;93m2026-09-11 13:38:44.594108788 [W:onnxruntime:MoonshineModel, device_discovery.cc:164 DiscoverDevicesForPlatform] GPU device discovery failed: device_discovery.cc:89 ReadFileContents Failed to open file: "/sys/class/drm/card1/device/vendor"[m
+2026-09-11 13:38:44,906 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-09-11 13:38:44,906 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-09-11 13:38:44,906 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-ab8c4363.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-09-11 13:38:44,906 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-09-11 13:38:45,407 INFO    bench_pipeline_load: Replaying ['characterization/testaudio/boundary_ss_len10_near.wav'] on channels ['rx'] in a loop for 300s at 1.0x speed (Ctrl-C to stop early)
+2026-09-11 13:38:45,459 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_ss_len10_near.wav'] 481010 samples → 1504 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 13:38:54,907 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=None mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={}
+2026-09-11 13:38:55,329 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101525.460-1 [1789101525.46-1789101531.25] latency=4.047s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정의 공식 불이 발판이랑.'
+2026-09-11 13:39:01,571 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101531.413-2 [1789101531.41-1789101537.27] latency=4.290s '아, 이 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 4론자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방글리 정의 공식 불이 되게 빠르네요.'
+2026-09-11 13:39:04,907 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.290 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.29}
+2026-09-11 13:39:07,295 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101537.430-3 [1789101537.43-1789101543.28] latency=3.994s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이핑이 다르면.'
+2026-09-11 13:39:13,337 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101543.444-4 [1789101543.44-1789101549.30] latency=3.952s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이 발달해요.'
+2026-09-11 13:39:14,908 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.952 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.952}
+2026-09-11 13:39:16,521 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1504 frames in 31.06s (1.0x real-time)
+2026-09-11 13:39:16,574 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_ss_len10_near.wav'] 481010 samples → 1504 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 13:39:19,333 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101549.460-5 [1789101549.46-1789101555.28] latency=4.032s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 사론자가 계속 나오고 있습니다. 지금까지 몇 명 나눠요? 네, 지금까지 이 지방거리 전염병식 불이 발달합니다.'
+2026-09-11 13:39:24,908 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.032 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.032}
+2026-09-11 13:39:26,458 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101555.476-6 [1789101555.48-1789101562.37] latency=4.059s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이핑이 다르네요.'
+2026-09-11 13:39:32,700 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101562.527-7 [1789101562.53-1789101568.38] latency=4.304s '아, 이 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 4론자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방글리 정의 공식 불이 되게 빠르네요.'
+2026-09-11 13:39:34,908 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.304 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.304}
+2026-09-11 13:39:38,448 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101568.543-8 [1789101568.54-1789101574.40] latency=4.033s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이핑이 다르면.'
+2026-09-11 13:39:44,402 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101574.559-9 [1789101574.56-1789101580.41] latency=3.966s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이 발달해요.'
+2026-09-11 13:39:44,909 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.966 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.966}
+2026-09-11 13:39:47,635 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1504 frames in 31.06s (1.0x real-time)
+2026-09-11 13:39:47,688 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_ss_len10_near.wav'] 481010 samples → 1504 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 13:39:50,535 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101580.575-10 [1789101580.57-1789101586.42] latency=4.096s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 사론자가 계속 나오고 있습니다. 지금까지 몇 명 나눠요? 네, 지금까지 이 지방거리 전염병식 불이 발달합니다.'
+2026-09-11 13:39:54,909 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 1, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.096 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.096}
+2026-09-11 13:39:57,605 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101586.614-11 [1789101586.61-1789101593.48] latency=4.095s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이핑이 다르네요.'
+2026-09-11 13:40:03,788 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101593.643-12 [1789101593.64-1789101599.50] latency=4.278s '아, 이 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 4론자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방글리 정의 공식 불이 되게 빠르네요.'
+2026-09-11 13:40:04,910 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.278 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.278}
+2026-09-11 13:40:09,531 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101599.657-13 [1789101599.66-1789101605.51] latency=4.001s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이핑이 다르면.'
+2026-09-11 13:40:14,910 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.001 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.001}
+2026-09-11 13:40:15,507 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101605.674-14 [1789101605.67-1789101611.53] latency=3.957s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이 발달해요.'
+2026-09-11 13:40:18,750 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1504 frames in 31.06s (1.0x real-time)
+2026-09-11 13:40:18,804 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_ss_len10_near.wav'] 481010 samples → 1504 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 13:40:21,595 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101611.690-15 [1789101611.69-1789101617.51] latency=4.065s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 사론자가 계속 나오고 있습니다. 지금까지 몇 명 나눠요? 네, 지금까지 이 지방거리 전염병식 불이 발달합니다.'
+2026-09-11 13:40:24,910 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.065 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.065}
+2026-09-11 13:40:28,709 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101617.706-16 [1789101617.71-1789101624.60] latency=4.083s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이핑이 다르네요.'
+2026-09-11 13:40:34,902 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101624.758-17 [1789101624.76-1789101630.61] latency=4.275s '아, 이 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 4론자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방글리 정의 공식 불이 되게 빠르네요.'
+2026-09-11 13:40:34,911 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.275 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.275}
+2026-09-11 13:40:40,636 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101630.774-18 [1789101630.77-1789101636.63] latency=3.989s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이핑이 다르면.'
+2026-09-11 13:40:44,911 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.989 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.989}
+2026-09-11 13:40:46,629 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101636.790-19 [1789101636.79-1789101642.65] latency=3.962s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이 발달해요.'
+2026-09-11 13:40:49,870 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1504 frames in 31.07s (1.0x real-time)
+2026-09-11 13:40:49,922 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_ss_len10_near.wav'] 481010 samples → 1504 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 13:40:52,715 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101642.805-20 [1789101642.81-1789101648.63] latency=4.069s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 사론자가 계속 나오고 있습니다. 지금까지 몇 명 나눠요? 네, 지금까지 이 지방거리 전염병식 불이 발달합니다.'
+2026-09-11 13:40:54,911 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.069 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.069}
+2026-09-11 13:40:59,823 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101648.821-21 [1789101648.82-1789101655.71] latency=4.079s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이핑이 다르네요.'
+2026-09-11 13:41:04,912 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.079 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.079}
+2026-09-11 13:41:06,023 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101655.876-22 [1789101655.88-1789101661.73] latency=4.279s '아, 이 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 4론자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방글리 정의 공식 불이 되게 빠르네요.'
+2026-09-11 13:41:11,841 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101661.894-23 [1789101661.89-1789101667.75] latency=4.078s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이핑이 다르면.'
+2026-09-11 13:41:14,912 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.078 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.078}
+2026-09-11 13:41:17,759 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101667.907-24 [1789101667.91-1789101673.76] latency=3.975s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이 발달해요.'
+2026-09-11 13:41:20,984 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1504 frames in 31.06s (1.0x real-time)
+2026-09-11 13:41:21,036 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_ss_len10_near.wav'] 481010 samples → 1504 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 13:41:23,839 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101673.923-25 [1789101673.92-1789101679.75] latency=4.076s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 사론자가 계속 나오고 있습니다. 지금까지 몇 명 나눠요? 네, 지금까지 이 지방거리 전염병식 불이 발달합니다.'
+2026-09-11 13:41:24,912 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.076 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.076}
+2026-09-11 13:41:30,954 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101679.939-26 [1789101679.94-1789101686.83] latency=4.096s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이핑이 다르네요.'
+2026-09-11 13:41:34,913 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.096 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.096}
+2026-09-11 13:41:37,137 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101686.989-27 [1789101686.99-1789101692.84] latency=4.280s '아, 이 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 4론자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방글리 정의 공식 불이 되게 빠르네요.'
+2026-09-11 13:41:42,882 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101693.005-28 [1789101693.00-1789101698.86] latency=4.004s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이핑이 다르면.'
+2026-09-11 13:41:44,913 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.004 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.004}
+2026-09-11 13:41:48,867 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101699.021-29 [1789101699.02-1789101704.88] latency=3.970s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이 발달해요.'
+2026-09-11 13:41:52,098 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1504 frames in 31.06s (1.0x real-time)
+2026-09-11 13:41:52,150 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_ss_len10_near.wav'] 481010 samples → 1504 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 13:41:54,913 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.970 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.97}
+2026-09-11 13:41:54,914 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101705.037-30 [1789101705.04-1789101710.86] latency=4.037s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 사론자가 계속 나오고 있습니다. 지금까지 몇 명 나눠요? 네, 지금까지 이 지방거리 전염병식 불이 발달합니다.'
+2026-09-11 13:42:02,077 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101711.053-31 [1789101711.05-1789101717.94] latency=4.104s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이핑이 다르네요.'
+2026-09-11 13:42:04,914 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.104 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.104}
+2026-09-11 13:42:08,308 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101718.104-32 [1789101718.10-1789101723.96] latency=4.336s '아, 이 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 4론자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방글리 정의 공식 불이 되게 빠르네요.'
+2026-09-11 13:42:13,999 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101724.126-33 [1789101724.13-1789101729.98] latency=4.007s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이핑이 다르면.'
+2026-09-11 13:42:14,914 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.007 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.007}
+2026-09-11 13:42:19,981 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101730.136-34 [1789101730.14-1789101735.99] latency=3.969s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이 발달해요.'
+2026-09-11 13:42:23,212 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1504 frames in 31.06s (1.0x real-time)
+2026-09-11 13:42:23,218 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_ss_len10_near.wav'] 481010 samples → 1504 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 13:42:24,918 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.969 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.969}
+2026-09-11 13:42:26,053 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101736.152-35 [1789101736.15-1789101741.98] latency=4.061s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 사론자가 계속 나오고 있습니다. 지금까지 몇 명 나눠요? 네, 지금까지 이 지방거리 전염병식 불이 발달합니다.'
+2026-09-11 13:42:33,150 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101742.168-36 [1789101742.17-1789101749.01] latency=4.110s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이핑이 다르네요.'
+2026-09-11 13:42:34,918 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.110 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.11}
+2026-09-11 13:42:39,337 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101749.171-37 [1789101749.17-1789101755.03] latency=4.297s '아, 이 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 4론자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방글리 정의 공식 불이 되게 빠르네요.'
+2026-09-11 13:42:44,918 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.297 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.297}
+2026-09-11 13:42:45,078 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101755.194-38 [1789101755.19-1789101761.04] latency=4.019s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이핑이 다르면.'
+2026-09-11 13:42:51,088 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101761.203-39 [1789101761.20-1789101767.06] latency=3.985s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이 발달해요.'
+2026-09-11 13:42:54,280 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1504 frames in 31.06s (1.0x real-time)
+2026-09-11 13:42:54,334 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_ss_len10_near.wav'] 481010 samples → 1504 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 13:42:54,919 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.985 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.985}
+2026-09-11 13:42:57,097 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101767.219-40 [1789101767.22-1789101773.04] latency=4.037s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 사론자가 계속 나오고 있습니다. 지금까지 몇 명 나눠요? 네, 지금까지 이 지방거리 전염병식 불이 발달합니다.'
+2026-09-11 13:43:04,230 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101773.235-41 [1789101773.24-1789101780.13] latency=4.071s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이핑이 다르네요.'
+2026-09-11 13:43:04,919 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.071 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.071}
+2026-09-11 13:43:10,432 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101780.287-42 [1789101780.29-1789101786.14] latency=4.276s '아, 이 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 4론자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방글리 정의 공식 불이 되게 빠르네요.'
+2026-09-11 13:43:14,920 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.276 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.276}
+2026-09-11 13:43:16,182 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101786.304-43 [1789101786.30-1789101792.16] latency=4.006s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이핑이 다르면.'
+2026-09-11 13:43:22,234 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101792.319-44 [1789101792.32-1789101798.18] latency=4.037s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이 발달해요.'
+2026-09-11 13:43:24,920 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.037 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.037}
+2026-09-11 13:43:25,396 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1504 frames in 31.06s (1.0x real-time)
+2026-09-11 13:43:25,451 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_ss_len10_near.wav'] 481010 samples → 1504 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 13:43:28,229 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101798.336-45 [1789101798.34-1789101804.16] latency=4.053s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 사론자가 계속 나오고 있습니다. 지금까지 몇 명 나눠요? 네, 지금까지 이 지방거리 전염병식 불이 발달합니다.'
+2026-09-11 13:43:34,920 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.053 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.053}
+2026-09-11 13:43:35,356 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101804.352-46 [1789101804.35-1789101811.24] latency=4.083s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이핑이 다르네요.'
+2026-09-11 13:43:41,547 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101811.404-47 [1789101811.40-1789101817.26] latency=4.274s '아, 이 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 4론자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방글리 정의 공식 불이 되게 빠르네요.'
+2026-09-11 13:43:44,921 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.274 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.274}
+2026-09-11 13:43:47,293 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101817.420-48 [1789101817.42-1789101823.28] latency=4.000s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이핑이 다르면.'
+2026-09-11 13:43:53,285 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101823.437-49 [1789101823.44-1789101829.29] latency=3.972s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 3원자가 계속 나오고 있습니다. 지금까지 몇 명 나왔나요? 네, 지금까지 이 지방거리 정액 공식 불이 발달해요.'
+2026-09-11 13:43:54,921 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.972 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.972}
+2026-09-11 13:43:56,513 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1504 frames in 31.06s (1.0x real-time)
+2026-09-11 13:43:56,514 INFO    bench_pipeline_load: 10 loop(s) done in 311s, waiting 5s for trailing decodes
+2026-09-11 13:43:59,305 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789101829.452-50 [1789101829.45-1789101835.28] latency=4.012s '아, 많은 분들이 좀 불안해하세요. 이 독감 백신 접종 사론자가 계속 나오고 있습니다. 지금까지 몇 명 나눠요? 네, 지금까지 이 지방거리 전염병식 불이 발달합니다.'
+2026-09-11 13:44:01,806 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-09-11 13:44:02,520 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-09-11 13:44:02,521 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-09-11 13:44:02,717 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-09-11 13:44:03,109 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+
+================================================================================================
+PER-SEGMENT -- 10 loop(s) x ['characterization/testaudio/boundary_ss_len10_near.wav'] on ['rx'], 50 final transcripts
+================================================================================================
+elapsed_s  ch  dur_s  cap  chars  full_ms   stt_ms   pre_ms   q(i/r/s)
+     12.2  rx   5.79          93   4077.2   4047.2     30.0   0/0/0
+     18.5  rx   5.86          98   4302.9   4289.8     13.1   0/0/0
+     24.2  rx   5.85          94   4011.3   3994.1     17.1   0/0/0
+     30.2  rx   5.86          93   3973.0   3952.0     21.1   0/0/0
+     36.2  rx   5.82          92   4048.9   4031.8     17.1   0/0/0
+     43.4  rx   6.89          95   4087.9   4058.7     29.2   0/0/0
+     49.6  rx   5.86          98   4317.7   4304.4     13.3   0/0/0
+     55.3  rx   5.86          94   4050.1   4033.0     17.1   0/0/0
+     61.3  rx   5.86          93   3987.6   3966.5     21.1   0/0/0
+     67.4  rx   5.85          92   4113.5   4096.3     17.2   0/0/0
+     74.5  rx   6.87          95   4124.0   4094.9     29.0   0/0/0
+     80.7  rx   5.85          98   4291.4   4278.3     13.1   0/0/0
+     86.4  rx   5.86          94   4018.2   4001.0     17.2   0/0/0
+     92.4  rx   5.86          93   3977.6   3956.5     21.0   0/0/0
+     98.5  rx   5.82          92   4081.9   4064.7     17.2   0/0/0
+    105.6  rx   6.89          95   4111.9   4082.9     29.1   0/0/0
+    111.8  rx   5.86          98   4288.6   4275.4     13.2   0/0/0
+    117.5  rx   5.86          94   4006.6   3989.5     17.1   0/0/0
+    123.5  rx   5.86          93   3983.5   3962.4     21.1   0/0/0
+    129.6  rx   5.82          92   4085.9   4068.7     17.2   0/0/0
+    136.7  rx   6.89          95   4108.4   4079.3     29.0   0/0/0
+    142.9  rx   5.85          98   4292.3   4279.1     13.2   0/0/0
+    148.7  rx   5.85          94   4094.6   4077.5     17.1   0/0/0
+    154.7  rx   5.86          93   3996.5   3975.4     21.1   0/0/0
+    160.7  rx   5.82          92   4092.9   4075.9     17.1   0/0/0
+    167.8  rx   6.89          95   4125.6   4096.5     29.2   0/0/0
+    174.0  rx   5.86          98   4292.8   4279.6     13.2   0/0/0
+    179.8  rx   5.86          94   4021.6   4004.5     17.1   0/0/0
+    185.8  rx   5.86          93   3990.7   3969.8     20.9   0/0/0
+    191.8  rx   5.82          92   4053.9   4036.9     17.0   0/0/0
+    199.0  rx   6.89          95   4133.4   4104.4     29.0   0/0/0
+    205.2  rx   5.86          98   4349.0   4336.0     13.0   0/0/0
+    210.9  rx   5.85          94   4023.6   4006.6     17.0   0/0/0
+    216.9  rx   5.86          93   3990.1   3969.1     21.0   0/0/0
+    222.9  rx   5.82          92   4077.6   4060.6     17.1   0/0/0
+    230.0  rx   6.84          95   4138.9   4109.9     29.1   0/0/0
+    236.2  rx   5.86          98   4309.8   4296.7     13.1   0/0/0
+    242.0  rx   5.85          94   4035.6   4018.5     17.1   0/0/0
+    248.0  rx   5.86          93   4029.1   3984.8     44.2   0/0/0
+    254.0  rx   5.82          92   4054.2   4037.1     17.1   0/0/0
+    261.1  rx   6.89          95   4102.5   4070.8     31.7   0/0/0
+    267.3  rx   5.86          98   4288.7   4275.6     13.1   0/0/0
+    273.1  rx   5.86          94   4022.8   4005.6     17.2   0/0/0
+    279.1  rx   5.86          93   4058.6   4037.5     21.1   0/0/0
+    285.1  rx   5.82          92   4070.3   4053.2     17.1   0/0/0
+    292.3  rx   6.89          95   4112.0   4082.9     29.1   0/0/0
+    298.4  rx   5.86          98   4287.2   4274.1     13.1   0/0/0
+    304.2  rx   5.86          94   4017.3   4000.3     17.0   0/0/0
+    310.2  rx   5.86          93   3993.1   3972.1     21.0   0/0/0
+    316.2  rx   5.82          92   4029.5   4012.4     17.1   0/0/0
+
+Wrote 50 rows to characterization/results_boundary_singlesource/ss_len10_near.csv
+
+Note: RSS/CPU cover this process only -- the MQTT broker is a
+separate OS process (check with `ps aux | grep mosquitto` if needed).
+Note: queue depths are sampled when this script observes the transcript,
+not at the moment STT actually started decoding it -- context, not a
+precise at-decode-time reading.
+
+================================================================================================
+SUMMARY
+================================================================================================
+Full latency (mic-arrival -> transcript): n=50  min=3973.0ms  mean=4102.7ms  median=4077.4ms  p95=4309.8ms  max=4349.0ms  p99=4349.0ms
+  of which STT decode: n=50  min=3952.0ms  mean=4082.6ms  median=4055.9ms  p95=4296.7ms  max=4336.0ms  p99=4336.0ms
+  of which pre-STT (VAD wait + queueing): n=50  min=13.0ms  mean=20.0ms  median=17.2ms  p95=30.0ms  max=44.2ms  p99=44.2ms
+RSS: n=1581  min=738.9MB  mean=755.4MB  median=755.8MB  p95=755.9MB  max=755.9MB  p99=755.9MB  (sampled every 0.2s)
+  peak: 755.9MB at elapsed_s=301.2
+CPU: n=316  min=0.0%  mean=69.8%  median=90.8%  p95=107.8%  max=109.8%  p99=108.8%  (4 cores available, 100%=1 core, averaged over 1.0s windows)
+
+By segment duration:
+                 5s+: n=50  full mean= 4102.7ms  stt mean= 4082.6ms
+
+By channel:
+                  rx: n=50  full mean= 4102.7ms  stt mean= 4082.6ms
+
+By hit_cap (max_segment_s=35.0, enforced in this config):
+               False: n=50  full mean= 4102.7ms  stt mean= 4082.6ms
+
+Queue depth trend (the 'running out of CPU' signal, not raw CPU%):
+    first half mean=0.00  second half mean=0.00  peak=0 at elapsed_s=12.2 (flat/draining -- no sign of falling behind)
+
+------------------------------------------------------------------------------------------------
+TL;DR: 50 segments over 10 loop(s) at 1.0x speed -- latency p50=4077ms p95=4310ms max=4349ms  |  RSS mean=755MB peak=756MB  |  CPU mean=70%  |  queue trend: first half mean=0.00  second half mean=0.00  peak=0 at elapsed_s=12.2 (flat/draining -- no sign of falling behind)
+------------------------------------------------------------------------------------------------
