@@ -219,6 +219,11 @@ MOONSHINE_ORT_SINGLE_THREAD=1 python scratch/bench_pipeline_load.py \
 
 ### Results
 
+> **Superseded by the VAD backend switch** — see
+> [VAD backend switch (torch.hub → onnxruntime)](#vad-backend-switch-torchhub--onnxruntime--2x-latency-improvement)
+> below. Kept as-is for the historical record; do not use these numbers for
+> current capacity planning.
+
 54 segments over 6 loops (190s), fresh-reboot baseline, current committed
 config (`soft_cut_enabled=false`):
 
@@ -343,6 +348,62 @@ RPi5 test session run measurably pessimistic — a cold-boot (or at least
 cooled-down) baseline is the number to trust for capacity planning, and the
 mid-session one is now understood as a thermal artifact rather than a
 separate finding.
+
+#### VAD backend switch (torch.hub → onnxruntime) — ~2x latency improvement
+
+All results above were measured at commit `f8056c8` (2026-08-10), before
+`1b3a3bf` (2026-09-02, `refactor(vad): load silero-vad from onnxruntime
+instead of torch.hub`) switched Silero VAD off `torch.hub`. That refactor
+was motivated by `scratch/probe_gil_release.py`'s finding that the
+`torch.hub` VAD backend holds the GIL for longer stretches than
+`onnxruntime` does (see the VAD-backend docs added alongside it) — long
+enough to stall the STT decode thread mid-decode on this 4-core RPi5, which
+inflates *wall-clock* STT latency even though the decode's own CPU work is
+unchanged.
+
+Re-ran the identical `bench_pipeline_load.py` command from the Method
+section above, unchanged (`configs/default.yaml` as currently committed,
+same `wav/rx_recorded_1.wav` + `wav/tx_recorded_1.wav` pair, `--stt-cores
+2,3 --other-cores 0,1`, `MOONSHINE_ORT_SINGLE_THREAD=1`, `--duration-s
+180`), 5 times back-to-back (no reboot between runs) on 2026-09-09,
+`--csv-out` capturing all 285 segments (57/run):
+
+| Metric | mean | stdev | p50 | p95 | max |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Full latency (mic → transcript) | 1157.9 ms | 581.2 ms | 912.1 ms | 2039.3 ms | 2925.6 ms |
+| STT decode | 1081.6 ms | 556.8 ms | 891.0 ms | 1999.0 ms | 2054.5 ms |
+| Pre-STT (VAD wait + queueing) | 76.3 ms | 278.0 ms | 21.2 ms | 455.5 ms | 1981.8 ms |
+
+That's roughly **half** the pre-refactor baseline (p50 1948 ms → 912 ms,
+p95 3971 ms → 2039 ms), consistent with the GIL-contention theory: STT
+decode wall-time itself dropped by close to the same factor, not just the
+pre-STT wait.
+
+Per-run breakdown (n=57 each) shows no thermal drift this time, even
+without a reboot between runs:
+
+| Run | mean | stdev | p50 | p95 | max |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | 1155.2 ms | 579.5 ms | 908.2 ms | 2011.3 ms | 2925.6 ms |
+| 2 | 1155.7 ms | 582.9 ms | 912.1 ms | 2027.6 ms | 2912.2 ms |
+| 3 | 1153.5 ms | 585.0 ms | 930.0 ms | 2005.0 ms | 2913.2 ms |
+| 4 | 1156.5 ms | 585.7 ms | 893.8 ms | 2033.4 ms | 2922.9 ms |
+| 5 | 1168.4 ms | 593.3 ms | 925.0 ms | 2071.0 ms | 2921.1 ms |
+
+By channel (combined across all 5 runs, same rx > tx pattern as before —
+still attributed to rx's longer average turns in this recording, not a
+channel-handling asymmetry):
+
+| Channel | n | Full latency mean | STT decode mean |
+| --- | ---: | ---: | ---: |
+| rx | 120 | 1551.8 ms | 1530.2 ms |
+| tx | 165 | 871.3 ms | 755.3 ms |
+
+**Practical takeaway:** the torch.hub → onnxruntime VAD backend switch is a
+real, substantial latency win on this hardware, not measurement noise —
+confirmed by 5 stable back-to-back runs. Use this section's numbers for
+current capacity planning; the original Results table above predates the
+fix and is kept only for historical comparison.
 
 ---
 
