@@ -1,0 +1,83 @@
+2026-09-11 13:26:45,090 INFO    bench_pipeline_load: Restricting orchestrator to channel(s) ['rx'] -- not building STT worker(s) for ['tx'], so this is a true 1-process isolation test, not 2 channels with ['tx'] idle
+2026-09-11 13:26:45,091 WARNING bench_pipeline_load: RELIABILITY DISABLED: segment_limits_enabled=False, idle_flush_s=0, reliability.enabled=False -- a segment or worker can now hang indefinitely, bounded only by --duration-s + --grace-s
+2026-09-11 13:26:45,091 INFO    bench_pipeline_load: Scaling max_tokens_per_second 18.0 -> 36.0 (multiplier=2x)
+2026-09-11 13:26:45,091 WARNING bench_pipeline_load: Overriding vad.min_silence_duration_ms 100 -> 50 -- diagnostic only, tests whether Silero's end-of-speech detection is unreliable at this file's own gap length specifically, not a recommended production value
+2026-09-11 13:26:45,202 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-09-11 13:26:45,202 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:1883)
+2026-09-11 13:26:45,203 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-09-11 13:26:45,210 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-09-11 13:26:45,210 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-09-11 13:26:46,640 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+[0;93m2026-09-11 13:26:46.656082666 [W:onnxruntime:MoonshineModel, device_discovery.cc:164 DiscoverDevicesForPlatform] GPU device discovery failed: device_discovery.cc:89 ReadFileContents Failed to open file: "/sys/class/drm/card1/device/vendor"[m
+2026-09-11 13:26:46,997 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-09-11 13:26:46,998 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-09-11 13:26:46,997 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-ab8c4363.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-09-11 13:26:46,997 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-09-11 13:26:47,498 INFO    bench_pipeline_load: Replaying ['characterization/testaudio/boundary_ss_len9_max.wav'] on channels ['rx'] in a loop for 300s at 1.0x speed (Ctrl-C to stop early)
+2026-09-11 13:26:47,550 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_ss_len9_max.wav'] 444966 samples → 1391 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 13:26:54,704 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789100807.679-1 [1789100807.68-1789100812.13] latency=2.551s '많은 분들이 좀 불안해하세요. 독감 백신 접종 사후 문제가 계속 나오고 있습니다. 지금까지 몇 명 나눠요?'
+2026-09-11 13:26:56,998 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.551 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.551}
+2026-09-11 13:27:06,998 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.551 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.551}
+2026-09-11 13:27:16,352 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1391 frames in 28.80s (1.0x real-time)
+2026-09-11 13:27:16,543 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_ss_len9_max.wav'] 444966 samples → 1391 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 13:27:17,002 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 1} stt_latency_s=2.551 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.551}
+2026-09-11 13:27:17,575 WARNING edge_voice.stt.stt_worker: STTWorker: segment=rx-1789100812.159-2 final line was repetitive, falling back to best partial
+2026-09-11 13:27:20,827 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789100826.079-3 [1789100826.08-1789100830.66] latency=3.249s '어, 이 반문제 좀 풀어내세요. 독감 백신 접종 사훈제가 계속 나오고 있습니다. 지금까지 몇 명 나눠요? 네, 지금까지 이 지방간의 정액.'
+2026-09-11 13:27:27,002 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.249 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.249}
+2026-09-11 13:27:28,863 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789100830.687-4 [1789100830.69-1789100841.11] latency=7.738s '어, 이 반군대 좀 불안해하세요. 이 독감 백신 접종 사문제가 계속 나오고 있습니다. 지금까지 몇 명 나눠요? 네, 지금까지 이 질병관리청이 아, 이 반군대 좀 불안해하세요. 이 독감 백신 접종 사문제가 계속 나오고 있습니다. 지금까지 몇 명 나눠요? 네, 지금까지 이 질병관리청이 없습니다.'
+2026-09-11 13:27:37,002 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=7.738 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 7.738}
+2026-09-11 13:27:38,176 WARNING edge_voice.stt.stt_worker: STTWorker: segment=rx-1789100841.140-5 final line was repetitive, falling back to best partial
+2026-09-11 13:27:45,354 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1391 frames in 28.81s (1.0x real-time)
+2026-09-11 13:27:45,354 WARNING bench_pipeline_load: EARLY STOP after 2 loop(s) / 58s: merge event detected (segment-start gap 18.40s > 1.3x atomic cycle 4.63s) on channel=rx (elapsed_s=35.6), 10s grace period elapsed -- skipping the rest of --duration-s=300s
+2026-09-11 13:27:45,354 INFO    bench_pipeline_load: 2 loop(s) done in 58s, waiting 5s for trailing decodes
+2026-09-11 13:27:47,002 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=7.738 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 7.738}
+2026-09-11 13:27:50,369 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-09-11 13:27:51,356 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-09-11 13:27:51,357 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-09-11 13:27:51,552 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-09-11 13:27:55,680 WARNING edge_voice.stt.stt_worker: STTWorker: segment=rx-1789100850.421-6 final line was repetitive, falling back to best partial
+2026-09-11 13:27:55,682 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+
+================================================================================================
+PER-SEGMENT -- 2 loop(s) x ['characterization/testaudio/boundary_ss_len9_max.wav'] on ['rx'], 3 final transcripts
+================================================================================================
+elapsed_s  ch  dur_s  cap  chars  full_ms   stt_ms   pre_ms   q(i/r/s)
+      9.5  rx   4.45          59   2576.8   2551.3     25.5   0/0/0
+     35.6  rx   4.58          77  10171.9   3248.7   6923.3   0/0/0
+     43.7  rx  10.42         163   7755.0   7737.7     17.3   0/0/0
+
+Wrote 3 rows to characterization/results_boundary_singlesource/ss_len9_max.csv
+
+Note: RSS/CPU cover this process only -- the MQTT broker is a
+separate OS process (check with `ps aux | grep mosquitto` if needed).
+Note: queue depths are sampled when this script observes the transcript,
+not at the moment STT actually started decoding it -- context, not a
+precise at-decode-time reading.
+
+================================================================================================
+SUMMARY
+================================================================================================
+Full latency (mic-arrival -> transcript): n=3  min=2576.8ms  mean=6834.6ms  median=7755.0ms  p95=10171.9ms  max=10171.9ms
+  of which STT decode: n=3  min=2551.3ms  mean=4512.6ms  median=3248.7ms  p95=7737.7ms  max=7737.7ms
+  of which pre-STT (VAD wait + queueing): n=3  min=17.3ms  mean=2322.0ms  median=25.5ms  p95=6923.3ms  max=6923.3ms
+RSS: n=316  min=739.0MB  mean=762.5MB  median=767.4MB  p95=769.7MB  max=769.7MB  p99=769.7MB  (sampled every 0.2s)
+  peak: 769.7MB at elapsed_s=59.1
+CPU: n=63  min=2.0%  mean=66.8%  median=99.8%  p95=108.8%  max=118.8%  p99=109.8%  (4 cores available, 100%=1 core, averaged over 1.0s windows)
+
+By segment duration:
+                3-5s: n=2   full mean= 6374.4ms  stt mean= 2900.0ms
+                 5s+: n=1   full mean= 7755.0ms  stt mean= 7737.7ms
+
+By channel:
+                  rx: n=3   full mean= 6834.6ms  stt mean= 4512.6ms
+
+By hit_cap (max_segment_s=35.0, enforced in this config):
+               False: n=3   full mean= 6834.6ms  stt mean= 4512.6ms
+
+Queue depth trend (the 'running out of CPU' signal, not raw CPU%):
+    not enough segments to compare halves (need >= 4)
+
+------------------------------------------------------------------------------------------------
+TL;DR: 3 segments over 2 loop(s) at 1.0x speed -- latency p50=7755ms p95=10172ms max=10172ms  |  RSS mean=763MB peak=770MB  |  CPU mean=67%  |  queue trend: not enough segments to compare halves (need >= 4)
+------------------------------------------------------------------------------------------------

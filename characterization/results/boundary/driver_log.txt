@@ -1,0 +1,16 @@
+=== STARTING p1_baseline (rate=1.0x) at 2026-09-11T00:42:02Z ===
+=== FINISHED p1_baseline at 2026-09-11T00:47:37Z ===
+p1_baseline: PASS  {"label": "p1_baseline", "loops_completed": 10, "expected_segments": 40, "captured_segments": 40, "capture_rate": 1.0, "capture_fail": false, "backlog_fail": false, "first_fail_elapsed_s": null, "passed": true}
+=== STARTING p1_density_95 (rate=1.0x) at 2026-09-11T00:47:37Z ===
+=== FINISHED p1_density_95 at 2026-09-11T00:53:08Z ===
+p1_density_95: PASS  {"label": "p1_density_95", "loops_completed": 11, "expected_segments": 44, "captured_segments": 44, "capture_rate": 1.0, "capture_fail": false, "backlog_fail": false, "first_fail_elapsed_s": null, "passed": true}
+=== STARTING p1_density_97 (rate=1.0x) at 2026-09-11T00:53:08Z ===
+=== FINISHED p1_density_97 at 2026-09-11T00:58:33Z ===
+p1_density_97: PASS  {"label": "p1_density_97", "loops_completed": 11, "expected_segments": 44, "captured_segments": 44, "capture_rate": 1.0, "capture_fail": false, "backlog_fail": false, "first_fail_elapsed_s": null, "passed": true}
+=== STARTING p1_rate_1.5 (rate=1.5x) at 2026-09-11T00:58:33Z ===
+=== FINISHED p1_rate_1.5 at 2026-09-11T01:04:08Z ===
+p1_rate_1.5: PASS  {"label": "p1_rate_1.5", "loops_completed": 10, "expected_segments": 60, "captured_segments": 60, "capture_rate": 1.0, "capture_fail": false, "backlog_fail": false, "first_fail_elapsed_s": null, "passed": true}
+=== STARTING p1_rate_2.0 (rate=2.0x) at 2026-09-11T01:04:08Z ===
+=== FINISHED p1_rate_2.0 at 2026-09-11T01:09:44Z ===
+p1_rate_2.0: PASS  {"label": "p1_rate_2.0", "loops_completed": 10, "expected_segments": 80, "captured_segments": 80, "capture_rate": 1.0, "capture_fail": false, "backlog_fail": false, "first_fail_elapsed_s": null, "passed": true}
+=== STARTING p1_length_9 (rate=1.0x) at 2026-09-11T01:09:44Z ===

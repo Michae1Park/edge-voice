@@ -1,0 +1,367 @@
+<title>Speaking Rate Ceiling</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface:        #f6f8f7;
+    --surface-raised: #ffffff;
+    --surface-sunken: #eceeec;
+    --ink:            #12181a;
+    --ink-secondary:  #4c5960;
+    --ink-muted:      #7c8a8f;
+    --line:           #d7dcda;
+    --line-strong:    #b7c0bd;
+    --accent:         #a8690a;
+    --accent-ink:     #ffffff;
+    --accent-soft:    #f3e3cd;
+    --good:           #0ca30c;
+    --warning:        #b9790a;
+    --serious:        #c1531f;
+    --critical:       #d03b3b;
+    --seq-100: #cde2fb; --seq-250: #86b6ef; --seq-400: #3987e5; --seq-550: #1c5cab; --seq-700: #0d366b;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface:        #17191a;
+      --surface-raised: #1e2224;
+      --surface-sunken: #101213;
+      --ink:            #f0f2f1;
+      --ink-secondary:  #b7c2c4;
+      --ink-muted:      #8b979a;
+      --line:           #33393b;
+      --line-strong:    #454d4f;
+      --accent:         #e3a237;
+      --accent-ink:     #14181a;
+      --accent-soft:    #3a2f18;
+      --good:           #35c25a;
+      --warning:        #fab219;
+      --serious:        #ec835a;
+      --critical:       #e66767;
+      --seq-100: #113052; --seq-250: #184f95; --seq-400: #3987e5; --seq-550: #6da7ec; --seq-700: #b7d3f6;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface:        #17191a;
+    --surface-raised: #1e2224;
+    --surface-sunken: #101213;
+    --ink:            #f0f2f1;
+    --ink-secondary:  #b7c2c4;
+    --ink-muted:      #8b979a;
+    --line:           #33393b;
+    --line-strong:    #454d4f;
+    --accent:         #e3a237;
+    --accent-ink:     #14181a;
+    --accent-soft:    #3a2f18;
+    --good:           #35c25a;
+    --warning:        #fab219;
+    --serious:        #ec835a;
+    --critical:       #e66767;
+    --seq-100: #113052; --seq-250: #184f95; --seq-400: #3987e5; --seq-550: #6da7ec; --seq-700: #b7d3f6;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    padding-inline: max(16px, calc((100vw - 1180px) / 2));
+    padding-block: 44px 72px;
+  }
+  h1, h2, h3 { font-family: var(--mono); font-weight: 600; text-wrap: balance; margin: 0; }
+  p { margin: 0; }
+  .tabular { font-variant-numeric: tabular-nums; }
+
+  /* ---- header ---- */
+  header {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-bottom: 28px;
+    margin-bottom: 32px;
+    border-bottom: 1px solid var(--line);
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  h1 { font-size: clamp(28px, 4vw, 40px); letter-spacing: -0.01em; }
+  header p.dek { font-size: 16px; color: var(--ink-secondary); max-width: 62ch; }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .badge {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-secondary);
+    background: var(--surface-raised);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 4px 9px;
+    white-space: nowrap;
+  }
+
+  section { margin-bottom: 44px; }
+  section > h2 {
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin-bottom: 16px;
+  }
+
+  /* ---- table ---- */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-raised); }
+  table { border-collapse: collapse; width: 100%; min-width: 920px; }
+  caption { caption-side: bottom; text-align: left; padding: 10px 14px; font-size: 12.5px; color: var(--ink-muted); }
+  thead th {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    font-weight: 500;
+    text-align: left;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line-strong);
+    background: var(--surface-sunken);
+    position: sticky;
+    top: 0;
+  }
+  thead th.num { text-align: right; }
+  tbody td {
+    padding: 13px 14px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+    font-family: var(--mono);
+    font-size: 13.5px;
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--surface-sunken); }
+  td.num { text-align: right; }
+  td.speed-cell { font-weight: 600; font-size: 14px; }
+  td.speed-cell .tag { display: block; font-family: var(--sans); font-weight: 400; font-size: 11px; color: var(--ink-muted); text-transform: none; letter-spacing: 0; }
+  .stats { color: var(--ink-secondary); }
+  .stats b { color: var(--ink); font-weight: 600; }
+
+  .bar-cell { min-width: 140px; }
+  .bar-track { position: relative; height: 18px; background: var(--surface-sunken); border-radius: 3px; overflow: hidden; margin-bottom: 4px; }
+  .bar-fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; }
+  .bar-fill.seq { background: linear-gradient(90deg, var(--seq-250), var(--seq-550)); }
+  .bar-label { font-size: 13px; }
+
+  .cer-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 100px;
+  }
+  .cer-chip .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .cer-chip[data-level="good"]     { color: var(--good);     background: color-mix(in srgb, var(--good) 14%, transparent); }
+  .cer-chip[data-level="warning"]  { color: var(--warning);  background: color-mix(in srgb, var(--warning) 16%, transparent); }
+  .cer-chip[data-level="serious"]  { color: var(--serious);  background: color-mix(in srgb, var(--serious) 16%, transparent); }
+  .cer-chip[data-level="critical"] { color: var(--critical); background: color-mix(in srgb, var(--critical) 16%, transparent); }
+  .cer-chip[data-level="good"] .dot     { background: var(--good); }
+  .cer-chip[data-level="warning"] .dot  { background: var(--warning); }
+  .cer-chip[data-level="serious"] .dot  { background: var(--serious); }
+  .cer-chip[data-level="critical"] .dot { background: var(--critical); }
+
+  .flag { font-family: var(--sans); color: var(--ink-muted); font-size: 12px; }
+
+  /* ---- interpretation ---- */
+  .takeaway {
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    border-radius: 8px;
+    padding: 20px 22px;
+    margin-bottom: 28px;
+  }
+  .takeaway .eyebrow { margin-bottom: 8px; display: block; }
+  .takeaway p { font-size: 16px; color: var(--ink); max-width: 68ch; }
+  .takeaway p + p { margin-top: 10px; }
+
+  .findings { display: flex; flex-direction: column; gap: 22px; }
+  .finding { display: grid; grid-template-columns: minmax(180px, 220px) 1fr; gap: 20px; }
+  .finding h3 { font-size: 15px; color: var(--ink); }
+  .finding .sub { font-family: var(--sans); font-size: 12px; color: var(--ink-muted); margin-top: 4px; }
+  .finding p { color: var(--ink-secondary); max-width: 62ch; }
+  .finding p + p { margin-top: 8px; }
+  .finding b { color: var(--ink); font-weight: 600; }
+  .finding code { font-family: var(--mono); font-size: 0.92em; background: var(--surface-sunken); padding: 1px 5px; border-radius: 3px; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  footer p { font-size: 12.5px; color: var(--ink-muted); max-width: 78ch; }
+  footer p b { color: var(--ink-secondary); }
+
+  @media (max-width: 720px) {
+    .finding { grid-template-columns: 1fr; gap: 6px; }
+  }
+</style>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<header>
+  <span class="eyebrow">edge-voice &middot; characterization</span>
+  <h1>Speaking Rate Ceiling</h1>
+  <p class="dek">STT decode behavior as speaking rate increases 0.5&times;&ndash;3&times; via pitch-preserving time-scale modification, holding speech occupancy fixed at 60% so density can't confound the result.</p>
+  <div class="badges">
+    <span class="badge">Raspberry Pi 5 &middot; 4 core</span>
+    <span class="badge">Moonshine tiny-ko, single-threaded ORT</span>
+    <span class="badge">single channel (rx)</span>
+    <span class="badge">occupancy fixed 60%</span>
+    <span class="badge">5 repeats / condition</span>
+    <span class="badge">token budget scaled 18&times;speed</span>
+  </div>
+</header>
+
+<section>
+  <h2>Results</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Speed</th>
+          <th>Utterance dur.</th>
+          <th class="num">E2E latency (ms)<br><span style="font-weight:400;text-transform:none;">mean / std / p50 / p95 / p99</span></th>
+          <th>Decode efficiency<br><span style="font-weight:400;text-transform:none;">audio-s per decode-s</span></th>
+          <th>CER</th>
+          <th class="num">Throughput</th>
+          <th class="num">CPU mean</th>
+          <th class="num">RSS mean</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="speed-cell">0.5&times;<span class="tag">slower</span></td>
+          <td class="tabular">6.79 s</td>
+          <td class="num stats tabular"><b>1774</b> / 96 / 1727 / 1992 / 1992</td>
+          <td class="bar-cell">
+            <div class="bar-track"><div class="bar-fill seq" style="width:92%"></div></div>
+            <span class="bar-label tabular">3.67&times;</span>
+          </td>
+          <td><span class="cer-chip" data-level="warning"><span class="dot"></span>11.5%</span> <span class="flag">TSM artifact&dagger;</span></td>
+          <td class="num tabular">0.54&times;</td>
+          <td class="num tabular">17.4%</td>
+          <td class="num tabular">780 MB</td>
+        </tr>
+        <tr>
+          <td class="speed-cell">1&times;<span class="tag">baseline</span></td>
+          <td class="tabular">3.39 s</td>
+          <td class="num stats tabular"><b>1635</b> / 24 / 1640 / 1665 / 1671</td>
+          <td class="bar-cell">
+            <div class="bar-track"><div class="bar-fill seq" style="width:52%"></div></div>
+            <span class="bar-label tabular">2.08&times;</span>
+          </td>
+          <td><span class="cer-chip" data-level="good"><span class="dot"></span>0.0%</span></td>
+          <td class="num tabular">0.53&times;</td>
+          <td class="num tabular">28.5%</td>
+          <td class="num tabular">838 MB</td>
+        </tr>
+        <tr>
+          <td class="speed-cell">1.5&times;</td>
+          <td class="tabular">2.26 s</td>
+          <td class="num stats tabular"><b>1519</b> / 55 / 1543 / 1587 / 1611</td>
+          <td class="bar-cell">
+            <div class="bar-track"><div class="bar-fill seq" style="width:40%"></div></div>
+            <span class="bar-label tabular">1.62&times;</span>
+          </td>
+          <td><span class="cer-chip" data-level="good"><span class="dot"></span>3.9%</span></td>
+          <td class="num tabular">0.53&times;</td>
+          <td class="num tabular">38.7%</td>
+          <td class="num tabular">900 MB</td>
+        </tr>
+        <tr>
+          <td class="speed-cell">2&times;</td>
+          <td class="tabular">1.70 s</td>
+          <td class="num stats tabular"><b>1421</b> / 80 / 1410 / 1549 / 1562</td>
+          <td class="bar-cell">
+            <div class="bar-track"><div class="bar-fill seq" style="width:33%"></div></div>
+            <span class="bar-label tabular">1.38&times;</span>
+          </td>
+          <td><span class="cer-chip" data-level="serious"><span class="dot"></span>25.2%</span></td>
+          <td class="num tabular">0.53&times;</td>
+          <td class="num tabular">48.2%</td>
+          <td class="num tabular">959 MB</td>
+        </tr>
+        <tr>
+          <td class="speed-cell">3&times;</td>
+          <td class="tabular">1.13 s</td>
+          <td class="num stats tabular"><b>773</b> / 327 / 644 / 1240 / 1253</td>
+          <td class="bar-cell">
+            <div class="bar-track"><div class="bar-fill seq" style="width:25%"></div></div>
+            <span class="bar-label tabular">1.03&times;</span>
+          </td>
+          <td><span class="cer-chip" data-level="critical"><span class="dot"></span>86.5%</span> <span class="flag">decoder failure&Dagger;</span></td>
+          <td class="num tabular">0.29&times;</td>
+          <td class="num tabular">18.6%</td>
+          <td class="num tabular">1016 MB</td>
+        </tr>
+      </tbody>
+      <caption>RPi5, 5 repeats per condition, single channel. Latency/decode-efficiency stats pooled across repeats (n=10/20/35/50/50); CER/throughput/CPU/RSS are per-run means (n=5). &dagger; 0.5&times;'s CER is a real but minor phase-vocoder stretching artifact (a dropped final syllable), not a recognition failure. &Dagger; 3&times;'s decode-efficiency bar looks mid-pack only because the decoder is abandoning segments early on badly degraded audio &mdash; read every 3&times; column against its CER, never alone.</caption>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Interpretation</h2>
+
+  <div class="takeaway">
+    <span class="eyebrow">Bottom line</span>
+    <p><b>Accuracy fails long before hardware does.</b> CPU tops out around 48% of one core and RSS never approaches a ceiling, even at 2&times; &mdash; but word error rate has already climbed to 1 in 4 by that point. For this pipeline, speaking rate is an accuracy problem first, and a resource problem never, within the range where the model still produces real output at all.</p>
+    <p>3&times; is not "the pipeline handles up to 3&times;, just less accurately" &mdash; it's a qualitatively different regime where the decoder stops doing the job and starts hallucinating. Nothing after that point should be read as a graceful degradation curve.</p>
+  </div>
+
+  <div class="findings">
+    <div class="finding">
+      <div>
+        <h3>0.5&times;&ndash;2&times;: one clean, physical trend</h3>
+        <div class="sub">the trustworthy range</div>
+      </div>
+      <div>
+        <p>Decode efficiency falls in a smooth, low-variance line &mdash; <b>3.67&times; &rarr; 2.08&times; &rarr; 1.62&times; &rarr; 1.38&times;</b> audio-seconds decoded per second of compute. Compressing the same words into less audio doesn't shrink the decode workload proportionally, so the cost per second of (denser) content rises. CER tracks the same story: <b>0% &rarr; 3.9% &rarr; 25.2%</b>, real substitution errors on genuinely fast speech, not truncation &mdash; the token budget was already scaled per condition to rule that out.</p>
+      </div>
+    </div>
+    <div class="finding">
+      <div>
+        <h3>3&times;: a collapse, not a data point</h3>
+        <div class="sub">phase-vocoder + decoder both give up</div>
+      </div>
+      <div>
+        <p>Raw transcripts show hallucination-style repetition (<code>"저는 알고 있지만 저는 무서운 겁니다. 저는 알고 있지만&hellip;"</code>) and content that's wrong from the very first syllable, not just cut short. Latency, CPU, and decode-efficiency all look artificially <i>better</i> here &mdash; because the decoder is terminating early on audio it can't parse, not because the task got easier. Aggressive time-compression at this ratio also degrades the phase vocoder's own output quality, compounding the effect.</p>
+      </div>
+    </div>
+    <div class="finding">
+      <div>
+        <h3>What stayed flat, and why that's not news</h3>
+        <div class="sub">throughput &asymp; 0.53&times; everywhere except 3&times;</div>
+      </div>
+      <div>
+        <p>Content-seconds-decoded-per-wallclock-second sat within a hair of 0.53&times; from 0.5&times; through 2&times;. That's the experimental control working, not a capacity finding: every file was built to exactly 60% occupancy regardless of speaking rate, specifically so density couldn't confound this result. At real-time playback, that metric is mechanically pinned near the occupancy target &mdash; it says nothing about decode capacity here.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p><b>Latency definition.</b> End-to-end = time from an utterance's audio finishing ingest to its final transcript being published (VAD &rarr; STT &rarr; publish) &mdash; the same "mic-arrival &rarr; transcript" definition used elsewhere in this codebase's benchmarks.</p>
+  <p><b>Known limitation.</b> The first counted segment of every run (excluded from all latency/decode-efficiency stats above) is occasionally corrupted by an unresolved warm-up/real-file boundary artifact in the test harness; it does not affect CER, throughput, CPU, or RSS.</p>
+  <p><b>RSS caveat.</b> Resident memory rises smoothly across sequential runs within a single harness process regardless of condition &mdash; treat CPU as the reliable resource signal in this table; RSS mean is included for completeness, not as a speaking-rate finding.</p>
+</footer>

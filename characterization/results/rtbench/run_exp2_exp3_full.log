@@ -1,0 +1,202 @@
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+[0;93m2026-09-11 16:54:37.294753579 [W:onnxruntime:MoonshineModel, device_discovery.cc:164 DiscoverDevicesForPlatform] GPU device discovery failed: device_discovery.cc:89 ReadFileContents Failed to open file: "/sys/class/drm/card1/device/vendor"[m
+Audio chunk: /home/ai/workspace/edge-voice/characterization/testaudio/natural17s_gap150ms.wav (17.302s)
+Loading ASR adapter (moonshine)...
+Adapter ready in 0.5s
+warm-up 1/1: 7.25s
+
+######################################################################
+# EXPERIMENT 2 -- maximum sustainable throughput
+######################################################################
+
+=== exp2_0.75x: 17.30s chunks every 23.07s for 180s ===
+
+[exp2_0.75x] offered=0.75x realtime (0.0433 req/s)  -- verdict: SUSTAINABLE
+    queue slope=+0.0000 depth/s, end_depth=0.0 (start=0.0), throughput_ratio=1.03
+    requests: offered=8 completed=8 failed=0  actual throughput=0.77x realtime (0.0444 req/s)
+    queue depth: avg=0.00 max=0 growth=+0.0000 depth/s
+    e2e latency (ms): mean=7220 p50=7229 p95=7332 p99=7332 max=7332 std=59
+    service time (ms): mean=7220   RTF: mean=0.417 p95=0.424
+    CPU%=34 (max 103)  temp=46.3C  RSS=332MB (max 375)
+    backlog fully drained 7.2s after arrivals stopped
+
+=== exp2_1.00x: 17.30s chunks every 17.30s for 180s ===
+
+[exp2_1.00x] offered=1.00x realtime (0.0578 req/s)  -- verdict: BORDERLINE
+    queue slope=+0.0000 depth/s, end_depth=0.0 (start=0.0), throughput_ratio=0.96
+    requests: offered=11 completed=11 failed=0  actual throughput=0.96x realtime (0.0556 req/s)
+    queue depth: avg=0.00 max=0 growth=+0.0000 depth/s
+    e2e latency (ms): mean=7177 p50=7175 p95=7211 p99=7211 max=7211 std=20
+    service time (ms): mean=7177   RTF: mean=0.415 p95=0.417
+    CPU%=44 (max 102)  temp=47.3C  RSS=336MB (max 376)
+    backlog fully drained 7.1s after arrivals stopped
+
+=== exp2_1.25x: 17.30s chunks every 13.84s for 180s ===
+
+[exp2_1.25x] offered=1.25x realtime (0.0722 req/s)  -- verdict: SUSTAINABLE
+    queue slope=+0.0000 depth/s, end_depth=0.0 (start=0.0), throughput_ratio=1.00
+    requests: offered=14 completed=14 failed=0  actual throughput=1.25x realtime (0.0722 req/s)
+    queue depth: avg=0.00 max=0 growth=+0.0000 depth/s
+    e2e latency (ms): mean=7224 p50=7211 p95=7249 p99=7298 max=7298 std=31
+    service time (ms): mean=7224   RTF: mean=0.418 p95=0.419
+    CPU%=52 (max 102)  temp=48.9C  RSS=336MB (max 377)
+    backlog fully drained 7.2s after arrivals stopped
+
+=== exp2_1.50x: 17.30s chunks every 11.53s for 180s ===
+
+[exp2_1.50x] offered=1.50x realtime (0.0867 req/s)  -- verdict: BORDERLINE
+    queue slope=+0.0000 depth/s, end_depth=0.0 (start=0.0), throughput_ratio=0.96
+    requests: offered=16 completed=16 failed=0  actual throughput=1.44x realtime (0.0833 req/s)
+    queue depth: avg=0.00 max=0 growth=+0.0000 depth/s
+    e2e latency (ms): mean=7186 p50=7182 p95=7236 p99=7257 max=7257 std=35
+    service time (ms): mean=7186   RTF: mean=0.415 p95=0.418
+    CPU%=64 (max 102)  temp=50.2C  RSS=337MB (max 377)
+    backlog fully drained 7.2s after arrivals stopped
+
+=== exp2_2.00x: 17.30s chunks every 8.65s for 180s ===
+
+[exp2_2.00x] offered=2.00x realtime (0.1156 req/s)  -- verdict: BORDERLINE
+    queue slope=+0.0000 depth/s, end_depth=0.0 (start=0.0), throughput_ratio=0.96
+    requests: offered=21 completed=21 failed=0  actual throughput=1.92x realtime (0.1111 req/s)
+    queue depth: avg=0.00 max=0 growth=+0.0000 depth/s
+    e2e latency (ms): mean=7143 p50=7142 p95=7173 p99=7187 max=7187 std=20
+    service time (ms): mean=7143   RTF: mean=0.413 p95=0.415
+    CPU%=83 (max 104)  temp=52.2C  RSS=338MB (max 377)
+    backlog fully drained 7.2s after arrivals stopped
+
+######################################################################
+# EXPERIMENT 3 -- deliberate overload
+######################################################################
+
+=== exp3_1.50x: 17.30s chunks every 11.53s for 180s ===
+
+[exp3_1.50x] offered=1.50x realtime (0.0867 req/s)  -- verdict: BORDERLINE
+    queue slope=+0.0000 depth/s, end_depth=0.0 (start=0.0), throughput_ratio=0.96
+    requests: offered=16 completed=16 failed=0  actual throughput=1.44x realtime (0.0833 req/s)
+    queue depth: avg=0.00 max=0 growth=+0.0000 depth/s
+    e2e latency (ms): mean=7228 p50=7221 p95=7381 p99=7415 max=7415 std=78
+    service time (ms): mean=7228   RTF: mean=0.418 p95=0.427
+    CPU%=64 (max 104)  temp=51.9C  RSS=349MB (max 388)
+    backlog fully drained 7.2s after arrivals stopped
+
+=== exp3_2.00x: 17.30s chunks every 8.65s for 180s ===
+
+[exp3_2.00x] offered=2.00x realtime (0.1156 req/s)  -- verdict: BORDERLINE
+    queue slope=+0.0000 depth/s, end_depth=0.0 (start=0.0), throughput_ratio=0.96
+    requests: offered=21 completed=21 failed=0  actual throughput=1.92x realtime (0.1111 req/s)
+    queue depth: avg=0.00 max=0 growth=+0.0000 depth/s
+    e2e latency (ms): mean=7152 p50=7149 p95=7180 p99=7186 max=7186 std=18
+    service time (ms): mean=7152   RTF: mean=0.413 p95=0.415
+    CPU%=83 (max 104)  temp=53.1C  RSS=359MB (max 398)
+    backlog fully drained 7.2s after arrivals stopped
+
+=== exp3_3.00x: 17.30s chunks every 5.77s for 180s ===
+
+[exp3_3.00x] offered=3.00x realtime (0.1734 req/s)  -- verdict: UNSUSTAINABLE
+    queue slope=+0.0338 depth/s, end_depth=5.5 (start=0.6), throughput_ratio=0.80
+    requests: offered=32 completed=32 failed=0  actual throughput=2.40x realtime (0.1389 req/s)
+    queue depth: avg=3.02 max=6 growth=+0.0338 depth/s
+    e2e latency (ms): mean=28586 p50=29252 p95=47285 p99=50056 max=50056 std=13014
+    service time (ms): mean=7151   RTF: mean=0.413 p95=0.415
+    CPU%=100 (max 102)  temp=54.9C  RSS=361MB (max 431)
+    backlog fully drained 50.1s after arrivals stopped
+
+Wrote 139 request rows -> characterization/results_rtbench_pi/requests.csv
+Wrote 2960 queue-sample rows -> characterization/results_rtbench_pi/queue_samples.csv
+Wrote per-load summary -> characterization/results_rtbench_pi/summary.json
+
+======================================================================
+EXPERIMENT 2 SUMMARY
+======================================================================
+
+[exp2_0.75x] offered=0.75x realtime (0.0433 req/s)  -- verdict: SUSTAINABLE
+    queue slope=+0.0000 depth/s, end_depth=0.0 (start=0.0), throughput_ratio=1.03
+    requests: offered=8 completed=8 failed=0  actual throughput=0.77x realtime (0.0444 req/s)
+    queue depth: avg=0.00 max=0 growth=+0.0000 depth/s
+    e2e latency (ms): mean=7220 p50=7229 p95=7332 p99=7332 max=7332 std=59
+    service time (ms): mean=7220   RTF: mean=0.417 p95=0.424
+    CPU%=34 (max 103)  temp=46.3C  RSS=332MB (max 375)
+    backlog fully drained 7.2s after arrivals stopped
+
+[exp2_1.00x] offered=1.00x realtime (0.0578 req/s)  -- verdict: BORDERLINE
+    queue slope=+0.0000 depth/s, end_depth=0.0 (start=0.0), throughput_ratio=0.96
+    requests: offered=11 completed=11 failed=0  actual throughput=0.96x realtime (0.0556 req/s)
+    queue depth: avg=0.00 max=0 growth=+0.0000 depth/s
+    e2e latency (ms): mean=7177 p50=7175 p95=7211 p99=7211 max=7211 std=20
+    service time (ms): mean=7177   RTF: mean=0.415 p95=0.417
+    CPU%=44 (max 102)  temp=47.3C  RSS=336MB (max 376)
+    backlog fully drained 7.1s after arrivals stopped
+
+[exp2_1.25x] offered=1.25x realtime (0.0722 req/s)  -- verdict: SUSTAINABLE
+    queue slope=+0.0000 depth/s, end_depth=0.0 (start=0.0), throughput_ratio=1.00
+    requests: offered=14 completed=14 failed=0  actual throughput=1.25x realtime (0.0722 req/s)
+    queue depth: avg=0.00 max=0 growth=+0.0000 depth/s
+    e2e latency (ms): mean=7224 p50=7211 p95=7249 p99=7298 max=7298 std=31
+    service time (ms): mean=7224   RTF: mean=0.418 p95=0.419
+    CPU%=52 (max 102)  temp=48.9C  RSS=336MB (max 377)
+    backlog fully drained 7.2s after arrivals stopped
+
+[exp2_1.50x] offered=1.50x realtime (0.0867 req/s)  -- verdict: BORDERLINE
+    queue slope=+0.0000 depth/s, end_depth=0.0 (start=0.0), throughput_ratio=0.96
+    requests: offered=16 completed=16 failed=0  actual throughput=1.44x realtime (0.0833 req/s)
+    queue depth: avg=0.00 max=0 growth=+0.0000 depth/s
+    e2e latency (ms): mean=7186 p50=7182 p95=7236 p99=7257 max=7257 std=35
+    service time (ms): mean=7186   RTF: mean=0.415 p95=0.418
+    CPU%=64 (max 102)  temp=50.2C  RSS=337MB (max 377)
+    backlog fully drained 7.2s after arrivals stopped
+
+[exp2_2.00x] offered=2.00x realtime (0.1156 req/s)  -- verdict: BORDERLINE
+    queue slope=+0.0000 depth/s, end_depth=0.0 (start=0.0), throughput_ratio=0.96
+    requests: offered=21 completed=21 failed=0  actual throughput=1.92x realtime (0.1111 req/s)
+    queue depth: avg=0.00 max=0 growth=+0.0000 depth/s
+    e2e latency (ms): mean=7143 p50=7142 p95=7173 p99=7187 max=7187 std=20
+    service time (ms): mean=7143   RTF: mean=0.413 p95=0.415
+    CPU%=83 (max 104)  temp=52.2C  RSS=338MB (max 377)
+    backlog fully drained 7.2s after arrivals stopped
+
+======================================================================
+EXPERIMENT 3 SUMMARY
+======================================================================
+
+[exp3_1.50x] offered=1.50x realtime (0.0867 req/s)  -- verdict: BORDERLINE
+    queue slope=+0.0000 depth/s, end_depth=0.0 (start=0.0), throughput_ratio=0.96
+    requests: offered=16 completed=16 failed=0  actual throughput=1.44x realtime (0.0833 req/s)
+    queue depth: avg=0.00 max=0 growth=+0.0000 depth/s
+    e2e latency (ms): mean=7228 p50=7221 p95=7381 p99=7415 max=7415 std=78
+    service time (ms): mean=7228   RTF: mean=0.418 p95=0.427
+    CPU%=64 (max 104)  temp=51.9C  RSS=349MB (max 388)
+    backlog fully drained 7.2s after arrivals stopped
+
+[exp3_2.00x] offered=2.00x realtime (0.1156 req/s)  -- verdict: BORDERLINE
+    queue slope=+0.0000 depth/s, end_depth=0.0 (start=0.0), throughput_ratio=0.96
+    requests: offered=21 completed=21 failed=0  actual throughput=1.92x realtime (0.1111 req/s)
+    queue depth: avg=0.00 max=0 growth=+0.0000 depth/s
+    e2e latency (ms): mean=7152 p50=7149 p95=7180 p99=7186 max=7186 std=18
+    service time (ms): mean=7152   RTF: mean=0.413 p95=0.415
+    CPU%=83 (max 104)  temp=53.1C  RSS=359MB (max 398)
+    backlog fully drained 7.2s after arrivals stopped
+
+[exp3_3.00x] offered=3.00x realtime (0.1734 req/s)  -- verdict: UNSUSTAINABLE
+    queue slope=+0.0338 depth/s, end_depth=5.5 (start=0.6), throughput_ratio=0.80
+    requests: offered=32 completed=32 failed=0  actual throughput=2.40x realtime (0.1389 req/s)
+    queue depth: avg=3.02 max=6 growth=+0.0338 depth/s
+    e2e latency (ms): mean=28586 p50=29252 p95=47285 p99=50056 max=50056 std=13014
+    service time (ms): mean=7151   RTF: mean=0.413 p95=0.415
+    CPU%=100 (max 102)  temp=54.9C  RSS=361MB (max 431)
+    backlog fully drained 50.1s after arrivals stopped
+
+======================================================================
+FINAL SUMMARY
+======================================================================
+Maximum sustainable offered load: 1.25x realtime
+Corresponding throughput: 1.25x realtime
+Saturation begins: not reached at any tested load
+
+At overload (Experiment 3, 3.00x realtime):
+  queue growth: approximately linear (slope +0.033 -> +0.034 depth/s, peak depth 6)
+  latency growth: 17479ms -> 39692ms (first half -> second half)
+  service time: 7148ms -> 7154ms
+  RSS behavior: 364MB -> 357MB (stable)
+  temperature: 54.5C -> 55.2C
+  CPU frequency: 2800MHz -> 2800MHz (stable)
+======================================================================

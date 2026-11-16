@@ -1,0 +1,12 @@
+16:59:30 start density temp=temp=36.7'C throttled=throttled=0x50000
+18:38:56 end density rc=0 temp=temp=42.2'C throttled=throttled=0x50000
+18:38:56 start speed temp=temp=42.2'C throttled=throttled=0x50000
+20:57:14 end speed rc=0 temp=temp=40.6'C throttled=throttled=0x50000
+20:57:14 start length temp=temp=40.6'C throttled=throttled=0x50000
+22:06:12 end length rc=0 temp=temp=40.6'C throttled=throttled=0x50000
+ALLDONE
+22:07:07 start speed_nocap temp=temp=37.3'C
+22:33:38 end speed_nocap rc=0
+22:33:38 start length_nocap temp=temp=40.0'C
+22:55:36 end length_nocap rc=0
+NOCAPDONE

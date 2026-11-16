@@ -1,0 +1,216 @@
+2026-09-11 12:51:38,432 INFO    bench_pipeline_load: Restricting orchestrator to channel(s) ['rx'] -- not building STT worker(s) for ['tx'], so this is a true 1-process isolation test, not 2 channels with ['tx'] idle
+2026-09-11 12:51:38,433 WARNING bench_pipeline_load: RELIABILITY DISABLED: segment_limits_enabled=False, idle_flush_s=0, reliability.enabled=False -- a segment or worker can now hang indefinitely, bounded only by --duration-s + --grace-s
+2026-09-11 12:51:38,433 INFO    bench_pipeline_load: Scaling max_tokens_per_second 18.0 -> 36.0 (multiplier=2x)
+2026-09-11 12:51:38,433 WARNING bench_pipeline_load: Overriding vad.min_silence_duration_ms 100 -> 50 -- diagnostic only, tests whether Silero's end-of-speech detection is unreliable at this file's own gap length specifically, not a recommended production value
+2026-09-11 12:51:38,550 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-09-11 12:51:38,550 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:1883)
+2026-09-11 12:51:38,550 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-09-11 12:51:38,559 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-09-11 12:51:38,559 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-09-11 12:51:40,018 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+[0;93m2026-09-11 12:51:40.033726379 [W:onnxruntime:MoonshineModel, device_discovery.cc:164 DiscoverDevicesForPlatform] GPU device discovery failed: device_discovery.cc:89 ReadFileContents Failed to open file: "/sys/class/drm/card1/device/vendor"[m
+2026-09-11 12:51:40,344 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-ab8c4363.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-09-11 12:51:40,345 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-09-11 12:51:40,345 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-09-11 12:51:40,345 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-09-11 12:51:40,846 INFO    bench_pipeline_load: Replaying ['characterization/testaudio/boundary_fine_len9_d95.wav'] on channels ['rx'] in a loop for 300s at 1.0x speed (Ctrl-C to stop early)
+2026-09-11 12:51:40,906 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_fine_len9_d95.wav'] 473736 samples → 1481 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 12:51:48,418 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098700.907-1 [1789098700.91-1789098705.67] latency=2.730s '네, 지금까지 이재명 대통령의 99명이 따르면 9건의 3항상 작용을 했다. 그리고 이 중에 8건에 대해서 불이 제일 중요하고요.'
+2026-09-11 12:51:50,346 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.730 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.73}
+2026-09-11 12:51:53,584 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098705.774-2 [1789098705.77-1789098710.60] latency=2.956s '네, 지금까지 이 집을 정해본 집 부임에 따르면 9건이 사는 사람이 되고 있다. 그리고 이 중에 8건에 대해서 부임 중이라고 하고요.'
+2026-09-11 12:51:58,759 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098710.699-3 [1789098710.70-1789098715.53] latency=3.211s '네 지금까지 이 실물 청약 지푸리핑에 따르면 아홉 건이 상한 사람이 오겠다 그리고 이 중에 여덟 건이 돼서 부엉이 쟁쟁이라고 하고요.'
+2026-09-11 12:52:00,346 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.211 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.211}
+2026-09-11 12:52:10,347 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.211 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.211}
+2026-09-11 12:52:11,508 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1481 frames in 30.60s (1.0x real-time)
+2026-09-11 12:52:11,563 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_fine_len9_d95.wav'] 473736 samples → 1481 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 12:52:13,382 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098715.627-4 [1789098715.63-1789098725.42] latency=7.917s '네, 지금까지 이재명 대통령이 불평했다는 게 나올 거라고 생각하는 사람이 됐다는 겁니다. 그리고 이 중에 여덟 번에 계속 불평했으면 좋겠다고 하고요. 네, 지금까지 이재명 대통령이 불평했다는 게 나올 거라고 생각하고 있다. 그리고 이 중에 여덟 번에 대해서 불평했으면 좋겠다고 하고요.'
+2026-09-11 12:52:18,216 WARNING edge_voice.stt.stt_worker: STTWorker: segment=rx-1789098725.483-5 final line was repetitive, falling back to best partial
+2026-09-11 12:52:20,347 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=7.917 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 7.917}
+2026-09-11 12:52:27,865 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098730.448-6 [1789098730.45-1789098741.27] latency=6.580s '네, 지금까지 이재명 대통령 집품이 다르면 9건이 30, 40건이 됐다는 겁니다. 그리고 이 중에 8건이 돼서 불이 제일 중요하고요. 네, 지금까지 이재명 대통령 집품이 다르면 9건이 30, 40, 5건이 됐다는 겁니다. 그리고 이 중에 8건이 돼서 불이 제일 중요하고요.'
+2026-09-11 12:52:30,349 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=6.580 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 6.58}
+2026-09-11 12:52:32,277 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098741.336-7 [1789098741.34-1789098746.20] latency=4.412s '네 지금까지 이 지금까지 이 지금까지 이 지금까지 이 지금까지 이 지금까지 분명히 따르면 아홉 건이 사람 사는 거고 있다라고 봅니다. 그리고 이 중에 여덟 건이 돼서 분명히 중요하고요.'
+2026-09-11 12:52:35,431 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098746.298-8 [1789098746.30-1789098751.13] latency=3.154s '네, 지금까지 이재명 대통령이 불평했다는 양 아홉 건의 상황상 얘기하고 있다. 그리고 이 중에 여덟 건에 대해서 불행증이 중요하고요.'
+2026-09-11 12:52:39,417 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098751.224-9 [1789098751.22-1789098756.12] latency=3.273s '네 지금까지 이십 일 일 총에 99명이 따르면 아홉 건이 상한 사람이 되고 있다는 겁니다 그리고 이 중에 여덟 건이 돼서 부원이 되는 중이라고 하고요.'
+2026-09-11 12:52:40,350 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.273 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.273}
+2026-09-11 12:52:42,164 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1481 frames in 30.60s (1.0x real-time)
+2026-09-11 12:52:42,217 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_fine_len9_d95.wav'] 473736 samples → 1481 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 12:52:44,488 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098756.152-10 [1789098756.15-1789098761.17] latency=3.321s '내가 지금까지 이 집행을 정해 본 집행이 다르면 아홉 건이 상한 사항이 되고 있다는 겁니다. 그리고 이 중에 여덟 건이 돼서 범죄 중이라고 하고요.'
+2026-09-11 12:52:50,042 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098761.198-11 [1789098761.20-1789098766.98] latency=3.042s '네, 지금까지 이재명 대통령의 불임증이 따르면 9건의 상황상 입력을 했다. 그리고 이 중에 8건에 대해서 본인 쟁쟁이라고 하고요.'
+2026-09-11 12:52:50,350 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.042 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.042}
+2026-09-11 12:52:55,199 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098767.074-12 [1789098767.07-1789098771.97] latency=3.200s '네 지금까지 이 집 멸치청에 불이 달리면 아홉 거리 사는 사람이 오고 있다는 거예요 그리고 이 중에 여덟 거리 돼서 부근이 제일 중요하고요.'
+2026-09-11 12:53:00,350 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.200 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.2}
+2026-09-11 12:53:09,430 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098772.002-13 [1789098772.00-1789098781.79] latency=7.595s '네, 지금까지 이재명 대통령이 불평히 따르면 9건이 상한 사람이 되고 있다는 겁니다. 그리고 이 중에 8건이 돼서 불평히 쟁쟁이라고 하고요. 네, 지금까지 이재명 대통령이 불평히 따르면 9건이 상한 사람이 되고 있다는 겁니다. 그리고 이 중에 8건이 돼서 불평히 쟁쟁이라고 하고요.'
+2026-09-11 12:53:10,351 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=7.595 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 7.595}
+2026-09-11 12:53:12,819 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1481 frames in 30.60s (1.0x real-time)
+2026-09-11 12:53:12,872 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_fine_len9_d95.wav'] 473736 samples → 1481 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 12:53:13,189 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098781.858-14 [1789098781.86-1789098786.72] latency=3.773s '네 지금까지 이 지금까지 이 지금까지 이 지금까지 이 지금까지 불필요했다는 건 아홉 건의 상황상이라고 그랬다. 그리고 이 중에 여덟 건에 대해서 부연이 제일 중요하다고요.'
+2026-09-11 12:53:15,983 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098786.819-15 [1789098786.82-1789098791.65] latency=2.794s '네 지금까지 이재명 대통령이 99명이 따르면 9건의 사망사항이 오고 있다는 겁니다. 그리고 이 중에 8건에 대해서 부연이 중요하다고요.'
+2026-09-11 12:53:20,351 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.794 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.794}
+2026-09-11 12:53:20,894 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098791.746-16 [1789098791.75-1789098797.64] latency=3.220s '네 지금까지 이십 일 일정에 금식 분명히 해달라는 아홉 건의 상황상 되고 있다는 거죠. 그리고 이 중에 여덟 건에 대해서 불이 제일 중요하고요.'
+2026-09-11 12:53:25,880 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098797.709-17 [1789098797.71-1789098802.57] latency=3.286s '네, 지금까지 이재명 대통령 집품이 따르면 아홉 건의 사랑상이 되고 있다는 겁니다. 그리고 이 중에 여덟 건이 돼서 구원이 진행 중이라고 하고요.'
+2026-09-11 12:53:30,351 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.286 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.286}
+2026-09-11 12:53:30,999 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098802.669-18 [1789098802.67-1789098807.50] latency=3.485s '네, 지금까지 이 지금까지 이 지금까지 이 지금까지 구입했다는 건 아홉 건의 사항상 보고 있다는 겁니다. 그리고 이 중에 여덟 건에 대해서 부연이 중요하고요.'
+2026-09-11 12:53:35,601 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098807.598-19 [1789098807.60-1789098812.56] latency=3.026s '네, 지금까지 이재명 대통령의 불임이 따르면 아홉 번이 상상해보겠다는 겁니다. 그리고 이 중에 여덟 번이 돼서 부엉이 제일 중요하고요.'
+2026-09-11 12:53:40,352 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.026 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.026}
+2026-09-11 12:53:40,748 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098812.589-20 [1789098812.59-1789098817.48] latency=3.234s '네, 지금까지 이 집행을 정해본 지 분명히 다르냐는 아홉 건의 상황상 보고 있다. 그리고 이 중에 여덟 건에 대해서 분위적인 입니다. 하고요.'
+2026-09-11 12:53:43,473 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1481 frames in 30.60s (1.0x real-time)
+2026-09-11 12:53:43,526 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_fine_len9_d95.wav'] 473736 samples → 1481 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 12:53:44,992 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098817.517-21 [1789098817.52-1789098822.32] latency=2.659s '네, 지금까지 21초 정도씩 불행했다는 얘기는 9건의 상황상 보고 있다. 그리고 이 중에 8건에 대해서 본인이 중요하고요.'
+2026-09-11 12:53:50,352 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.659 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.659}
+2026-09-11 12:53:51,998 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098822.413-22 [1789098822.41-1789098828.41] latency=3.569s '네 지금까지 이 집행정의 법칙 불행에 따르면 아홉 건이 상한 사람이 되고 있다 라고 불러요. 그리고 이 중에 여덟 건이 돼서 분쟁 중이라고 하고요.'
+2026-09-11 12:53:56,314 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098828.439-23 [1789098828.44-1789098833.33] latency=2.965s '네, 지금까지 이 집을 정해본 집 부임에 따르면 9건이 사는 상황이 오겠다는 겁니다. 그리고 이 중에 8건에 대해서 부임 중이라고 하고요.'
+2026-09-11 12:54:00,354 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.965 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.965}
+2026-09-11 12:54:01,210 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098833.367-24 [1789098833.37-1789098838.17] latency=3.022s '그런데 지금까지 이 지방적인 불입에 따르면 9건이 상한 상황이 오겠다는 겁니다. 그리고 이 중에 8건이 돼서 부원이 되는 중이라고 하고요.'
+2026-09-11 12:54:07,088 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098838.231-25 [1789098838.23-1789098843.09] latency=3.980s '네 지금까지 이 지금까지 이 지금까지 이 지금까지 이 지금까지 불행히 따르면 아홉 건의 상황상 이루어졌다. 그리고 이 중에 여덟 건에 대해서 부연이 진행 중이라고 하고요.'
+2026-09-11 12:54:10,358 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.980 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.98}
+2026-09-11 12:54:11,139 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098843.194-26 [1789098843.19-1789098848.02] latency=3.091s '네 지금까지 이 집행을 정해 공식 프리핑에 따르면 아홉 건이 사항상 있다고 했다. 그리고 이 중에 여덟 건이 돼서 부원이 제일 중요하다고요.'
+2026-09-11 12:54:14,128 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1481 frames in 30.60s (1.0x real-time)
+2026-09-11 12:54:14,130 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_fine_len9_d95.wav'] 473736 samples → 1481 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 12:54:16,187 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098848.119-27 [1789098848.12-1789098853.11] latency=3.059s '내가 지금까지 이십 일 년 정도 집품이 되어 있다는 건 아무거나 상상해보고 그랬다는 거다 그리고 이제 여덟 번에 계속 본 진중이라고 하고요.'
+2026-09-11 12:54:20,358 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.059 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.059}
+2026-09-11 12:54:21,626 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098853.143-28 [1789098853.14-1789098858.90] latency=2.714s '그런데 지금까지 21총에 99명이 따르면 9건이 사는 사람이 되고 있다. 그리고 이 중에 8건이 돼서 부건이 제일 중요하고요.'
+2026-09-11 12:54:27,158 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098858.992-29 [1789098858.99-1789098863.82] latency=3.306s '그런데 지금까지 이재명 대통령이 불입히 따르면 9건의 사망사항이 되고 있다는 겁니다. 그리고 이 중에 8건에 대해서 불임증이 중요하다고요?'
+2026-09-11 12:54:30,358 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.306 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.306}
+2026-09-11 12:54:39,612 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098863.919-30 [1789098863.92-1789098873.71] latency=5.879s '네, 지금까지 21총에 분위기 따르면 9건이 30총이라고 했다. 그리고 이 중에 8건이 돼서 분위기 좀 중요하고요. 네, 지금까지 21총에 분위기 따르면 9건이 30총이 됐다는 겁니다. 그리고 이 중에 8건이 돼서 분위기 좀 중요하고요.'
+2026-09-11 12:54:40,358 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=5.879 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 5.879}
+2026-09-11 12:54:43,085 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098873.775-31 [1789098873.78-1789098878.64] latency=3.473s '네 지금까지 이 집행을 정해 공식 포인트에 따르면 아홉 건의 상황 상황이 오겠다는 겁니다. 그리고 이 중에 여덟 건에 대해서 부엉이 쟁쟁이 중이라고 하고요.'
+2026-09-11 12:54:44,732 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1481 frames in 30.60s (1.0x real-time)
+2026-09-11 12:54:44,785 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_fine_len9_d95.wav'] 473736 samples → 1481 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 12:54:46,736 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098878.736-32 [1789098878.74-1789098883.57] latency=3.141s '네 지금까지 이 집행을 정해 공식 포인트에 따르면 아홉 번의 사랑 사용을 했다는 겁니다. 그리고 이 중에 여덟 번에 대해서 번지는 중이라고 하고요.'
+2026-09-11 12:54:50,359 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.141 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.141}
+2026-09-11 12:54:53,057 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098883.663-33 [1789098883.66-1789098889.56] latency=3.470s '네 지금까지 이 집행을 정해 주신 분이 배달이면 아홉 건이 사는 사람이 되고 있다는 겁니다 그리고 이 중에 여덟 건이 돼서 범위 재밌습니다 하고요.'
+2026-09-11 12:54:57,848 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098889.626-34 [1789098889.63-1789098894.49] latency=3.341s '네 지금까지 이 집을 정해 본 집 부임에 따르면 아홉 건이 사는 사람이 되고 있다는 겁니다. 그리고 이 중에 여덟 건이 돼서 부임 중이라고 하고요.'
+2026-09-11 12:55:00,359 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.341 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.341}
+2026-09-11 12:55:02,348 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098894.586-35 [1789098894.59-1789098899.42] latency=2.901s '네, 지금까지 21층에 공식 불평이 따르면 9건이 사는 사람이 되고 있다. 그리고 이 중에 8건이 돼서 불평이 제일 중요하고요.'
+2026-09-11 12:55:07,577 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098899.514-36 [1789098899.51-1789098904.35] latency=3.210s '네 지금까지 이 집행정지 포인트 있다는 게 한 아홉 건의 상황상 이루어졌다는 겁니다. 그리고 이 중에 여덟 건에 대해서 부엉이 진중 얘기하고요.'
+2026-09-11 12:55:10,359 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.210 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.21}
+2026-09-11 12:55:15,387 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1481 frames in 30.60s (1.0x real-time)
+2026-09-11 12:55:15,439 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_fine_len9_d95.wav'] 473736 samples → 1481 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 12:55:20,360 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 1} stt_latency_s=3.210 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.21}
+2026-09-11 12:55:21,801 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098904.442-37 [1789098904.44-1789098914.23] latency=7.553s '네, 지금까지 이재명 대통령이 불평히 따르면 9건이 30, 40건이 됐다는 거죠. 그리고 이 중에 8건이 돼서 불평히 쟁쟁이라고 하고요. 네, 지금까지 이재명 대통령이 불평히 따르면 9건이 30, 40, 5건이 됐다는 거죠. 그리고 이 중에 8건이 돼서 불평히 쟁쟁이라고 하고요.'
+2026-09-11 12:55:25,383 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098914.334-38 [1789098914.33-1789098920.20] latency=3.582s '네 지금까지 이 지금까지 이 지금까지 이 지금까지 불편했다는 건 아홉 건의 상황상이라고 그랬다. 그리고 이 중에 여덟 건이 돼서 불편해진 중이라고 하고요.'
+2026-09-11 12:55:30,360 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.582 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.582}
+2026-09-11 12:55:37,443 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098920.292-39 [1789098920.29-1789098930.08] latency=7.341s '네, 지금까지 이재명 대통령이 불임했다는 건 아홉 건의 상황 상황이 오랬다는 건가. 그리고 이 중에 여덟 건에 대해서 불임증이 중요하고요. 네, 지금까지 이재명 대통령 집품이 따르면 아홉 건의 상황상 입력을 했다는 건가. 그리고 이 중에 여덟 건에 대해서 불임증이 중요하고요.'
+2026-09-11 12:55:40,362 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 1} stt_latency_s=7.341 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 7.341}
+2026-09-11 12:55:41,456 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098930.148-40 [1789098930.15-1789098935.01] latency=4.012s '네 지금까지 이 지금까지 이 지금까지 이 지금까지 이 지금까지 분명히 다른 년 아홉 건의 사랑 사연이 오고 있다라고 봅니다. 그리고 이 중에 여덟 건에 대해서 부연이 좀 중요하고요.'
+2026-09-11 12:55:44,646 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098935.108-41 [1789098935.11-1789098939.94] latency=3.190s '네, 지금까지 이 집행을 정해본 집행위에 따르면 아홉 건이 사항상 나오겠다는 겁니다. 그리고 이 중에 여덟 건에 대해서 불이 제일 중요하고요.'
+2026-09-11 12:55:46,041 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1481 frames in 30.60s (1.0x real-time)
+2026-09-11 12:55:46,044 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_fine_len9_d95.wav'] 473736 samples → 1481 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 12:55:48,428 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098940.036-42 [1789098940.04-1789098944.87] latency=3.544s '네 지금까지 이 집 노래처럼 이렇게 불행했다는 건 아홉 건의 상황상 보고 있다는 겁니다. 그리고 이 중에 여덟 권이 돼서 분쟁 중이라고 하고요.'
+2026-09-11 12:55:50,362 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.544 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.544}
+2026-09-11 12:55:54,656 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098944.966-43 [1789098944.97-1789098950.81] latency=3.830s '네 지금까지 이 지금까지 이 지금까지 이 지금까지 이 지금까지 분명히 다른 연 9건의 30, 40, 5건이 됐다는 겁니다. 그리고 이 중에 8건에 대해서 분명히 중요하고요.'
+2026-09-11 12:55:58,659 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098950.910-44 [1789098950.91-1789098955.74] latency=2.894s '네, 지금까지 이 집을 정해본 집 부임에 따르면 9건이 사는 사람이 되고 있다. 그리고 이 중에 8건에 대해서 부임 중이라고 하고요.'
+2026-09-11 12:56:00,362 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=2.894 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 2.894}
+2026-09-11 12:56:03,899 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098955.837-45 [1789098955.84-1789098960.67] latency=3.214s '네 지금까지 이 실물 청약 지푸리핑에 따르면 아홉 건이 상한 사람이 오겠다 그리고 이 중에 여덟 건이 돼서 부엉이 쟁쟁이라고 하고요.'
+2026-09-11 12:56:10,363 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.214 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.214}
+2026-09-11 12:56:16,646 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1481 frames in 30.60s (1.0x real-time)
+2026-09-11 12:56:16,698 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['characterization/testaudio/boundary_fine_len9_d95.wav'] 473736 samples → 1481 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-09-11 12:56:18,453 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098960.765-46 [1789098960.76-1789098970.56] latency=7.867s '네, 지금까지 이재명 대통령이 불평했다는 게 나올 거라고 생각하는 사람이 됐다는 겁니다. 그리고 이 중에 여덟 번에 계속 불평했으면 좋겠다고 하고요. 네, 지금까지 이재명 대통령이 불평했다는 게 나올 거라고 생각하고 있다. 그리고 이 중에 여덟 번에 대해서 불평했으면 좋겠다고 하고요.'
+2026-09-11 12:56:20,363 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=7.867 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 7.867}
+2026-09-11 12:56:23,325 WARNING edge_voice.stt.stt_worker: STTWorker: segment=rx-1789098970.622-47 final line was repetitive, falling back to best partial
+2026-09-11 12:56:30,363 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=7.867 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 7.867}
+2026-09-11 12:56:32,980 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098975.581-48 [1789098975.58-1789098986.41] latency=6.559s '네, 지금까지 이재명 대통령 집품이 다르면 9건이 30, 40건이 됐다는 겁니다. 그리고 이 중에 8건이 돼서 불이 제일 중요하고요. 네, 지금까지 이재명 대통령 집품이 다르면 9건이 30, 40, 5건이 됐다는 겁니다. 그리고 이 중에 8건이 돼서 불이 제일 중요하고요.'
+2026-09-11 12:56:37,395 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098986.474-49 [1789098986.47-1789098991.34] latency=4.415s '네 지금까지 이 지금까지 이 지금까지 이 지금까지 이 지금까지 이 지금까지 분명히 따르면 아홉 건이 사람 사는 거고 있다라고 봅니다. 그리고 이 중에 여덟 건이 돼서 분명히 중요하고요.'
+2026-09-11 12:56:40,364 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=4.415 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 4.415}
+2026-09-11 12:56:40,505 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098991.431-50 [1789098991.43-1789098996.26] latency=3.110s '네, 지금까지 이재명 대통령이 불평했다는 양 아홉 건의 상황상 얘기하고 있다. 그리고 이 중에 여덟 건에 대해서 불행증이 중요하고요.'
+2026-09-11 12:56:44,554 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789098996.359-51 [1789098996.36-1789099001.26] latency=3.274s '네 지금까지 이십 일 일 총에 99명이 따르면 아홉 건이 상한 사람이 되고 있다는 겁니다 그리고 이 중에 여덟 건이 돼서 부원이 되는 중이라고 하고요.'
+2026-09-11 12:56:47,300 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1481 frames in 30.60s (1.0x real-time)
+2026-09-11 12:56:47,300 INFO    bench_pipeline_load: 10 loop(s) done in 306s, waiting 5s for trailing decodes
+2026-09-11 12:56:49,583 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1789099001.287-52 [1789099001.29-1789099006.28] latency=3.283s '내가 지금까지 이 집행을 정해 본 집행이 다르면 아홉 건이 상한 사항이 되고 있다는 겁니다. 그리고 이 중에 여덟 건이 돼서 범죄 중이라고 하고요.'
+2026-09-11 12:56:50,364 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=3.283 mqtt_connected=True restarts=None vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 3.283}
+2026-09-11 12:56:52,584 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-09-11 12:56:53,301 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-09-11 12:56:53,301 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-09-11 12:56:53,302 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-09-11 12:56:53,988 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+
+================================================================================================
+PER-SEGMENT -- 10 loop(s) x ['characterization/testaudio/boundary_fine_len9_d95.wav'] on ['rx'], 50 final transcripts
+================================================================================================
+elapsed_s  ch  dur_s  cap  chars  full_ms   stt_ms   pre_ms   q(i/r/s)
+      9.9  rx   4.77          71   2743.6   2730.2     13.4   0/0/0
+     15.0  rx   4.83          74   2980.9   2955.8     25.2   0/0/0
+     20.2  rx   4.83          74   3228.2   3211.1     17.1   0/0/0
+     34.8  rx   9.79         159   7948.7   7916.6     32.1   0/0/0
+     49.3  rx  10.82         152   6593.1   6579.7     13.4   0/0/0
+     53.7  rx   4.86         103   6077.6   4411.9   1665.7   0/0/0
+     56.9  rx   4.83          74   4303.8   3153.6   1150.2   0/0/0
+     60.9  rx   4.90          84   3297.8   3272.7     25.1   0/0/0
+     65.9  rx   5.01          82   3322.4   3321.3      1.1   0/0/0
+     71.5  rx   5.78          72   3063.8   3041.5     22.3   0/0/0
+     76.6  rx   4.90          78   3228.6   3199.6     29.0   0/0/0
+     90.9  rx   9.79         157   7621.0   7594.9     26.1   0/0/0
+     94.6  rx   4.86          95   6466.3   3773.3   2693.1   0/0/0
+     97.4  rx   4.83          75   4332.5   2793.7   1538.8   0/0/0
+    102.3  rx   5.90          80   3248.9   3220.0     28.9   0/0/0
+    107.3  rx   4.86          81   3307.1   3286.2     21.0   0/0/0
+    112.4  rx   4.83          88   3498.1   3484.7     13.4   0/0/0
+    117.1  rx   4.96          75   3044.3   3026.5     17.8   0/0/0
+    122.2  rx   4.90          79   3263.3   3234.2     29.2   0/0/0
+    126.4  rx   4.80          68   2675.7   2658.7     17.0   0/0/0
+    133.4  rx   5.99          82   3591.0   3569.3     21.7   0/0/0
+    137.8  rx   4.90          77   2978.9   2965.3     13.6   0/0/0
+    142.7  rx   4.80          77   3043.1   3022.1     21.0   0/0/0
+    148.5  rx   4.86          95   3993.3   3980.3     13.0   0/0/0
+    152.6  rx   4.83          78   3116.3   3091.1     25.1   0/0/0
+    157.6  rx   4.99          78   3076.4   3059.0     17.3   0/0/0
+    163.1  rx   5.75          70   2731.1   2714.1     17.0   0/0/0
+    168.6  rx   4.83          77   3334.8   3305.6     29.2   0/0/0
+    181.1  rx   9.79         132   5901.0   5879.3     21.7   0/0/0
+    184.5  rx   4.86          87   4445.5   3472.7    972.8   0/0/0
+    188.2  rx   4.83          82   3168.6   3140.9     27.7   0/0/0
+    194.5  rx   5.90          82   3495.2   3470.2     25.0   0/0/0
+    199.3  rx   4.86          82   3358.0   3341.0     17.0   0/0/0
+    203.8  rx   4.83          71   2930.5   2901.1     29.5   0/0/0
+    209.0  rx   4.83          80   3230.8   3209.8     21.1   0/0/0
+    223.3  rx   9.79         156   7566.5   7553.2     13.3   0/0/0
+    226.8  rx   5.86          86   5186.6   3581.8   1604.8   0/0/0
+    238.9  rx   9.79         154   7358.8   7341.2     17.7   0/0/0
+    242.9  rx   4.86         101   6443.7   4012.5   2431.3   0/0/0
+    246.1  rx   4.83          79   4705.6   3189.6   1516.1   0/0/0
+    249.9  rx   4.83          80   3559.8   3544.2     15.6   0/0/0
+    256.1  rx   5.85          96   3843.8   3830.4     13.4   0/0/0
+    260.1  rx   4.83          74   2918.9   2893.8     25.2   0/0/0
+    265.3  rx   4.83          74   3230.7   3213.6     17.1   0/0/0
+    279.9  rx   9.79         159   7895.1   7867.5     27.7   0/0/0
+    294.4  rx  10.83         152   6572.7   6559.3     13.4   0/0/0
+    298.8  rx   4.86         103   6059.4   4414.6   1644.9   0/0/0
+    302.0  rx   4.83          74   4242.0   3110.0   1132.0   0/0/0
+    306.0  rx   4.90          84   3299.1   3274.1     24.9   0/0/0
+    311.0  rx   4.99          82   3304.1   3283.0     21.1   0/0/0
+
+Wrote 50 rows to characterization/results_boundary_fine/fine_len9_d95.csv
+
+Note: RSS/CPU cover this process only -- the MQTT broker is a
+separate OS process (check with `ps aux | grep mosquitto` if needed).
+Note: queue depths are sampled when this script observes the transcript,
+not at the moment STT actually started decoding it -- context, not a
+precise at-decode-time reading.
+
+================================================================================================
+SUMMARY
+================================================================================================
+Full latency (mic-arrival -> transcript): n=50  min=2675.7ms  mean=4256.5ms  median=3346.4ms  p95=7621.0ms  max=7948.7ms  p99=7948.7ms
+  of which STT decode: n=50  min=2658.7ms  mean=3913.1ms  median=3278.6ms  p95=7594.9ms  max=7916.6ms  p99=7916.6ms
+  of which pre-STT (VAD wait + queueing): n=50  min=1.1ms  mean=343.4ms  median=23.6ms  p95=1665.7ms  max=2693.1ms  p99=2693.1ms
+RSS: n=1557  min=738.6MB  mean=755.7MB  median=756.0MB  p95=757.1MB  max=757.1MB  p99=757.1MB  (sampled every 0.2s)
+  peak: 757.1MB at elapsed_s=292.7
+CPU: n=311  min=0.0%  mean=71.4%  median=104.7%  p95=107.8%  max=119.7%  p99=108.8%  (4 cores available, 100%=1 core, averaged over 1.0s windows)
+
+By segment duration:
+                3-5s: n=34  full mean= 3732.0ms  stt mean= 3282.8ms
+                 5s+: n=16  full mean= 5371.2ms  stt mean= 5252.5ms
+
+By channel:
+                  rx: n=50  full mean= 4256.5ms  stt mean= 3913.1ms
+
+By hit_cap (max_segment_s=35.0, enforced in this config):
+               False: n=50  full mean= 4256.5ms  stt mean= 3913.1ms
+
+Queue depth trend (the 'running out of CPU' signal, not raw CPU%):
+    first half mean=0.00  second half mean=0.00  peak=0 at elapsed_s=9.9 (flat/draining -- no sign of falling behind)
+
+------------------------------------------------------------------------------------------------
+TL;DR: 50 segments over 10 loop(s) at 1.0x speed -- latency p50=3335ms p95=7621ms max=7949ms  |  RSS mean=756MB peak=757MB  |  CPU mean=71%  |  queue trend: first half mean=0.00  second half mean=0.00  peak=0 at elapsed_s=9.9 (flat/draining -- no sign of falling behind)
+------------------------------------------------------------------------------------------------
