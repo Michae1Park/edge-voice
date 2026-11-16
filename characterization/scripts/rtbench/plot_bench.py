@@ -19,7 +19,7 @@ Experiment 3 (elapsed time on the x-axis, one line per load level):
     CPU frequency vs elapsed time
 
 Usage:
-    python characterization/scripts/rtbench/plot_bench.py --results-dir characterization/results_rtbench
+    python characterization/scripts/rtbench/plot_bench.py --results-dir characterization/results/rtbench
 """
 
 from __future__ import annotations

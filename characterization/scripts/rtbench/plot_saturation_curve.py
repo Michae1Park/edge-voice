@@ -7,9 +7,8 @@ each run's own narrow load range in isolation.
 
 Usage:
     python characterization/scripts/rtbench/plot_saturation_curve.py \\
-        --results-dir characterization/results_rtbench_pi \\
-        --results-dir characterization/results_rtbench_boundary \\
-        --out characterization/results_rtbench_boundary/plots/saturation_curve.png
+        --results-dir characterization/results/rtbench \\
+        --out characterization/results/rtbench/plots/saturation_curve.png
 """
 
 from __future__ import annotations
