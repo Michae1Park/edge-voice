@@ -1,0 +1,1060 @@
+2026-10-13 11:07:34,013 INFO    measure_sbc: CPU affinity: [0, 2, 4, 6]
+2026-10-13 11:07:34,060 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:07:34,060 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:07:34,061 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:07:34,063 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:07:34,063 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:07:34,616 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:07:34,742 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:07:34,743 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:07:34,743 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:07:34,743 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:07:34,743 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:07:35,243 INFO    measure_sbc: [repeat 0] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:07:35,295 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:07:38,845 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857255.328-1 [1791857255.33-1791857258.66] latency=0.168s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:07:41,676 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:07:44,743 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.168 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.168}
+2026-10-13 11:07:49,677 INFO    measure_sbc: [repeat 0] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:07:49,728 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:07:49,738 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:07:54,744 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.168 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.168}
+2026-10-13 11:07:57,498 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857275.507-2 [1791857275.51-1791857277.43] latency=0.058s '신고하라고 전화드렸습니다.'
+2026-10-13 11:08:04,744 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.058 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.058}
+2026-10-13 11:08:04,896 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857279.827-3 [1791857279.83-1791857284.66] latency=0.216s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:08:10,664 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857287.123-4 [1791857287.12-1791857290.48] latency=0.165s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:08:14,744 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.165 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.165}
+2026-10-13 11:08:17,083 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857292.787-5 [1791857292.79-1791857296.85] latency=0.204s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:08:20,720 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:08:24,086 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:08:24,087 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:08:24,724 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:08:24,724 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:08:24,922 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:08:25,295 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:08:25,498 INFO    measure_sbc: [repeat 0] segments=4/4  CER=9.4%
+2026-10-13 11:08:25,517 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:08:25,517 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:08:25,517 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:08:25,518 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:08:25,518 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:08:26,063 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:08:26,190 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:08:26,190 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:08:26,190 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:08:26,190 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:08:26,190 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:08:26,690 INFO    measure_sbc: [repeat 1] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:08:26,691 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:08:30,235 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857306.724-1 [1791857306.72-1791857310.05] latency=0.162s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:08:33,073 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:08:36,190 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.162 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.162}
+2026-10-13 11:08:41,074 INFO    measure_sbc: [repeat 1] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:08:41,124 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:08:41,134 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:08:46,191 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.162 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.162}
+2026-10-13 11:08:48,893 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857326.902-2 [1791857326.90-1791857328.82] latency=0.059s '신고하라고 전화드렸습니다.'
+2026-10-13 11:08:56,191 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.059 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.059}
+2026-10-13 11:08:56,280 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857331.223-3 [1791857331.22-1791857336.05] latency=0.205s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:09:02,050 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857338.518-4 [1791857338.52-1791857341.88] latency=0.155s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:09:06,191 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.155 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.155}
+2026-10-13 11:09:08,462 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857344.182-5 [1791857344.18-1791857348.25] latency=0.186s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:09:12,115 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:09:15,465 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:09:15,465 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:09:16,119 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:09:16,120 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:09:16,120 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:09:16,677 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:09:16,879 INFO    measure_sbc: [repeat 1] segments=4/4  CER=9.4%
+2026-10-13 11:09:16,896 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:09:16,897 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:09:16,897 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:09:16,897 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:09:16,897 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:09:17,444 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:09:17,574 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:09:17,575 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:09:17,574 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:09:17,575 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:09:17,575 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:09:18,075 INFO    measure_sbc: [repeat 2] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:09:18,076 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:09:21,632 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857358.109-1 [1791857358.11-1791857361.44] latency=0.174s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:09:24,458 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:09:27,575 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.174 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.174}
+2026-10-13 11:09:32,459 INFO    measure_sbc: [repeat 2] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:09:32,460 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:09:32,469 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:09:37,575 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.174 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.174}
+2026-10-13 11:09:40,228 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857378.238-2 [1791857378.24-1791857380.16] latency=0.057s '신고하라고 전화드렸습니다.'
+2026-10-13 11:09:47,576 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.057 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.057}
+2026-10-13 11:09:47,618 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857382.558-3 [1791857382.56-1791857387.39] latency=0.208s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:09:53,389 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857389.854-4 [1791857389.85-1791857393.21] latency=0.158s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:09:57,576 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.158 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.158}
+2026-10-13 11:09:59,800 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857395.518-5 [1791857395.52-1791857399.58] latency=0.190s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:10:03,450 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:10:06,804 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:10:06,804 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:10:07,455 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:10:07,455 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:10:07,655 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:10:08,016 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:10:08,218 INFO    measure_sbc: [repeat 2] segments=4/4  CER=9.4%
+2026-10-13 11:10:08,235 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:10:08,235 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:10:08,236 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:10:08,236 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:10:08,236 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:10:08,793 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:10:08,919 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:10:08,919 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:10:08,919 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:10:08,919 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:10:08,919 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:10:09,420 INFO    measure_sbc: [repeat 3] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:10:09,471 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:10:13,019 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857409.504-1 [1791857409.50-1791857412.83] latency=0.166s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:10:15,853 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:10:18,919 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.166 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.166}
+2026-10-13 11:10:23,853 INFO    measure_sbc: [repeat 3] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:10:23,904 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:10:23,913 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:10:28,920 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.166 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.166}
+2026-10-13 11:10:31,670 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857429.682-2 [1791857429.68-1791857431.60] latency=0.055s '신고하라고 전화드렸습니다.'
+2026-10-13 11:10:38,920 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.055 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.055}
+2026-10-13 11:10:39,065 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857434.002-3 [1791857434.00-1791857438.83] latency=0.211s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:10:44,837 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857441.298-4 [1791857441.30-1791857444.66] latency=0.162s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:10:48,920 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.162 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.162}
+2026-10-13 11:10:51,246 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857446.962-5 [1791857446.96-1791857451.03] latency=0.191s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:10:54,895 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:10:58,249 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:10:58,249 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:10:58,899 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:10:58,899 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:10:59,099 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:10:59,460 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:10:59,662 INFO    measure_sbc: [repeat 3] segments=4/4  CER=9.4%
+2026-10-13 11:10:59,680 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:10:59,680 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:10:59,681 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:10:59,681 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:10:59,681 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:11:00,251 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:11:00,376 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:11:00,377 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:11:00,377 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:11:00,377 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:11:00,377 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:11:00,878 INFO    measure_sbc: [repeat 4] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:11:00,879 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:11:04,424 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857460.911-1 [1791857460.91-1791857464.24] latency=0.164s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:11:07,260 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:11:10,377 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.164 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.164}
+2026-10-13 11:11:15,261 INFO    measure_sbc: [repeat 4] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:11:15,262 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:11:15,271 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:11:20,378 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.164 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.164}
+2026-10-13 11:11:23,026 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857481.040-2 [1791857481.04-1791857482.96] latency=0.054s '신고하라고 전화드렸습니다.'
+2026-10-13 11:11:30,378 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.054 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.054}
+2026-10-13 11:11:30,427 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857485.360-3 [1791857485.36-1791857490.19] latency=0.214s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:11:36,191 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857492.656-4 [1791857492.66-1791857496.02] latency=0.158s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:11:40,378 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.158 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.158}
+2026-10-13 11:11:42,603 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857498.320-5 [1791857498.32-1791857502.38] latency=0.191s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:11:46,252 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:11:49,607 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:11:49,608 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:11:50,257 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:11:50,257 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:11:50,457 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:11:50,820 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:11:51,021 INFO    measure_sbc: [repeat 4] segments=4/4  CER=9.4%
+2026-10-13 11:11:51,040 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:11:51,040 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:11:51,040 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:11:51,041 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:11:51,041 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:11:51,588 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:11:51,715 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:11:51,715 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:11:51,715 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:11:51,715 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:11:51,715 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:11:52,216 INFO    measure_sbc: [repeat 5] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:11:52,216 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:11:55,764 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857512.249-1 [1791857512.25-1791857515.58] latency=0.165s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:11:58,598 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:12:01,715 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.165 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.165}
+2026-10-13 11:12:06,599 INFO    measure_sbc: [repeat 5] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:12:06,600 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:12:06,608 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:12:11,716 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.165 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.165}
+2026-10-13 11:12:14,367 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857532.378-2 [1791857532.38-1791857534.30] latency=0.057s '신고하라고 전화드렸습니다.'
+2026-10-13 11:12:21,716 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.057 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.057}
+2026-10-13 11:12:21,768 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857536.698-3 [1791857536.70-1791857541.53] latency=0.218s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:12:27,529 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857543.994-4 [1791857543.99-1791857547.35] latency=0.159s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:12:31,716 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.159 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.001} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.159}
+2026-10-13 11:12:33,944 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857549.658-5 [1791857549.66-1791857553.72] latency=0.193s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:12:37,590 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:12:40,948 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:12:40,948 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:12:41,595 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:12:41,595 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:12:41,595 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:12:42,159 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:12:42,361 INFO    measure_sbc: [repeat 5] segments=4/4  CER=9.4%
+2026-10-13 11:12:42,379 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:12:42,380 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:12:42,380 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:12:42,381 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:12:42,381 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:12:42,930 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:12:43,056 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:12:43,057 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:12:43,056 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:12:43,057 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:12:43,057 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:12:43,557 INFO    measure_sbc: [repeat 6] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:12:43,608 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:12:47,155 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857563.641-1 [1791857563.64-1791857566.97] latency=0.165s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:12:49,990 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:12:53,057 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.165 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.165}
+2026-10-13 11:12:57,991 INFO    measure_sbc: [repeat 6] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:12:57,992 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:12:58,000 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:13:03,057 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.165 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.165}
+2026-10-13 11:13:05,757 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857583.769-2 [1791857583.77-1791857585.69] latency=0.055s '신고하라고 전화드렸습니다.'
+2026-10-13 11:13:13,058 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.055 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.055}
+2026-10-13 11:13:13,151 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857588.089-3 [1791857588.09-1791857592.92] latency=0.209s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:13:18,921 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857595.385-4 [1791857595.39-1791857598.75] latency=0.159s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:13:23,058 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.159 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.159}
+2026-10-13 11:13:25,334 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857601.049-5 [1791857601.05-1791857605.11] latency=0.193s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:13:28,982 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:13:32,338 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:13:32,339 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:13:32,987 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:13:32,987 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:13:33,187 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:13:33,551 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:13:33,753 INFO    measure_sbc: [repeat 6] segments=4/4  CER=9.4%
+2026-10-13 11:13:33,771 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:13:33,771 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:13:33,771 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:13:33,772 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:13:33,772 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:13:34,317 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:13:34,442 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:13:34,443 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:13:34,443 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:13:34,443 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:13:34,443 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:13:34,943 INFO    measure_sbc: [repeat 7] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:13:34,944 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:13:38,488 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857614.977-1 [1791857614.98-1791857618.31] latency=0.163s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:13:41,327 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:13:44,443 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.163 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.163}
+2026-10-13 11:13:49,327 INFO    measure_sbc: [repeat 7] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:13:49,378 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:13:49,387 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:13:54,444 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.163 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.163}
+2026-10-13 11:13:57,142 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857635.156-2 [1791857635.16-1791857637.08] latency=0.054s '신고하라고 전화드렸습니다.'
+2026-10-13 11:14:04,444 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.054 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.054}
+2026-10-13 11:14:04,539 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857639.476-3 [1791857639.48-1791857644.31] latency=0.211s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:14:10,314 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857646.772-4 [1791857646.77-1791857650.13] latency=0.166s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:14:14,444 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.166 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.166}
+2026-10-13 11:14:16,722 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857652.436-5 [1791857652.44-1791857656.50] latency=0.194s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:14:20,368 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:14:23,725 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:14:23,725 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:14:24,374 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:14:24,374 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:14:24,573 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:14:24,939 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:14:25,141 INFO    measure_sbc: [repeat 7] segments=4/4  CER=9.4%
+2026-10-13 11:14:25,159 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:14:25,160 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:14:25,160 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:14:25,160 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:14:25,160 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:14:25,707 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:14:25,833 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:14:25,834 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:14:25,833 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:14:25,834 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:14:25,834 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:14:26,334 INFO    measure_sbc: [repeat 8] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:14:26,385 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:14:29,933 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857666.418-1 [1791857666.42-1791857669.75] latency=0.166s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:14:32,767 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:14:35,834 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.166 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.166}
+2026-10-13 11:14:40,768 INFO    measure_sbc: [repeat 8] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:14:40,769 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:14:40,777 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:14:45,834 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.166 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.166}
+2026-10-13 11:14:48,535 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857686.546-2 [1791857686.55-1791857688.47] latency=0.056s '신고하라고 전화드렸습니다.'
+2026-10-13 11:14:55,835 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.056 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.056}
+2026-10-13 11:14:55,928 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857690.866-3 [1791857690.87-1791857695.70] latency=0.209s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:15:01,694 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857698.162-4 [1791857698.16-1791857701.52] latency=0.155s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:15:05,835 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.155 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.155}
+2026-10-13 11:15:08,112 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857703.826-5 [1791857703.83-1791857707.89] latency=0.192s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:15:11,759 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:15:15,116 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:15:15,116 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:15:15,763 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:15:15,764 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:15:15,964 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:15:16,328 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:15:16,530 INFO    measure_sbc: [repeat 8] segments=4/4  CER=9.4%
+2026-10-13 11:15:16,548 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:15:16,548 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:15:16,548 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:15:16,549 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:15:16,549 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:15:17,096 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:15:17,221 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:15:17,221 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:15:17,221 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:15:17,221 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:15:17,221 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:15:17,722 INFO    measure_sbc: [repeat 9] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:15:17,772 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:15:21,322 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857717.805-1 [1791857717.81-1791857721.13] latency=0.167s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:15:24,154 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:15:27,222 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.167 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.167}
+2026-10-13 11:15:32,155 INFO    measure_sbc: [repeat 9] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:15:32,156 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:15:32,165 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:15:37,222 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.167 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.167}
+2026-10-13 11:15:39,924 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857737.933-2 [1791857737.93-1791857739.85] latency=0.059s '신고하라고 전화드렸습니다.'
+2026-10-13 11:15:47,222 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.059 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.059}
+2026-10-13 11:15:47,345 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857742.253-3 [1791857742.25-1791857747.09] latency=0.239s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:15:53,084 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857749.550-4 [1791857749.55-1791857752.91] latency=0.158s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:15:57,222 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.158 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.158}
+2026-10-13 11:15:59,496 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857755.213-5 [1791857755.21-1791857759.28] latency=0.190s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:16:03,146 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:16:06,499 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:16:06,500 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:16:07,150 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:16:07,151 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:16:07,151 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:16:07,710 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:16:07,912 INFO    measure_sbc: [repeat 9] segments=4/4  CER=9.4%
+2026-10-13 11:16:07,930 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:16:07,931 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:16:07,931 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:16:07,931 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:16:07,931 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:16:08,479 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:16:08,606 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:16:08,606 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:16:08,607 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:16:08,606 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:16:08,607 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:16:09,107 INFO    measure_sbc: [repeat 10] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:16:09,158 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:16:12,711 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857769.191-1 [1791857769.19-1791857772.52] latency=0.171s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:16:15,540 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:16:18,607 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.171 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.171}
+2026-10-13 11:16:23,541 INFO    measure_sbc: [repeat 10] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:16:23,541 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:16:23,550 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:16:28,607 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.171 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.171}
+2026-10-13 11:16:31,311 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857789.319-2 [1791857789.32-1791857791.24] latency=0.060s '신고하라고 전화드렸습니다.'
+2026-10-13 11:16:38,607 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.060 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.06}
+2026-10-13 11:16:38,709 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857793.639-3 [1791857793.64-1791857798.47] latency=0.217s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:16:44,468 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857800.935-4 [1791857800.94-1791857804.30] latency=0.157s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:16:48,608 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.157 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.157}
+2026-10-13 11:16:50,879 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857806.599-5 [1791857806.60-1791857810.66] latency=0.188s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:16:54,532 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:16:57,882 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:16:57,882 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:16:58,535 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:16:58,536 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:16:58,536 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:16:59,094 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:16:59,296 INFO    measure_sbc: [repeat 10] segments=4/4  CER=9.4%
+2026-10-13 11:16:59,314 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:16:59,314 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:16:59,314 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:16:59,315 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:16:59,315 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:16:59,870 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:16:59,997 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:16:59,997 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:16:59,998 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:16:59,998 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:16:59,997 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:17:00,498 INFO    measure_sbc: [repeat 11] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:17:00,549 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:17:04,100 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857820.582-1 [1791857820.58-1791857823.91] latency=0.169s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:17:06,931 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:17:09,998 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.169 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.169}
+2026-10-13 11:17:14,932 INFO    measure_sbc: [repeat 11] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:17:14,933 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:17:14,941 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:17:19,998 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.169 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.169}
+2026-10-13 11:17:22,700 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857840.710-2 [1791857840.71-1791857842.63] latency=0.057s '신고하라고 전화드렸습니다.'
+2026-10-13 11:17:29,999 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.057 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.057}
+2026-10-13 11:17:30,098 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857845.030-3 [1791857845.03-1791857849.86] latency=0.215s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:17:35,860 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857852.326-4 [1791857852.33-1791857855.69] latency=0.158s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:17:39,999 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.158 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.158}
+2026-10-13 11:17:42,268 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857857.990-5 [1791857857.99-1791857862.05] latency=0.186s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:17:45,922 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:17:49,272 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:17:49,272 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:17:49,926 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:17:49,927 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:17:50,126 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:17:50,485 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:17:50,686 INFO    measure_sbc: [repeat 11] segments=4/4  CER=9.4%
+2026-10-13 11:17:50,705 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:17:50,705 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:17:50,705 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:17:50,706 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:17:50,706 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:17:51,266 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:17:51,392 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:17:51,392 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:17:51,392 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:17:51,392 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:17:51,392 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:17:51,893 INFO    measure_sbc: [repeat 12] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:17:51,944 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:17:55,495 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857871.977-1 [1791857871.98-1791857875.30] latency=0.170s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:17:58,326 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:18:01,393 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.170 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.17}
+2026-10-13 11:18:06,326 INFO    measure_sbc: [repeat 12] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:18:06,377 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:18:06,386 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:18:11,393 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.170 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.17}
+2026-10-13 11:18:14,143 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857892.155-2 [1791857892.16-1791857894.08] latency=0.056s '신고하라고 전화드렸습니다.'
+2026-10-13 11:18:21,393 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.056 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.056}
+2026-10-13 11:18:21,548 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857896.475-3 [1791857896.48-1791857901.31] latency=0.220s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:18:27,305 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857903.771-4 [1791857903.77-1791857907.13] latency=0.158s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:18:31,393 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.158 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.158}
+2026-10-13 11:18:33,718 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857909.435-5 [1791857909.43-1791857913.50] latency=0.191s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:18:37,368 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:18:40,722 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:18:40,722 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:18:41,373 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:18:41,373 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:18:41,573 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:18:41,932 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:18:42,134 INFO    measure_sbc: [repeat 12] segments=4/4  CER=9.4%
+2026-10-13 11:18:42,152 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:18:42,152 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:18:42,152 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:18:42,153 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:18:42,153 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:18:42,717 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:18:42,843 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:18:42,843 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:18:42,843 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:18:42,843 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:18:42,843 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:18:43,343 INFO    measure_sbc: [repeat 13] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:18:43,345 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:18:46,895 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857923.377-1 [1791857923.38-1791857926.71] latency=0.169s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:18:49,727 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:18:52,843 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.169 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.169}
+2026-10-13 11:18:57,727 INFO    measure_sbc: [repeat 13] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:18:57,778 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:18:57,787 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:19:02,844 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.169 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.169}
+2026-10-13 11:19:05,547 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857943.556-2 [1791857943.56-1791857945.48] latency=0.058s '신고하라고 전화드렸습니다.'
+2026-10-13 11:19:12,844 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.058 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.058}
+2026-10-13 11:19:12,946 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857947.876-3 [1791857947.88-1791857952.71] latency=0.217s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:19:18,710 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857955.172-4 [1791857955.17-1791857958.53] latency=0.161s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:19:22,844 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.161 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.161}
+2026-10-13 11:19:25,119 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857960.836-5 [1791857960.84-1791857964.90] latency=0.190s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:19:28,769 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:19:32,123 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:19:32,123 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:19:32,774 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:19:32,774 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:19:32,973 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:19:33,334 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:19:33,536 INFO    measure_sbc: [repeat 13] segments=4/4  CER=9.4%
+2026-10-13 11:19:33,555 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:19:33,555 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:19:33,555 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:19:33,556 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:19:33,556 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:19:34,106 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:19:34,231 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:19:34,232 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:19:34,232 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:19:34,231 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:19:34,232 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:19:34,732 INFO    measure_sbc: [repeat 14] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:19:34,783 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:19:38,328 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857974.816-1 [1791857974.82-1791857978.14] latency=0.164s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:19:41,165 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:19:44,232 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.164 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.164}
+2026-10-13 11:19:49,165 INFO    measure_sbc: [repeat 14] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:19:49,166 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:19:49,175 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:19:54,232 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.164 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.164}
+2026-10-13 11:19:56,931 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857994.944-2 [1791857994.94-1791857996.86] latency=0.055s '신고하라고 전화드렸습니다.'
+2026-10-13 11:20:04,233 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.055 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.055}
+2026-10-13 11:20:04,331 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791857999.264-3 [1791857999.26-1791858004.10] latency=0.214s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:20:10,092 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858006.559-4 [1791858006.56-1791858009.92] latency=0.156s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:20:14,233 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.156 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.156}
+2026-10-13 11:20:16,513 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858012.224-5 [1791858012.22-1791858016.29] latency=0.196s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:20:20,156 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:20:23,516 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:20:23,516 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:20:24,161 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:20:24,161 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:20:24,161 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:20:24,728 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:20:24,929 INFO    measure_sbc: [repeat 14] segments=4/4  CER=9.4%
+2026-10-13 11:20:24,948 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:20:24,948 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:20:24,948 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:20:24,949 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:20:24,949 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:20:25,496 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:20:25,621 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:20:25,621 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:20:25,621 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:20:25,621 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:20:25,621 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:20:26,122 INFO    measure_sbc: [repeat 15] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:20:26,173 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:20:29,721 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858026.206-1 [1791858026.21-1791858029.53] latency=0.166s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:20:32,555 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:20:35,622 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.166 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.166}
+2026-10-13 11:20:40,556 INFO    measure_sbc: [repeat 15] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:20:40,557 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:20:40,565 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:20:45,622 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.166 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.166}
+2026-10-13 11:20:48,323 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858046.334-2 [1791858046.33-1791858048.25] latency=0.056s '신고하라고 전화드렸습니다.'
+2026-10-13 11:20:55,622 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.056 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.056}
+2026-10-13 11:20:55,716 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858050.654-3 [1791858050.65-1791858055.49] latency=0.209s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:21:01,491 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858057.950-4 [1791858057.95-1791858061.31] latency=0.165s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:21:05,622 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.165 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.165}
+2026-10-13 11:21:07,903 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858063.614-5 [1791858063.61-1791858067.68] latency=0.196s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:21:11,546 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:21:14,907 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:21:14,907 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:21:15,550 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:21:15,551 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:21:15,750 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:21:16,118 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:21:16,319 INFO    measure_sbc: [repeat 15] segments=4/4  CER=9.4%
+2026-10-13 11:21:16,338 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:21:16,338 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:21:16,338 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:21:16,339 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:21:16,339 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:21:16,891 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:21:17,017 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:21:17,018 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:21:17,018 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:21:17,018 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:21:17,018 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:21:17,518 INFO    measure_sbc: [repeat 16] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:21:17,569 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:21:21,118 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858077.602-1 [1791858077.60-1791858080.93] latency=0.166s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:21:23,950 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:21:27,018 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.166 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.166}
+2026-10-13 11:21:31,950 INFO    measure_sbc: [repeat 16] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:21:31,951 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:21:31,960 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:21:37,019 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.166 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.166}
+2026-10-13 11:21:39,718 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858097.729-2 [1791858097.73-1791858099.65] latency=0.056s '신고하라고 전화드렸습니다.'
+2026-10-13 11:21:47,019 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.056 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.056}
+2026-10-13 11:21:47,112 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858102.049-3 [1791858102.05-1791858106.88] latency=0.210s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:21:52,880 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858109.345-4 [1791858109.34-1791858112.70] latency=0.159s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:21:57,020 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.159 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.159}
+2026-10-13 11:21:59,294 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858115.009-5 [1791858115.01-1791858119.07] latency=0.193s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:22:02,942 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:22:06,297 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:22:06,297 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:22:06,945 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:22:06,945 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:22:06,946 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:22:07,510 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:22:07,711 INFO    measure_sbc: [repeat 16] segments=4/4  CER=9.4%
+2026-10-13 11:22:07,729 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:22:07,729 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:22:07,729 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:22:07,730 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:22:07,730 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:22:08,286 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:22:08,412 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:22:08,413 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:22:08,413 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:22:08,413 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:22:08,413 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:22:08,913 INFO    measure_sbc: [repeat 17] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:22:08,964 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:22:12,513 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858128.997-1 [1791858129.00-1791858132.33] latency=0.167s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:22:15,346 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:22:18,413 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.167 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.167}
+2026-10-13 11:22:23,346 INFO    measure_sbc: [repeat 17] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:22:23,347 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:22:23,357 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:22:28,414 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.167 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.167}
+2026-10-13 11:22:31,115 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858149.126-2 [1791858149.13-1791858151.05] latency=0.057s '신고하라고 전화드렸습니다.'
+2026-10-13 11:22:38,414 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.057 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.057}
+2026-10-13 11:22:38,507 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858153.446-3 [1791858153.45-1791858158.28] latency=0.209s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:22:44,274 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858160.741-4 [1791858160.74-1791858164.10] latency=0.156s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:22:48,414 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.156 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.156}
+2026-10-13 11:22:50,690 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858166.405-5 [1791858166.41-1791858170.47] latency=0.193s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:22:54,339 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:22:57,694 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:22:57,694 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:22:58,343 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:22:58,343 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:22:58,544 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:22:58,905 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:22:59,107 INFO    measure_sbc: [repeat 17] segments=4/4  CER=9.4%
+2026-10-13 11:22:59,125 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:22:59,125 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:22:59,125 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:22:59,126 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:22:59,126 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:22:59,676 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:22:59,801 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:22:59,802 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:22:59,802 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:22:59,802 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:22:59,802 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:23:00,302 INFO    measure_sbc: [repeat 18] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:23:00,353 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:23:03,903 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858180.386-1 [1791858180.39-1791858183.71] latency=0.168s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:23:06,735 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:23:09,802 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.168 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.168}
+2026-10-13 11:23:14,735 INFO    measure_sbc: [repeat 18] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:23:14,786 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:23:14,795 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:23:19,803 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.168 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.168}
+2026-10-13 11:23:22,553 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858200.564-2 [1791858200.56-1791858202.48] latency=0.057s '신고하라고 전화드렸습니다.'
+2026-10-13 11:23:29,803 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.057 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.057}
+2026-10-13 11:23:29,950 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858204.884-3 [1791858204.88-1791858209.72] latency=0.213s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:23:35,714 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858212.180-4 [1791858212.18-1791858215.54] latency=0.158s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:23:39,803 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.158 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.158}
+2026-10-13 11:23:42,128 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858217.844-5 [1791858217.84-1791858221.91] latency=0.192s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:23:45,777 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:23:49,133 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:23:49,133 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:23:49,780 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:23:49,781 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:23:49,781 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:23:50,343 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:23:50,544 INFO    measure_sbc: [repeat 18] segments=4/4  CER=9.4%
+2026-10-13 11:23:50,563 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:23:50,563 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:23:50,563 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:23:50,564 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:23:50,564 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:23:51,116 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:23:51,242 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:23:51,242 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:23:51,242 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:23:51,242 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:23:51,242 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:23:51,743 INFO    measure_sbc: [repeat 19] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:23:51,744 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:23:55,294 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858231.777-1 [1791858231.78-1791858235.10] latency=0.169s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:23:58,126 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:24:01,243 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.169 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.169}
+2026-10-13 11:24:06,126 INFO    measure_sbc: [repeat 19] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:24:06,127 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:24:06,136 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:24:11,243 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.169 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.169}
+2026-10-13 11:24:13,893 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858251.905-2 [1791858251.91-1791858253.83] latency=0.056s '신고하라고 전화드렸습니다.'
+2026-10-13 11:24:21,243 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.056 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.056}
+2026-10-13 11:24:21,290 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858256.225-3 [1791858256.22-1791858261.06] latency=0.212s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:24:27,060 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858263.521-4 [1791858263.52-1791858266.88] latency=0.163s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:24:31,244 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.163 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.163}
+2026-10-13 11:24:33,466 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858269.185-5 [1791858269.18-1791858273.25] latency=0.189s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:24:37,117 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:24:40,470 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:24:40,470 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:24:41,122 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:24:41,122 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:24:41,322 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:24:41,679 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:24:41,880 INFO    measure_sbc: [repeat 19] segments=4/4  CER=9.4%
+2026-10-13 11:24:41,899 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:24:41,899 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:24:41,899 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:24:41,900 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:24:41,900 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:24:42,458 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:24:42,583 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:24:42,583 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:24:42,583 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:24:42,584 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:24:42,584 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:24:43,084 INFO    measure_sbc: [repeat 20] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:24:43,135 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:24:46,684 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858283.168-1 [1791858283.17-1791858286.50] latency=0.168s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:24:49,517 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:24:52,584 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.168 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.168}
+2026-10-13 11:24:57,517 INFO    measure_sbc: [repeat 20] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:24:57,568 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:24:57,577 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:25:02,585 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.168 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.168}
+2026-10-13 11:25:05,336 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858303.346-2 [1791858303.35-1791858305.27] latency=0.058s '신고하라고 전화드렸습니다.'
+2026-10-13 11:25:12,585 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.058 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.058}
+2026-10-13 11:25:12,738 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858307.666-3 [1791858307.67-1791858312.50] latency=0.219s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:25:18,503 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858314.962-4 [1791858314.96-1791858318.32] latency=0.165s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:25:22,585 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.165 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.165}
+2026-10-13 11:25:24,914 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858320.626-5 [1791858320.63-1791858324.69] latency=0.196s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:25:28,559 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:25:31,917 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:25:31,917 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:25:32,562 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:25:32,562 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:25:32,563 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:25:33,130 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:25:33,332 INFO    measure_sbc: [repeat 20] segments=4/4  CER=9.4%
+2026-10-13 11:25:33,350 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:25:33,350 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:25:33,351 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:25:33,351 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:25:33,351 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:25:33,911 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:25:34,038 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:25:34,038 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:25:34,038 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:25:34,039 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:25:34,039 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:25:34,539 INFO    measure_sbc: [repeat 21] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:25:34,590 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:25:38,140 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858334.623-1 [1791858334.62-1791858337.95] latency=0.169s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:25:40,972 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:25:44,039 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.169 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.169}
+2026-10-13 11:25:48,972 INFO    measure_sbc: [repeat 21] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:25:49,023 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:25:49,032 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:25:54,039 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.169 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.169}
+2026-10-13 11:25:56,789 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858354.801-2 [1791858354.80-1791858356.72] latency=0.056s '신고하라고 전화드렸습니다.'
+2026-10-13 11:26:04,039 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.056 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.056}
+2026-10-13 11:26:04,184 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858359.121-3 [1791858359.12-1791858363.95] latency=0.211s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:26:09,953 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858366.417-4 [1791858366.42-1791858369.78] latency=0.159s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:26:14,040 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.159 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.159}
+2026-10-13 11:26:16,369 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858372.081-5 [1791858372.08-1791858376.15] latency=0.195s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:26:20,013 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:26:23,373 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:26:23,373 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:26:24,016 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:26:24,017 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:26:24,017 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:26:24,582 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:26:24,784 INFO    measure_sbc: [repeat 21] segments=4/4  CER=9.4%
+2026-10-13 11:26:24,802 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:26:24,803 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:26:24,803 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:26:24,803 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:26:24,803 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:26:25,361 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:26:25,487 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:26:25,488 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:26:25,488 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:26:25,488 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:26:25,487 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:26:25,988 INFO    measure_sbc: [repeat 22] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:26:26,039 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:26:29,588 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858386.072-1 [1791858386.07-1791858389.40] latency=0.168s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:26:32,421 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:26:35,488 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.168 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.168}
+2026-10-13 11:26:40,422 INFO    measure_sbc: [repeat 22] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:26:40,423 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:26:40,432 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:26:45,488 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.168 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.168}
+2026-10-13 11:26:48,188 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858406.201-2 [1791858406.20-1791858408.12] latency=0.055s '신고하라고 전화드렸습니다.'
+2026-10-13 11:26:55,489 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.055 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.055}
+2026-10-13 11:26:55,587 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858410.521-3 [1791858410.52-1791858415.35] latency=0.214s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:27:01,351 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858417.817-4 [1791858417.82-1791858421.18] latency=0.158s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:27:05,489 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.158 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.158}
+2026-10-13 11:27:07,767 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858423.481-5 [1791858423.48-1791858427.54] latency=0.194s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:27:11,413 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:27:14,771 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:27:14,771 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:27:15,417 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:27:15,417 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:27:15,418 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:27:15,982 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:27:16,184 INFO    measure_sbc: [repeat 22] segments=4/4  CER=9.4%
+2026-10-13 11:27:16,202 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:27:16,202 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:27:16,202 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:27:16,203 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:27:16,203 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:27:16,757 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:27:16,883 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:27:16,884 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:27:16,884 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:27:16,884 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:27:16,884 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:27:17,384 INFO    measure_sbc: [repeat 23] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:27:17,435 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:27:20,983 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858437.468-1 [1791858437.47-1791858440.80] latency=0.165s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:27:23,818 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:27:26,885 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.165 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.165}
+2026-10-13 11:27:31,818 INFO    measure_sbc: [repeat 23] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:27:31,819 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:27:31,828 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:27:36,885 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.165 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.165}
+2026-10-13 11:27:39,584 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858457.597-2 [1791858457.60-1791858459.52] latency=0.055s '신고하라고 전화드렸습니다.'
+2026-10-13 11:27:46,885 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.055 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.055}
+2026-10-13 11:27:46,992 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858461.917-3 [1791858461.92-1791858466.75] latency=0.223s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:27:52,749 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858469.213-4 [1791858469.21-1791858472.57] latency=0.160s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:27:56,885 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.160 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.16}
+2026-10-13 11:27:59,157 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858474.877-5 [1791858474.88-1791858478.94] latency=0.188s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:28:02,810 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:28:06,162 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:28:06,162 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:28:06,814 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:28:06,814 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:28:06,814 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:28:07,374 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:28:07,575 INFO    measure_sbc: [repeat 23] segments=4/4  CER=9.4%
+2026-10-13 11:28:07,593 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:28:07,593 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:28:07,593 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:28:07,594 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:28:07,594 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:28:08,145 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:28:08,271 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:28:08,272 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:28:08,272 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:28:08,272 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:28:08,272 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:28:08,773 INFO    measure_sbc: [repeat 24] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:28:08,774 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:28:12,321 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858488.806-1 [1791858488.81-1791858492.13] latency=0.165s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:28:15,156 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:28:18,272 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.165 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.165}
+2026-10-13 11:28:23,156 INFO    measure_sbc: [repeat 24] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:28:23,207 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:28:23,216 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:28:28,272 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.165 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.165}
+2026-10-13 11:28:30,974 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858508.985-2 [1791858508.98-1791858510.90] latency=0.057s '신고하라고 전화드렸습니다.'
+2026-10-13 11:28:38,273 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.057 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.057}
+2026-10-13 11:28:38,366 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858513.305-3 [1791858513.30-1791858518.14] latency=0.209s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:28:44,137 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858520.601-4 [1791858520.60-1791858523.96] latency=0.160s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:28:48,273 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.160 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.16}
+2026-10-13 11:28:50,561 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858526.265-5 [1791858526.26-1791858530.33] latency=0.204s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:28:54,197 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:28:57,564 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:28:57,565 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:28:58,202 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:28:58,202 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:28:58,402 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:28:58,776 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:28:58,978 INFO    measure_sbc: [repeat 24] segments=4/4  CER=9.4%
+2026-10-13 11:28:58,996 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:28:58,997 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:28:58,997 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:28:58,997 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:28:58,997 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:28:59,550 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:28:59,677 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:28:59,677 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:28:59,677 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:28:59,677 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:28:59,677 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:29:00,178 INFO    measure_sbc: [repeat 25] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:29:00,179 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:29:03,728 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858540.211-1 [1791858540.21-1791858543.54] latency=0.167s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:29:06,560 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:29:09,678 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.167 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.167}
+2026-10-13 11:29:14,561 INFO    measure_sbc: [repeat 25] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:29:14,562 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:29:14,571 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:29:19,678 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.167 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.167}
+2026-10-13 11:29:22,327 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858560.340-2 [1791858560.34-1791858562.26] latency=0.055s '신고하라고 전화드렸습니다.'
+2026-10-13 11:29:29,678 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.055 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.055}
+2026-10-13 11:29:29,727 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858564.660-3 [1791858564.66-1791858569.49] latency=0.215s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:29:35,502 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858571.956-4 [1791858571.96-1791858575.32] latency=0.169s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:29:39,678 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.169 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.169}
+2026-10-13 11:29:41,903 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858577.620-5 [1791858577.62-1791858581.68] latency=0.191s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:29:45,552 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:29:48,906 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:29:48,906 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:29:49,556 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:29:49,556 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:29:49,556 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:29:50,118 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:29:50,320 INFO    measure_sbc: [repeat 25] segments=4/4  CER=9.4%
+2026-10-13 11:29:50,338 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:29:50,338 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:29:50,338 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:29:50,339 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:29:50,339 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:29:50,897 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:29:51,022 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:29:51,023 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:29:51,023 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:29:51,023 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:29:51,023 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:29:51,523 INFO    measure_sbc: [repeat 26] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:29:51,574 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:29:55,123 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858591.607-1 [1791858591.61-1791858594.94] latency=0.167s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:29:57,955 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:30:01,023 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.167 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.167}
+2026-10-13 11:30:05,956 INFO    measure_sbc: [repeat 26] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:30:05,957 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:30:05,965 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:30:11,024 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.167 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.167}
+2026-10-13 11:30:13,722 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858611.734-2 [1791858611.73-1791858613.65] latency=0.055s '신고하라고 전화드렸습니다.'
+2026-10-13 11:30:21,024 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.055 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.055}
+2026-10-13 11:30:21,118 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858616.054-3 [1791858616.05-1791858620.89] latency=0.211s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:30:26,883 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858623.350-4 [1791858623.35-1791858626.71] latency=0.157s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:30:31,024 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.157 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.157}
+2026-10-13 11:30:33,295 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858629.014-5 [1791858629.01-1791858633.08] latency=0.188s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:30:36,946 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:30:40,298 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:30:40,299 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:30:40,950 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:30:40,950 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:30:40,952 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:30:41,509 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:30:41,711 INFO    measure_sbc: [repeat 26] segments=4/4  CER=9.4%
+2026-10-13 11:30:41,729 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:30:41,729 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:30:41,730 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:30:41,730 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:30:41,730 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:30:42,282 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:30:42,408 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:30:42,408 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:30:42,409 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:30:42,409 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:30:42,408 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:30:42,909 INFO    measure_sbc: [repeat 27] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:30:42,910 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:30:46,456 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858642.943-1 [1791858642.94-1791858646.27] latency=0.164s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:30:49,292 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:30:52,409 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.164 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.164}
+2026-10-13 11:30:57,292 INFO    measure_sbc: [repeat 27] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:30:57,343 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:30:57,352 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:31:02,409 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.164 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.164}
+2026-10-13 11:31:05,108 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858663.121-2 [1791858663.12-1791858665.04] latency=0.055s '신고하라고 전화드렸습니다.'
+2026-10-13 11:31:12,409 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.055 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.055}
+2026-10-13 11:31:12,503 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858667.441-3 [1791858667.44-1791858672.27] latency=0.210s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:31:18,271 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858674.737-4 [1791858674.74-1791858678.10] latency=0.157s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:31:22,410 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.157 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.157}
+2026-10-13 11:31:24,683 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858680.401-5 [1791858680.40-1791858684.47] latency=0.189s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:31:28,333 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:31:31,686 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:31:31,687 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:31:32,337 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:31:32,338 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:31:32,338 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:31:32,899 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:31:33,101 INFO    measure_sbc: [repeat 27] segments=4/4  CER=9.4%
+2026-10-13 11:31:33,119 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:31:33,119 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:31:33,120 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:31:33,120 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:31:33,120 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:31:33,677 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:31:33,804 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:31:33,804 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:31:33,804 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:31:33,805 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:31:33,805 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:31:34,305 INFO    measure_sbc: [repeat 28] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:31:34,356 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:31:37,902 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858694.389-1 [1791858694.39-1791858697.72] latency=0.164s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:31:40,738 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:31:43,805 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.164 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.164}
+2026-10-13 11:31:48,739 INFO    measure_sbc: [repeat 28] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:31:48,790 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:31:48,799 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:31:53,805 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.164 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.164}
+2026-10-13 11:31:56,557 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858714.568-2 [1791858714.57-1791858716.49] latency=0.056s '신고하라고 전화드렸습니다.'
+2026-10-13 11:32:03,805 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.056 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.056}
+2026-10-13 11:32:03,958 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858718.887-3 [1791858718.89-1791858723.72] latency=0.217s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:32:09,723 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858726.184-4 [1791858726.18-1791858729.54] latency=0.162s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:32:13,806 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.162 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.162}
+2026-10-13 11:32:16,135 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858731.847-5 [1791858731.85-1791858735.91] latency=0.195s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:32:19,781 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:32:23,140 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:32:23,140 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:32:23,785 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:32:23,785 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:32:23,786 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:32:24,352 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:32:24,553 INFO    measure_sbc: [repeat 28] segments=4/4  CER=9.4%
+2026-10-13 11:32:24,572 INFO    edge_voice.pipeline.orchestrator: Pipeline built with channels: ['rx']
+2026-10-13 11:32:24,572 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest starting (host=localhost:18830)
+2026-10-13 11:32:24,572 INFO    edge_voice.channel.router: ChannelRouter started for channels: ['rx']
+2026-10-13 11:32:24,573 INFO    edge_voice.audio_ingest.mqtt_client: Subscribed to stt/audio_chunks_rx for channel rx
+2026-10-13 11:32:24,573 INFO    edge_voice.audio_ingest.mqtt_client: Connected and subscribed to 1 channel(s)
+Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.
+2026-10-13 11:32:25,144 INFO    edge_voice.stt.stt_worker: STTWorker: model=/home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko arch=0
+2026-10-13 11:32:25,271 INFO    edge_voice.stt.stt_worker: STTWorker: model running on ONNX Runtime v1.23.2 (/home/ai/workspace/edge-voice/venv/lib/python3.12/site-packages/moonshine_voice.libs/libonnxruntime-13ab8084.so.1) -- model files=['decoder_model_merged.ort', 'encoder_model.ort'] at /home/ai/.cache/moonshine_voice/download.moonshine.ai/model/tiny-ko/quantized/tiny-ko
+2026-10-13 11:32:25,271 INFO    edge_voice.pipeline.supervisor: Supervisor started (watching 4 worker(s); watchdog=off)
+2026-10-13 11:32:25,271 INFO    edge_voice.observability.metrics: MetricsCollector started (emit_interval_s=10.0)
+2026-10-13 11:32:25,271 INFO    edge_voice.pipeline.orchestrator: Pipeline started
+2026-10-13 11:32:25,271 INFO    edge_voice.stt.stt_worker: STTWorker-rx started
+2026-10-13 11:32:25,772 INFO    measure_sbc: [repeat 29] warm-up: publishing /home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav, then a 8.0s settle window
+2026-10-13 11:32:25,823 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/characterization/testaudio/warmup.wav'] 86272 samples → 270 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:32:29,376 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858745.856-1 [1791858745.86-1791858749.18] latency=0.171s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:32:32,204 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 270 frames in 6.38s (0.8x real-time)
+2026-10-13 11:32:35,272 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.171 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.171}
+2026-10-13 11:32:40,205 INFO    measure_sbc: [repeat 29] publishing /home/ai/workspace/edge-voice/wav/rx_recorded_1.wav on channel rx (expect 4 segments)
+2026-10-13 11:32:40,256 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: resampling 8000 → 16000 Hz
+2026-10-13 11:32:40,265 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: ['/home/ai/workspace/edge-voice/wav/rx_recorded_1.wav'] 480000 samples → 1500 frames → {'rx': 'stt/audio_chunks_rx'} → localhost
+2026-10-13 11:32:45,272 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.171 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.171}
+2026-10-13 11:32:48,021 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858766.033-2 [1791858766.03-1791858767.95] latency=0.056s '신고하라고 전화드렸습니다.'
+2026-10-13 11:32:55,272 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.056 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.056}
+2026-10-13 11:32:55,423 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858770.353-3 [1791858770.35-1791858775.19] latency=0.217s '포항시 북구중앙상가 앞에 남자 두 명이 서로 주먹을 휘두르며 싸우고 있습니다.'
+2026-10-13 11:33:01,188 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858777.650-4 [1791858777.65-1791858781.01] latency=0.162s '네 주변 사람들이 말리고 있지만 계속 몸싸움을 하고 있습니다.'
+2026-10-13 11:33:05,273 INFO    edge_voice.observability.metrics: metrics snapshot: queues={'ingest': 0, 'routed': 0, 'segment_rx': 0} stt_latency_s=0.162 mqtt_connected=True restarts={'MqttAudioIngest': {'state': 'running', 'restarts': 0}, 'ChannelRouter': {'state': 'running', 'restarts': 0}, 'VADWorker': {'state': 'running', 'restarts': 0}, 'STTWorker-rx': {'state': 'running', 'restarts': 0}} vad_silero={'rx': 0.0} vad_rms_gate={'rx': 0.0} router_repacketize={'rx': 0.0} stt_channel={'rx': 0.162}
+2026-10-13 11:33:07,602 INFO    edge_voice.pipeline.orchestrator: TRANSCRIPT channel=rx segment=rx-1791858783.313-5 [1791858783.31-1791858787.38] latency=0.196s '한 명은 얼굴에 피가 나는 거 같고 다른 한 명은 넘어져서 다친 거 같습니다.'
+2026-10-13 11:33:11,246 INFO    edge_voice.utils.audio_generation.wav_source: WavSource: done — 1500 frames in 30.98s (1.0x real-time)
+2026-10-13 11:33:14,606 INFO    edge_voice.observability.metrics: MetricsCollector stopped
+2026-10-13 11:33:14,606 INFO    edge_voice.pipeline.supervisor: Supervisor stopped
+2026-10-13 11:33:15,250 WARNING edge_voice.audio_ingest.mqtt_client: Disconnected from MQTT broker (rc=DisconnectFlags(is_disconnect_packet_from_server=False))
+2026-10-13 11:33:15,250 INFO    edge_voice.audio_ingest.mqtt_client: MqttAudioIngest stopped
+2026-10-13 11:33:15,450 INFO    edge_voice.channel.router: ChannelRouter stopped
+2026-10-13 11:33:15,815 INFO    edge_voice.stt.stt_worker: STTWorker-rx stopped
+2026-10-13 11:33:16,019 INFO    measure_sbc: [repeat 29] segments=4/4  CER=9.4%
+
+====================================================================================================
+SBC: ops (x86_64)  wav=wav/rx_recorded_1.wav  n_repeats=30
+====================================================================================================
+  Full E2E latency: n=90  mean=210.9ms  p50=220.8ms  p95=239.1ms  min=171.8ms  max=259.5ms
+    of which STT decode: n=90  mean=188.8ms  p50=191.9ms  p95=217.9ms  min=154.7ms  max=238.6ms
+  CER: n=30  mean=9.4%  p50=9.4%  p95=9.4%  min=9.4%  max=9.4%
+
+Wrote characterization/results/sbc_compare/rerun/desktop4p-single/ops-cores0_2_4_6.json
