@@ -21,7 +21,7 @@
 
 ## Overview
 
-Real-time, dual-channel (Rx/Tx) transcription for edge devices, using Silero VAD for speech segmentation and Moonshine for multilingual STT. Light enough to run on a CPU — no GPU or NPU required — with partial (streaming) transcripts emitted before a turn finishes speaking. Built for any two-party audio source, where each party's audio arrives as its own MQTT stream and is transcribed independently, in order, with channel attribution preserved throughout.
+Real-time, dual-channel (Rx/Tx) transcription for edge devices, using Silero VAD for speech segmentation and Moonshine for multilingual STT. Lightweight enough to run on a plain CPU, with partial (streaming) transcripts emitted before a turn finishes speaking. Built for any two-party audio source, where each party's audio arrives as its own MQTT stream and is transcribed independently, in order, with channel attribution preserved throughout.
 
 <p align="center"><br><b>English</b><br></p>
 
@@ -43,7 +43,7 @@ Real-time, dual-channel (Rx/Tx) transcription for edge devices, using Silero VAD
 - **Segments** speech with Silero VAD, cutting turns on silence or a length cap.
 - **Transcribes** each channel independently with Moonshine, streaming partials before the turn ends.
 - **Fans out** ordered, channel-attributed transcripts to a web UI and structured logs.
-- **Runs** CPU-only — tested on Ubuntu 24.04 and Raspberry Pi 5.
+- **Runs** on modest edge hardware.
 
 ---
 
