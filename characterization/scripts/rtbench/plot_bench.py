@@ -35,11 +35,30 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 FLOAT_FIELDS_REQ = {
-    "iteration", "audio_duration_s", "arrival_time_s", "asr_start_time_s", "asr_finish_time_s",
-    "queue_wait_ms", "service_time_ms", "e2e_latency_ms", "rtf", "queue_depth_at_arrival",
-    "queue_depth_at_start", "cpu_percent", "cpu_freq_mhz", "cpu_temp_c", "rss_mb",
+    "iteration",
+    "audio_duration_s",
+    "arrival_time_s",
+    "asr_start_time_s",
+    "asr_finish_time_s",
+    "queue_wait_ms",
+    "service_time_ms",
+    "e2e_latency_ms",
+    "rtf",
+    "queue_depth_at_arrival",
+    "queue_depth_at_start",
+    "cpu_percent",
+    "cpu_freq_mhz",
+    "cpu_temp_c",
+    "rss_mb",
 }
-FLOAT_FIELDS_SAMPLE = {"elapsed_s", "queue_depth", "cpu_percent", "cpu_freq_mhz", "cpu_temp_c", "rss_mb"}
+FLOAT_FIELDS_SAMPLE = {
+    "elapsed_s",
+    "queue_depth",
+    "cpu_percent",
+    "cpu_freq_mhz",
+    "cpu_temp_c",
+    "rss_mb",
+}
 
 
 def _read_csv(path: Path, float_fields: set[str]) -> list[dict]:
@@ -69,7 +88,9 @@ def _sorted_levels(summaries: list[dict]) -> list[dict]:
     return sorted(summaries, key=lambda s: s["offered_load"])
 
 
-def plot_exp2(summaries: list[dict], requests_by_exp: dict, samples_by_exp: dict, out_dir: Path) -> None:
+def plot_exp2(
+    summaries: list[dict], requests_by_exp: dict, samples_by_exp: dict, out_dir: Path
+) -> None:
     if not summaries:
         return
     levels = _sorted_levels(summaries)
@@ -96,8 +117,13 @@ def plot_exp2(summaries: list[dict], requests_by_exp: dict, samples_by_exp: dict
     fig, ax = plt.subplots(figsize=(7, 5))
     for lv in levels:
         reqs = requests_by_exp.get(lv["experiment"], [])
-        ax.scatter([lv["offered_load"]] * len(reqs), [r["e2e_latency_ms"] for r in reqs],
-                   color="tab:blue", alpha=0.4, s=15)
+        ax.scatter(
+            [lv["offered_load"]] * len(reqs),
+            [r["e2e_latency_ms"] for r in reqs],
+            color="tab:blue",
+            alpha=0.4,
+            s=15,
+        )
     means = [lv["latency_ms"]["mean"] for lv in levels]
     ax.plot(loads, means, color="tab:red", marker="o", label="mean")
     ax.set_xlabel("Offered load (x realtime)")
@@ -148,11 +174,23 @@ def plot_exp2(summaries: list[dict], requests_by_exp: dict, samples_by_exp: dict
     plt.close(fig)
 
 
-def _vs_elapsed(summaries: list[dict], requests_by_exp: dict, samples_by_exp: dict, out_dir: Path,
-                 field: str, source: str, ylabel: str, title: str, filename: str, time_field: str) -> None:
+def _vs_elapsed(
+    summaries: list[dict],
+    requests_by_exp: dict,
+    samples_by_exp: dict,
+    out_dir: Path,
+    field: str,
+    source: str,
+    ylabel: str,
+    title: str,
+    filename: str,
+    time_field: str,
+) -> None:
     fig, ax = plt.subplots(figsize=(9, 5))
     for lv in _sorted_levels(summaries):
-        rows = (requests_by_exp if source == "requests" else samples_by_exp).get(lv["experiment"], [])
+        rows = (requests_by_exp if source == "requests" else samples_by_exp).get(
+            lv["experiment"], []
+        )
         if not rows:
             continue
         xs = [r[time_field] for r in rows]
@@ -167,41 +205,101 @@ def _vs_elapsed(summaries: list[dict], requests_by_exp: dict, samples_by_exp: di
     plt.close(fig)
 
 
-def plot_exp3(summaries: list[dict], requests_by_exp: dict, samples_by_exp: dict, out_dir: Path) -> None:
+def plot_exp3(
+    summaries: list[dict], requests_by_exp: dict, samples_by_exp: dict, out_dir: Path
+) -> None:
     if not summaries:
         return
-    _vs_elapsed(summaries, requests_by_exp, samples_by_exp, out_dir,
-                field="queue_depth", source="samples", ylabel="Queue depth (requests)",
-                title="Experiment 3: queue depth vs elapsed time",
-                filename="exp3_queue_depth_vs_time.png", time_field="elapsed_s")
-    _vs_elapsed(summaries, requests_by_exp, samples_by_exp, out_dir,
-                field="e2e_latency_ms", source="requests", ylabel="End-to-end latency (ms)",
-                title="Experiment 3: end-to-end latency vs elapsed time",
-                filename="exp3_latency_vs_time.png", time_field="asr_finish_time_s")
-    _vs_elapsed(summaries, requests_by_exp, samples_by_exp, out_dir,
-                field="queue_wait_ms", source="requests", ylabel="Queue wait time (ms)",
-                title="Experiment 3: queue wait time vs elapsed time",
-                filename="exp3_queue_wait_vs_time.png", time_field="arrival_time_s")
-    _vs_elapsed(summaries, requests_by_exp, samples_by_exp, out_dir,
-                field="service_time_ms", source="requests", ylabel="Service time (ms)",
-                title="Experiment 3: service time vs elapsed time",
-                filename="exp3_service_time_vs_time.png", time_field="asr_start_time_s")
-    _vs_elapsed(summaries, requests_by_exp, samples_by_exp, out_dir,
-                field="rss_mb", source="samples", ylabel="Process RSS (MB)",
-                title="Experiment 3: RSS vs elapsed time",
-                filename="exp3_rss_vs_time.png", time_field="elapsed_s")
-    _vs_elapsed(summaries, requests_by_exp, samples_by_exp, out_dir,
-                field="cpu_temp_c", source="samples", ylabel="CPU temperature (C)",
-                title="Experiment 3: CPU temperature vs elapsed time",
-                filename="exp3_temperature_vs_time.png", time_field="elapsed_s")
-    _vs_elapsed(summaries, requests_by_exp, samples_by_exp, out_dir,
-                field="cpu_freq_mhz", source="samples", ylabel="CPU frequency (MHz)",
-                title="Experiment 3: CPU frequency vs elapsed time",
-                filename="exp3_cpu_freq_vs_time.png", time_field="elapsed_s")
+    _vs_elapsed(
+        summaries,
+        requests_by_exp,
+        samples_by_exp,
+        out_dir,
+        field="queue_depth",
+        source="samples",
+        ylabel="Queue depth (requests)",
+        title="Experiment 3: queue depth vs elapsed time",
+        filename="exp3_queue_depth_vs_time.png",
+        time_field="elapsed_s",
+    )
+    _vs_elapsed(
+        summaries,
+        requests_by_exp,
+        samples_by_exp,
+        out_dir,
+        field="e2e_latency_ms",
+        source="requests",
+        ylabel="End-to-end latency (ms)",
+        title="Experiment 3: end-to-end latency vs elapsed time",
+        filename="exp3_latency_vs_time.png",
+        time_field="asr_finish_time_s",
+    )
+    _vs_elapsed(
+        summaries,
+        requests_by_exp,
+        samples_by_exp,
+        out_dir,
+        field="queue_wait_ms",
+        source="requests",
+        ylabel="Queue wait time (ms)",
+        title="Experiment 3: queue wait time vs elapsed time",
+        filename="exp3_queue_wait_vs_time.png",
+        time_field="arrival_time_s",
+    )
+    _vs_elapsed(
+        summaries,
+        requests_by_exp,
+        samples_by_exp,
+        out_dir,
+        field="service_time_ms",
+        source="requests",
+        ylabel="Service time (ms)",
+        title="Experiment 3: service time vs elapsed time",
+        filename="exp3_service_time_vs_time.png",
+        time_field="asr_start_time_s",
+    )
+    _vs_elapsed(
+        summaries,
+        requests_by_exp,
+        samples_by_exp,
+        out_dir,
+        field="rss_mb",
+        source="samples",
+        ylabel="Process RSS (MB)",
+        title="Experiment 3: RSS vs elapsed time",
+        filename="exp3_rss_vs_time.png",
+        time_field="elapsed_s",
+    )
+    _vs_elapsed(
+        summaries,
+        requests_by_exp,
+        samples_by_exp,
+        out_dir,
+        field="cpu_temp_c",
+        source="samples",
+        ylabel="CPU temperature (C)",
+        title="Experiment 3: CPU temperature vs elapsed time",
+        filename="exp3_temperature_vs_time.png",
+        time_field="elapsed_s",
+    )
+    _vs_elapsed(
+        summaries,
+        requests_by_exp,
+        samples_by_exp,
+        out_dir,
+        field="cpu_freq_mhz",
+        source="samples",
+        ylabel="CPU frequency (MHz)",
+        title="Experiment 3: CPU frequency vs elapsed time",
+        filename="exp3_cpu_freq_vs_time.png",
+        time_field="elapsed_s",
+    )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--results-dir", type=Path, required=True)
     args = parser.parse_args()
 

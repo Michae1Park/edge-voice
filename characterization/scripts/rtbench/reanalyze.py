@@ -94,7 +94,9 @@ def _load_samples(path: Path) -> list[QueueSample]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--results-dir", type=Path, required=True)
     parser.add_argument("--nominal-duration-s", type=float, default=180.0)
     args = parser.parse_args()
@@ -102,7 +104,9 @@ def main() -> None:
     requests = _load_requests(args.results_dir / "requests.csv")
     samples = _load_samples(args.results_dir / "queue_samples.csv")
 
-    experiments = sorted({r.experiment for r in requests}, key=lambda e: (e.split("_")[0], _parse_load(e)))
+    experiments = sorted(
+        {r.experiment for r in requests}, key=lambda e: (e.split("_")[0], _parse_load(e))
+    )
     levels: dict[str, LoadLevelResult] = {}
     for exp in experiments:
         exp_requests = [r for r in requests if r.experiment == exp]
@@ -146,7 +150,9 @@ def main() -> None:
         print_final_summary(exp2_summaries + exp3_summaries, exp3_levels)
 
     summary_path = args.results_dir / "summary.json"
-    summary_path.write_text(json.dumps({"exp2": exp2_summaries, "exp3": exp3_summaries}, indent=2, default=str))
+    summary_path.write_text(
+        json.dumps({"exp2": exp2_summaries, "exp3": exp3_summaries}, indent=2, default=str)
+    )
     print(f"\nRewrote {summary_path}")
 
 

@@ -52,7 +52,9 @@ import re
 import sys
 from pathlib import Path
 
-DEFAULT_METADATA_PATH = Path(__file__).resolve().parent.parent / "testaudio" / "metadata_boundary.json"
+DEFAULT_METADATA_PATH = (
+    Path(__file__).resolve().parent.parent / "testaudio" / "metadata_boundary.json"
+)
 
 SEGMENT_ID_RE = re.compile(r"segment=rx-([0-9]+\.[0-9]+)-([0-9]+)")
 MERGE_THRESHOLD_MULT = 1.3
@@ -68,7 +70,9 @@ def _segment_starts_from_log(log_text: str) -> list[tuple[int, float]]:
     return sorted(seen.items())
 
 
-def analyze(label: str, csv_path: Path, log_path: Path, metadata_path: Path = DEFAULT_METADATA_PATH) -> dict:
+def analyze(
+    label: str, csv_path: Path, log_path: Path, metadata_path: Path = DEFAULT_METADATA_PATH
+) -> dict:
     meta = json.loads(metadata_path.read_text())[label]
     n_per_loop = meta["n_repeats"]
     atomic_cycle_s = meta["atomic_segment_duration_s"] + meta["gap_s"]

@@ -75,7 +75,9 @@ COMBOS = [
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     args = parser.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -96,7 +98,13 @@ def main() -> None:
         gap_s = stretched_dur_s * (1 - occupancy) / occupancy
 
         cond = build_condition(
-            label, f"{label}.wav", gap_s, occupancy, stretched, sr, text,
+            label,
+            f"{label}.wav",
+            gap_s,
+            occupancy,
+            stretched,
+            sr,
+            text,
             extra={
                 "source_file": source_file,
                 "speed": speed,

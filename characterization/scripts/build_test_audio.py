@@ -118,7 +118,9 @@ def _repeats_for_target(speech_dur_s: float, gap_s: float, target_s: float) -> i
     return max(1, round(raw_n))
 
 
-def _tile_with_symmetric_gaps(speech_audio: np.ndarray, gap_s: float, n: int, sr: int) -> np.ndarray:
+def _tile_with_symmetric_gaps(
+    speech_audio: np.ndarray, gap_s: float, n: int, sr: int
+) -> np.ndarray:
     """N copies of speech_audio, each followed by a gap_s silence gap
     (including after the last copy) -- see module docstring on why the
     trailing gap is required, not just symmetry for its own sake."""
@@ -185,13 +187,15 @@ def build_condition(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     args = parser.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
     base_audio, sr, base_text = _load_base_utterance()
-    print(f"Base utterance: {BASE_UTTERANCE_FILE} ({len(base_audio) / sr:.3f}s) -- \"{base_text}\"")
+    print(f'Base utterance: {BASE_UTTERANCE_FILE} ({len(base_audio) / sr:.3f}s) -- "{base_text}"')
 
     warmup_path = build_warmup(base_audio, sr, args.out_dir)
     print(f"  warmup: utterance + {WARMUP_TRAILING_SILENCE_S}s trailing silence -> {warmup_path}")

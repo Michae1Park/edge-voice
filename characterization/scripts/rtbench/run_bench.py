@@ -46,12 +46,13 @@ import json
 import statistics
 import sys
 import time
-from dataclasses import asdict
 from pathlib import Path
 
 THIS_DIR = Path(__file__).resolve().parent
 CHARACTERIZATION_DIR = THIS_DIR.parent.parent
-sys.path.insert(0, str(THIS_DIR.parent))  # for `import edge_voice...` via src on sys.path already, and rtbench as a package
+sys.path.insert(
+    0, str(THIS_DIR.parent)
+)  # for `import edge_voice...` via src on sys.path already, and rtbench as a package
 sys.path.insert(0, str(THIS_DIR.parent.parent.parent / "src"))
 
 from rtbench.adapter import build_adapter  # noqa: E402
@@ -76,9 +77,9 @@ DEFAULT_LEVEL_DURATION_S = 180.0
 # Queue-depth slope during the ARRIVAL window only (drain phase excluded --
 # it always trends down by construction and would bias this). Units: queue
 # items per second.
-SLOPE_SUSTAINABLE_MAX = 0.02   # ~<=3.6 items grown over a 180s window: noise
+SLOPE_SUSTAINABLE_MAX = 0.02  # ~<=3.6 items grown over a 180s window: noise
 SLOPE_UNSUSTAINABLE_MIN = 0.08  # ~>=14.4 items grown over 180s: clear runaway
-DEPTH_BOUND_SMALL = 5.0        # end-of-window depth this small reads as "bounded"
+DEPTH_BOUND_SMALL = 5.0  # end-of-window depth this small reads as "bounded"
 # Server utilization rho = mean_service_time / arrival_interval (a single
 # sequential worker is a bounded queue iff rho < 1 -- standard M/D/1-style
 # reasoning). This is the PRIMARY signal, not a request-counting ratio: an
@@ -122,7 +123,11 @@ def classify_load(level: LoadLevelResult) -> tuple[str, str]:
     start_depth = sum(depths[:head]) / head if depths else 0.0
     end_depth = sum(depths[-head:]) / head if depths else 0.0
 
-    svc_mean_s = statistics.mean([r.service_time_ms / 1000.0 for r in level.requests]) if level.requests else 0.0
+    svc_mean_s = (
+        statistics.mean([r.service_time_ms / 1000.0 for r in level.requests])
+        if level.requests
+        else 0.0
+    )
     rho = svc_mean_s / level.arrival_interval_s if level.arrival_interval_s else float("inf")
 
     reason = (
@@ -130,7 +135,11 @@ def classify_load(level: LoadLevelResult) -> tuple[str, str]:
         f"end_depth={end_depth:.1f} (start={start_depth:.1f})"
     )
 
-    if rho <= UTIL_SUSTAINABLE_MAX and slope <= SLOPE_SUSTAINABLE_MAX and end_depth <= DEPTH_BOUND_SMALL:
+    if (
+        rho <= UTIL_SUSTAINABLE_MAX
+        and slope <= SLOPE_SUSTAINABLE_MAX
+        and end_depth <= DEPTH_BOUND_SMALL
+    ):
         return "SUSTAINABLE", reason
     if (
         rho >= UTIL_UNSUSTAINABLE_MIN
@@ -167,7 +176,9 @@ def summarize_level(level: LoadLevelResult) -> dict:
         "n_failed": level.n_failed,
         "avg_queue_depth": sum(depths) / len(depths) if depths else 0.0,
         "max_queue_depth": max(depths) if depths else 0,
-        "queue_growth_rate_per_s": linear_slope([s.elapsed_s for s in window], depths) if len(window) >= 2 else 0.0,
+        "queue_growth_rate_per_s": linear_slope([s.elapsed_s for s in window], depths)
+        if len(window) >= 2
+        else 0.0,
         "latency_ms": lat,
         "service_time_ms": svc,
         "queue_wait_ms": qwait,
@@ -204,14 +215,18 @@ def print_level_summary(s: dict) -> None:
         f"p99={lat['p99']:.0f} max={lat['max']:.0f} std={lat['std']:.0f}"
     )
     svc, rtf = s["service_time_ms"], s["rtf"]
-    print(f"    service time (ms): mean={svc['mean']:.0f}   RTF: mean={rtf['mean']:.3f} p95={rtf['p95']:.3f}")
+    print(
+        f"    service time (ms): mean={svc['mean']:.0f}   RTF: mean={rtf['mean']:.3f} p95={rtf['p95']:.3f}"
+    )
     cpu, temp, rss = s["cpu_percent"], s["cpu_temp_c"], s["rss_mb"]
     print(
         f"    CPU%={cpu['mean']:.0f} (max {cpu['max']:.0f})  temp={temp['mean']:.1f}C  "
         f"RSS={rss['mean']:.0f}MB (max {rss['max']:.0f})"
     )
     if s["drain_timed_out"]:
-        print(f"    WARNING: backlog drain hit the {s['drain_s']:.0f}s safety ceiling, still not empty")
+        print(
+            f"    WARNING: backlog drain hit the {s['drain_s']:.0f}s safety ceiling, still not empty"
+        )
     elif s["drain_s"] > 1.0:
         print(f"    backlog fully drained {s['drain_s']:.1f}s after arrivals stopped")
 
@@ -230,8 +245,10 @@ def run_experiment(
     results = []
     for load in loads:
         label = f"{name}_{load:.2f}x"
-        print(f"\n=== {label}: {audio_duration_s:.2f}s chunks every {audio_duration_s / load:.2f}s "
-              f"for {duration_s:.0f}s ===")
+        print(
+            f"\n=== {label}: {audio_duration_s:.2f}s chunks every {audio_duration_s / load:.2f}s "
+            f"for {duration_s:.0f}s ==="
+        )
         level = run_load_level(
             experiment=label,
             offered_load=load,
@@ -339,7 +356,9 @@ def print_final_summary(all_summaries: list[dict], exp3_levels: list[LoadLevelRe
         high = min(s["offered_load"] for s in unsustainable if s["offered_load"] > low)
         print(f"Saturation begins between: {low:.2f}x and {high:.2f}x realtime")
     elif unsustainable:
-        print(f"Saturation begins at or below: {min(s['offered_load'] for s in unsustainable):.2f}x realtime")
+        print(
+            f"Saturation begins at or below: {min(s['offered_load'] for s in unsustainable):.2f}x realtime"
+        )
     else:
         print("Saturation begins: not reached at any tested load")
 
@@ -347,25 +366,37 @@ def print_final_summary(all_summaries: list[dict], exp3_levels: list[LoadLevelRe
         worst = max(exp3_levels, key=lambda lv: lv.offered_load)
         n = overload_narrative(worst)
         print(f"\nAt overload (Experiment 3, {n['load']:.2f}x realtime):")
-        print(f"  queue growth: {n['queue_growth_shape']} "
-              f"(slope {n['queue_slope_first_half']:+.3f} -> {n['queue_slope_second_half']:+.3f} depth/s, "
-              f"peak depth {n['max_queue_depth']})")
-        print(f"  latency growth: {n['latency_ms_first_half']:.0f}ms -> {n['latency_ms_second_half']:.0f}ms "
-              f"(first half -> second half)")
-        print(f"  service time: {n['service_ms_first_half']:.0f}ms -> {n['service_ms_second_half']:.0f}ms")
+        print(
+            f"  queue growth: {n['queue_growth_shape']} "
+            f"(slope {n['queue_slope_first_half']:+.3f} -> {n['queue_slope_second_half']:+.3f} depth/s, "
+            f"peak depth {n['max_queue_depth']})"
+        )
+        print(
+            f"  latency growth: {n['latency_ms_first_half']:.0f}ms -> {n['latency_ms_second_half']:.0f}ms "
+            f"(first half -> second half)"
+        )
+        print(
+            f"  service time: {n['service_ms_first_half']:.0f}ms -> {n['service_ms_second_half']:.0f}ms"
+        )
         rss_delta = n["rss_mb_second_half"] - n["rss_mb_first_half"]
-        print(f"  RSS behavior: {n['rss_mb_first_half']:.0f}MB -> {n['rss_mb_second_half']:.0f}MB "
-              f"({'growing' if rss_delta > 20 else 'stable'})")
+        print(
+            f"  RSS behavior: {n['rss_mb_first_half']:.0f}MB -> {n['rss_mb_second_half']:.0f}MB "
+            f"({'growing' if rss_delta > 20 else 'stable'})"
+        )
         print(f"  temperature: {n['temp_c_first_half']:.1f}C -> {n['temp_c_second_half']:.1f}C")
-        print(f"  CPU frequency: {n['freq_mhz_first_half']:.0f}MHz -> {n['freq_mhz_second_half']:.0f}MHz "
-              f"({'THROTTLING SUSPECTED' if n['throttling_suspected'] else 'stable'})")
+        print(
+            f"  CPU frequency: {n['freq_mhz_first_half']:.0f}MHz -> {n['freq_mhz_second_half']:.0f}MHz "
+            f"({'THROTTLING SUSPECTED' if n['throttling_suspected'] else 'stable'})"
+        )
         if n["n_failed"]:
             print(f"  failures: {n['n_failed']}/{n['n_offered']} requests failed")
     print("=" * 70)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--adapter", choices=["moonshine", "dummy"], default="moonshine")
     parser.add_argument("--audio", type=Path, default=DEFAULT_AUDIO)
     parser.add_argument("--results-dir", type=Path, default=DEFAULT_RESULTS_DIR)
@@ -375,14 +406,24 @@ def main() -> None:
     parser.add_argument("--exp2-duration-s", type=float, default=DEFAULT_LEVEL_DURATION_S)
     parser.add_argument("--exp3-duration-s", type=float, default=DEFAULT_LEVEL_DURATION_S)
     parser.add_argument("--sample-interval-s", type=float, default=0.5)
-    parser.add_argument("--queue-maxsize", type=int, default=0, help="0 = unbounded (default, per spec)")
-    parser.add_argument("--max-drain-s", type=float, default=600.0,
-                         help="Safety ceiling on post-arrival backlog drain per load level (default 600s)")
+    parser.add_argument(
+        "--queue-maxsize", type=int, default=0, help="0 = unbounded (default, per spec)"
+    )
+    parser.add_argument(
+        "--max-drain-s",
+        type=float,
+        default=600.0,
+        help="Safety ceiling on post-arrival backlog drain per load level (default 600s)",
+    )
     parser.add_argument("--warmup-runs", type=int, default=1)
     parser.add_argument("--dummy-service-s", type=float, default=1.0)
     parser.add_argument("--dummy-jitter-s", type=float, default=0.0)
-    parser.add_argument("--dummy-rtf", type=float, default=None,
-                         help="If set, DummyAdapter service time = rtf * audio_duration_s instead of --dummy-service-s")
+    parser.add_argument(
+        "--dummy-rtf",
+        type=float,
+        default=None,
+        help="If set, DummyAdapter service time = rtf * audio_duration_s instead of --dummy-service-s",
+    )
     args = parser.parse_args()
 
     import soundfile as sf
@@ -395,7 +436,12 @@ def main() -> None:
     print(f"Loading ASR adapter ({args.adapter})...")
     t_load = time.monotonic()
     if args.adapter == "dummy":
-        adapter = build_adapter("dummy", service_s=args.dummy_service_s, jitter_s=args.dummy_jitter_s, rtf=args.dummy_rtf)
+        adapter = build_adapter(
+            "dummy",
+            service_s=args.dummy_service_s,
+            jitter_s=args.dummy_jitter_s,
+            rtf=args.dummy_rtf,
+        )
     else:
         adapter = build_adapter("moonshine")
     print(f"Adapter ready in {time.monotonic() - t_load:.1f}s")
@@ -416,8 +462,15 @@ def main() -> None:
         print("# EXPERIMENT 2 -- maximum sustainable throughput")
         print("#" * 70)
         exp2_levels = run_experiment(
-            "exp2", args.exp2_loads, args.audio, audio_duration_s, args.exp2_duration_s,
-            adapter, args.sample_interval_s, args.queue_maxsize, args.max_drain_s,
+            "exp2",
+            args.exp2_loads,
+            args.audio,
+            audio_duration_s,
+            args.exp2_duration_s,
+            adapter,
+            args.sample_interval_s,
+            args.queue_maxsize,
+            args.max_drain_s,
         )
         all_levels.extend(exp2_levels)
 
@@ -426,8 +479,15 @@ def main() -> None:
         print("# EXPERIMENT 3 -- deliberate overload")
         print("#" * 70)
         exp3_levels = run_experiment(
-            "exp3", args.exp3_loads, args.audio, audio_duration_s, args.exp3_duration_s,
-            adapter, args.sample_interval_s, args.queue_maxsize, args.max_drain_s,
+            "exp3",
+            args.exp3_loads,
+            args.audio,
+            audio_duration_s,
+            args.exp3_duration_s,
+            adapter,
+            args.sample_interval_s,
+            args.queue_maxsize,
+            args.max_drain_s,
         )
         all_levels.extend(exp3_levels)
 
@@ -442,7 +502,9 @@ def main() -> None:
     exp2_summaries = [summarize_level(lv) for lv in exp2_levels]
     exp3_summaries = [summarize_level(lv) for lv in exp3_levels]
     summary_path = args.results_dir / "summary.json"
-    summary_path.write_text(json.dumps({"exp2": exp2_summaries, "exp3": exp3_summaries}, indent=2, default=str))
+    summary_path.write_text(
+        json.dumps({"exp2": exp2_summaries, "exp3": exp3_summaries}, indent=2, default=str)
+    )
     print(f"Wrote per-load summary -> {summary_path}")
 
     if exp2_summaries:

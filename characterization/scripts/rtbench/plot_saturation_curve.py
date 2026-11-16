@@ -33,8 +33,12 @@ def _collect(results_dirs: list[Path]) -> list[dict]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--results-dir", type=Path, action="append", required=True, dest="results_dirs")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--results-dir", type=Path, action="append", required=True, dest="results_dirs"
+    )
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
 
@@ -50,7 +54,9 @@ def main() -> None:
 
     ax1.plot(loads, rhos, color="gray", linewidth=1, zorder=1)
     for lv, rho in zip(levels, rhos):
-        ax1.scatter(lv["offered_load"], rho, color=colors.get(lv["verdict"], "gray"), s=60, zorder=2)
+        ax1.scatter(
+            lv["offered_load"], rho, color=colors.get(lv["verdict"], "gray"), s=60, zorder=2
+        )
     ax1.axhline(1.0, color="k", linestyle="--", alpha=0.5, label="rho=1 (theoretical breakeven)")
     ax1.set_ylabel("Utilization rho\n(service_time / arrival_interval)")
     ax1.set_title("Saturation boundary: utilization and queue growth vs offered load")
@@ -63,8 +69,10 @@ def main() -> None:
     ax2.set_xlabel("Offered load (x realtime)")
     ax2.set_ylabel("Queue growth rate\n(requests/s)")
 
-    handles = [plt.Line2D([0], [0], marker="o", color="w", markerfacecolor=c, markersize=9, label=v)
-               for v, c in colors.items()]
+    handles = [
+        plt.Line2D([0], [0], marker="o", color="w", markerfacecolor=c, markersize=9, label=v)
+        for v, c in colors.items()
+    ]
     ax2.legend(handles=handles)
 
     fig.tight_layout()
@@ -74,7 +82,9 @@ def main() -> None:
 
     print("\nCombined data points:")
     for lv, rho, g in zip(levels, rhos, growth):
-        print(f"  {lv['offered_load']:.2f}x  rho={rho:.3f}  growth={g:+.4f} req/s  verdict={lv['verdict']}")
+        print(
+            f"  {lv['offered_load']:.2f}x  rho={rho:.3f}  growth={g:+.4f} req/s  verdict={lv['verdict']}"
+        )
 
 
 if __name__ == "__main__":

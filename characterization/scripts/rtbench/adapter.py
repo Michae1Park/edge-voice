@@ -19,7 +19,6 @@ from __future__ import annotations
 import os
 import random
 import time
-from pathlib import Path
 from typing import Protocol
 
 # Must be set before moonshine_voice/onnxruntime is imported -- see
@@ -29,7 +28,6 @@ from typing import Protocol
 # set this) and would misrepresent single-worker capacity.
 os.environ.setdefault("MOONSHINE_ORT_SINGLE_THREAD", "1")
 
-import numpy as np
 import soundfile as sf
 
 
@@ -47,7 +45,9 @@ class DummyAdapter:
     exercised under variable service times too.
     """
 
-    def __init__(self, service_s: float = 1.0, jitter_s: float = 0.0, rtf: float | None = None) -> None:
+    def __init__(
+        self, service_s: float = 1.0, jitter_s: float = 0.0, rtf: float | None = None
+    ) -> None:
         self.service_s = service_s
         self.jitter_s = jitter_s
         self.rtf = rtf  # if set, overrides service_s as rtf * audio_duration_s
@@ -115,8 +115,12 @@ class MoonshineAdapter:
         self.model_arch = model_arch
         self.sample_rate = sample_rate
 
-        model_path, model_arch_enum = get_model_for_language(language, string_to_model_arch(model_arch))
-        self._transcriber = Transcriber(model_path=model_path, model_arch=model_arch_enum, options=options)
+        model_path, model_arch_enum = get_model_for_language(
+            language, string_to_model_arch(model_arch)
+        )
+        self._transcriber = Transcriber(
+            model_path=model_path, model_arch=model_arch_enum, options=options
+        )
         self._collector_cls = self._build_collector_cls()
 
     def _build_collector_cls(self):

@@ -114,7 +114,9 @@ def build_cell(sr: int, source_file: str, rate: float, occupancy: float) -> tupl
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     args = parser.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)

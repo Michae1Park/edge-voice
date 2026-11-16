@@ -316,7 +316,9 @@ def run_one(
     settings = Settings.load()
     configured_ids = {c.channel_id for c in settings.mqtt.channels}
     if channel not in configured_ids:
-        raise SystemExit(f"--channel {channel!r} not in configs' mqtt.channels ({sorted(configured_ids)})")
+        raise SystemExit(
+            f"--channel {channel!r} not in configs' mqtt.channels ({sorted(configured_ids)})"
+        )
     settings.mqtt.channels = [c for c in settings.mqtt.channels if c.channel_id == channel]
 
     # Stress-testing only ("how far can this be pushed before it clogs or
@@ -336,7 +338,8 @@ def run_one(
             "[%s] RELIABILITY DISABLED: segment_limits_enabled=False, idle_flush_s=0, "
             "reliability.enabled=False -- a segment or worker can now hang indefinitely, "
             "bounded only by this harness's own --max-wait-s=%.0f timeout",
-            condition["label"], max_wait_s,
+            condition["label"],
+            max_wait_s,
         )
 
     # Speaking-rate experiment only: the decoder's token budget is
@@ -357,7 +360,10 @@ def run_one(
         settings.stt.max_tokens_per_second = str(scaled_rate)
         logger.info(
             "[%s] scaling max_tokens_per_second %.1f -> %.1f (speed=%.2gx)",
-            condition["label"], base_rate, scaled_rate, speed,
+            condition["label"],
+            base_rate,
+            scaled_rate,
+            speed,
         )
 
     orch = PipelineOrchestrator(settings)
@@ -419,7 +425,10 @@ def run_one(
 
     logger.info(
         "[%s repeat %d] warm-up: publishing %s, then a %.1fs settle window (all discarded, not measured)",
-        condition["label"], repeat_idx, WARMUP_WAV, WARMUP_SETTLE_S,
+        condition["label"],
+        repeat_idx,
+        WARMUP_WAV,
+        WARMUP_SETTLE_S,
     )
     wav_source.main(["--wav", str(WARMUP_WAV), "--channels", channel])
     time.sleep(WARMUP_SETTLE_S)
@@ -432,7 +441,11 @@ def run_one(
     wav_path = TESTAUDIO_DIR / condition["filename"]
     logger.info(
         "[%s repeat %d] publishing %s on channel %s (expect %d segments)",
-        condition["label"], repeat_idx, wav_path, channel, n_expected,
+        condition["label"],
+        repeat_idx,
+        wav_path,
+        channel,
+        n_expected,
     )
     publish_started = time.monotonic()
     wav_source.main(["--wav", str(wav_path), "--channels", channel])
@@ -455,7 +468,10 @@ def run_one(
         logger.warning(
             "[%s repeat %d] expected %d final segments, got %d -- CER/throughput below still "
             "computed against what actually arrived",
-            condition["label"], repeat_idx, n_expected, n_got,
+            condition["label"],
+            repeat_idx,
+            n_expected,
+            n_got,
         )
 
     hypothesis = " ".join(r.text for r in segment_records)
@@ -478,7 +494,9 @@ def run_one(
         wallclock_s=wallclock_s,
         rss_mean_mb=statistics.mean(sampler.rss_samples) if sampler.rss_samples else float("nan"),
         rss_peak_mb=max(sampler.rss_samples) if sampler.rss_samples else float("nan"),
-        cpu_mean_pct=statistics.mean(sampler.cpu_pct_samples) if sampler.cpu_pct_samples else float("nan"),
+        cpu_mean_pct=statistics.mean(sampler.cpu_pct_samples)
+        if sampler.cpu_pct_samples
+        else float("nan"),
         rss_first_half_mb=rss_first,
         rss_second_half_mb=rss_second,
         cpu_first_half_pct=cpu_first,
@@ -488,27 +506,41 @@ def run_one(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--repeats", type=int, default=5, help="Independent trials per density condition (default 5)")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--repeats",
+        type=int,
+        default=5,
+        help="Independent trials per density condition (default 5)",
+    )
     parser.add_argument("--channel", default="rx", help="MQTT channel to publish on (default rx)")
     parser.add_argument(
-        "--conditions", nargs="+", default=["extreme", "high", "medium", "low"],
+        "--conditions",
+        nargs="+",
+        default=["extreme", "high", "medium", "low"],
         help="Which density conditions to run (default: all four)",
     )
     parser.add_argument(
-        "--metadata", type=Path, default=TESTAUDIO_DIR / "metadata.json",
+        "--metadata",
+        type=Path,
+        default=TESTAUDIO_DIR / "metadata.json",
         help="Path to testaudio metadata (default: characterization/testaudio/metadata.json)",
     )
     parser.add_argument("--results-dir", type=Path, default=RESULTS_DIR)
     parser.add_argument(
-        "--disable-reliability", action="store_true",
+        "--disable-reliability",
+        action="store_true",
         help="Stress-testing only: turn off vad.segment_limits_enabled, vad.idle_flush_s, and "
         "reliability.enabled (script-level override, configs/default.yaml untouched) so a "
         "genuine clog/freeze can manifest instead of being silently recovered from. "
         "Strongly consider raising --max-wait-s alongside this.",
     )
     parser.add_argument(
-        "--max-wait-s", type=float, default=MAX_WAIT_AFTER_PUBLISH_S,
+        "--max-wait-s",
+        type=float,
+        default=MAX_WAIT_AFTER_PUBLISH_S,
         help=f"How long to wait for all expected segments after publish finishes before giving "
         f"up on this run (default {MAX_WAIT_AFTER_PUBLISH_S:.0f}s) -- raise this well above the "
         "file's own duration with --disable-reliability, since nothing else will force a stuck "
@@ -521,7 +553,9 @@ def main() -> None:
     all_conditions = {c["label"]: c for c in json.loads(args.metadata.read_text())}
     missing = set(args.conditions) - set(all_conditions)
     if missing:
-        raise SystemExit(f"Unknown condition(s) {sorted(missing)} -- available: {sorted(all_conditions)}")
+        raise SystemExit(
+            f"Unknown condition(s) {sorted(missing)} -- available: {sorted(all_conditions)}"
+        )
 
     args.results_dir.mkdir(parents=True, exist_ok=True)
 
@@ -532,12 +566,17 @@ def main() -> None:
         condition = all_conditions[label]
         logger.info(
             "=== Condition %r: gap=%.1fs N=%d total=%.1fs occupancy=%.1f%% ===",
-            label, condition["gap_s"], condition["repeats"], condition["total_duration_s"],
+            label,
+            condition["gap_s"],
+            condition["repeats"],
+            condition["total_duration_s"],
             condition["occupancy_actual"] * 100,
         )
         for repeat_idx in range(args.repeats):
             result, segments = run_one(
-                condition, args.channel, repeat_idx,
+                condition,
+                args.channel,
+                repeat_idx,
                 disable_reliability=args.disable_reliability,
                 max_wait_s=args.max_wait_s,
             )
@@ -547,10 +586,20 @@ def main() -> None:
                 "[%s repeat %d] segments=%d/%d  CER=%.1f%%  content-s/wallclock-s=%.2f  "
                 "wallclock=%.1fs  RSS mean=%.0fMB peak=%.0fMB (1st-half %.0f -> 2nd-half %.0f)  "
                 "CPU mean=%.0f%% (1st-half %.0f%% -> 2nd-half %.0f%%)",
-                label, repeat_idx, result.n_segments, result.n_expected, result.cer * 100,
-                result.content_s_per_wallclock_s, result.wallclock_s, result.rss_mean_mb,
-                result.rss_peak_mb, result.rss_first_half_mb, result.rss_second_half_mb,
-                result.cpu_mean_pct, result.cpu_first_half_pct, result.cpu_second_half_pct,
+                label,
+                repeat_idx,
+                result.n_segments,
+                result.n_expected,
+                result.cer * 100,
+                result.content_s_per_wallclock_s,
+                result.wallclock_s,
+                result.rss_mean_mb,
+                result.rss_peak_mb,
+                result.rss_first_half_mb,
+                result.rss_second_half_mb,
+                result.cpu_mean_pct,
+                result.cpu_first_half_pct,
+                result.cpu_second_half_pct,
             )
 
     # --- Per-segment CSV (raw rows across all conditions/repeats) ---
@@ -588,7 +637,9 @@ def main() -> None:
         summary[label] = {
             "condition": all_conditions[label],
             "full_latency_ms": _stats([r.full_latency_ms for r in latency_rows]),
-            "stt_latency_ms": _stats([r.stt_latency_ms for r in latency_rows if r.stt_latency_ms is not None]),
+            "stt_latency_ms": _stats(
+                [r.stt_latency_ms for r in latency_rows if r.stt_latency_ms is not None]
+            ),
             "audio_s_per_decode_s": _stats(
                 [r.audio_s_per_decode_s for r in latency_rows if r.audio_s_per_decode_s is not None]
             ),
@@ -614,9 +665,17 @@ def main() -> None:
         )
         print("  " + _fmt_stats("Full E2E latency", s["full_latency_ms"], "ms"))
         print("  " + _fmt_stats("  of which STT decode", s["stt_latency_ms"], "ms"))
-        print("  " + _fmt_stats("Decode efficiency (audio-s decoded per decode-s)", s["audio_s_per_decode_s"], "x"))
+        print(
+            "  "
+            + _fmt_stats(
+                "Decode efficiency (audio-s decoded per decode-s)", s["audio_s_per_decode_s"], "x"
+            )
+        )
         print("  " + _fmt_stats("CER", s["cer_pct"], "%"))
-        print("  " + _fmt_stats("Throughput (content-s/wallclock-s)", s["content_s_per_wallclock_s"], "x"))
+        print(
+            "  "
+            + _fmt_stats("Throughput (content-s/wallclock-s)", s["content_s_per_wallclock_s"], "x")
+        )
         print("  " + _fmt_stats("Throughput (jobs/s)", s["jobs_per_s"], "/s"))
         print("  " + _fmt_stats("RSS mean", s["rss_mean_mb"], "MB"))
         print("  " + _fmt_stats("RSS peak", s["rss_peak_mb"], "MB"))

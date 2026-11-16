@@ -73,10 +73,14 @@ def _load_source() -> tuple[np.ndarray, int]:
     return audio, sr
 
 
-def build_cell(audio: np.ndarray, sr: int, length_s: int, rate: float, occupancy: float) -> tuple[np.ndarray, dict]:
+def build_cell(
+    audio: np.ndarray, sr: int, length_s: int, rate: float, occupancy: float
+) -> tuple[np.ndarray, dict]:
     n_samples = int(round(length_s * sr))
     if n_samples > len(audio):
-        raise ValueError(f"requested length {length_s}s exceeds source duration {len(audio)/sr:.3f}s")
+        raise ValueError(
+            f"requested length {length_s}s exceeds source duration {len(audio) / sr:.3f}s"
+        )
     clip = audio[:n_samples]
 
     stretched = time_scale_modify(clip, sr, rate)
@@ -107,7 +111,7 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     audio, sr = _load_source()
-    print(f"Source: {SOURCE_FILE} ({len(audio)/sr:.3f}s)")
+    print(f"Source: {SOURCE_FILE} ({len(audio) / sr:.3f}s)")
 
     all_meta = {}
     for length_s in LENGTHS_S:

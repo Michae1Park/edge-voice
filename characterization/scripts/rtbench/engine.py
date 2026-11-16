@@ -270,9 +270,9 @@ def run_load_level(
 
             depth_at_start = q.qsize()
             start = time.monotonic()
-            success, error, text = True, "", None
+            success, error = True, ""
             try:
-                text = adapter(audio_path)
+                adapter(audio_path)
             except Exception as exc:  # noqa: BLE001 -- record it, keep the worker alive
                 success = False
                 error = f"{type(exc).__name__}: {exc}"
@@ -320,9 +320,15 @@ def run_load_level(
                 )
             )
 
-    producer_thread = threading.Thread(target=producer_loop, name=f"producer-{experiment}", daemon=True)
-    worker_thread = threading.Thread(target=worker_loop, name=f"asr-worker-{experiment}", daemon=True)
-    sampler_thread = threading.Thread(target=sampler_loop, name=f"sampler-{experiment}", daemon=True)
+    producer_thread = threading.Thread(
+        target=producer_loop, name=f"producer-{experiment}", daemon=True
+    )
+    worker_thread = threading.Thread(
+        target=worker_loop, name=f"asr-worker-{experiment}", daemon=True
+    )
+    sampler_thread = threading.Thread(
+        target=sampler_loop, name=f"sampler-{experiment}", daemon=True
+    )
 
     producer_thread.start()
     worker_thread.start()

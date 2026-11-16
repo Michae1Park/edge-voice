@@ -83,13 +83,15 @@ def _speed_label(speed: float) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     args = parser.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
     base_audio, sr, base_text = _load_base_utterance()
-    print(f"Base utterance: 3s.wav ({len(base_audio) / sr:.3f}s) -- \"{base_text}\"")
+    print(f'Base utterance: 3s.wav ({len(base_audio) / sr:.3f}s) -- "{base_text}"')
 
     warmup_path = args.out_dir / "warmup.wav"
     if not warmup_path.exists():

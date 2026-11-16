@@ -60,7 +60,9 @@ wav_source = _imp("utils.audio_generation.wav_source")
 VADWorker = _imp("vad.vad_worker").VADWorker
 Repacketizer = _imp("channel.router").Repacketizer
 
-logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
+logging.basicConfig(
+    level=logging.WARNING, format="%(asctime)s %(levelname)-7s %(name)s: %(message)s"
+)
 log = logging.getLogger("profile_pre_stt")
 
 DEFAULT_WAV = ROOT / "wav" / "rx_recorded_1.wav"
@@ -140,7 +142,9 @@ class Probe:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--wav", type=Path, default=DEFAULT_WAV)
     ap.add_argument("--channel", default="rx")
     ap.add_argument("--cores")
@@ -189,8 +193,15 @@ def main() -> None:
             if not ev.is_final and probe.armed:
                 probe.n_partials += 1
             if ev.is_final and probe.armed:
-                events.append({"segment_id": ev.segment_id, "end": ev.end, "start": ev.start,
-                               "created_at": ev.created_at, "text": ev.text})
+                events.append(
+                    {
+                        "segment_id": ev.segment_id,
+                        "end": ev.end,
+                        "start": ev.start,
+                        "created_at": ev.created_at,
+                        "text": ev.text,
+                    }
+                )
 
     def sample_depths() -> None:
         while not stop.is_set():
@@ -207,7 +218,10 @@ def main() -> None:
                 probe.depth_series.append((time.time(), d))
             time.sleep(0.05)
 
-    threads = [threading.Thread(target=drain, daemon=True), threading.Thread(target=sample_depths, daemon=True)]
+    threads = [
+        threading.Thread(target=drain, daemon=True),
+        threading.Thread(target=sample_depths, daemon=True),
+    ]
     orch.start()
     for t in threads:
         t.start()
@@ -241,14 +255,16 @@ def main() -> None:
             continue
         end_ts, fin_wall = fin
         decode_start = e["created_at"] - stt_s
-        rows.append({
-            "segment_id": sid,
-            "dur_s": e["end"] - e["start"],
-            "full_ms": (e["created_at"] - e["end"]) * 1000,
-            "end_to_finalize_ms": (fin_wall - end_ts) * 1000,
-            "finalize_to_decode_ms": (decode_start - fin_wall) * 1000,
-            "decode_ms": stt_s * 1000,
-        })
+        rows.append(
+            {
+                "segment_id": sid,
+                "dur_s": e["end"] - e["start"],
+                "full_ms": (e["created_at"] - e["end"]) * 1000,
+                "end_to_finalize_ms": (fin_wall - end_ts) * 1000,
+                "finalize_to_decode_ms": (decode_start - fin_wall) * 1000,
+                "decode_ms": stt_s * 1000,
+            }
+        )
 
     summary = {
         "hostname": platform.node(),
@@ -271,17 +287,27 @@ def main() -> None:
     out.write_text(json.dumps(summary, indent=2))
 
     print("\n" + "=" * 90)
-    print(f"{summary['hostname']}  cores={args.cores} affinity={affinity}  ORT_SINGLE={summary['moonshine_single_thread']}")
+    print(
+        f"{summary['hostname']}  cores={args.cores} affinity={affinity}  ORT_SINGLE={summary['moonshine_single_thread']}"
+    )
     print("=" * 90)
-    print(f"{'segment':<28}{'dur_s':>6}{'full':>8}{'end->fin':>10}{'fin->dec':>10}{'decode':>8}   (ms)")
+    print(
+        f"{'segment':<28}{'dur_s':>6}{'full':>8}{'end->fin':>10}{'fin->dec':>10}{'decode':>8}   (ms)"
+    )
     for r in rows:
-        print(f"{r['segment_id'][-26:]:<28}{r['dur_s']:>6.2f}{r['full_ms']:>8.0f}{r['end_to_finalize_ms']:>10.0f}"
-              f"{r['finalize_to_decode_ms']:>10.0f}{r['decode_ms']:>8.0f}")
+        print(
+            f"{r['segment_id'][-26:]:<28}{r['dur_s']:>6.2f}{r['full_ms']:>8.0f}{r['end_to_finalize_ms']:>10.0f}"
+            f"{r['finalize_to_decode_ms']:>10.0f}{r['decode_ms']:>8.0f}"
+        )
     for k in ("router_lag_ms", "vad_lag_ms", "vad_call_ms"):
         s = summary[k]
         if s.get("n"):
-            print(f"{k:<14} n={s['n']:<5} mean={s['mean']:.1f} p50={s['p50']:.1f} p95={s['p95']:.1f} max={s['max']:.1f}")
-    print(f"partial_interval_s={summary['partial_interval_s']}  partial events seen={probe.n_partials}")
+            print(
+                f"{k:<14} n={s['n']:<5} mean={s['mean']:.1f} p50={s['p50']:.1f} p95={s['p95']:.1f} max={s['max']:.1f}"
+            )
+    print(
+        f"partial_interval_s={summary['partial_interval_s']}  partial events seen={probe.n_partials}"
+    )
     print("peak queue depth:", summary["peak_queue_depth"])
     print(f"wrote {out}")
 

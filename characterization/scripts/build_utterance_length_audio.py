@@ -46,12 +46,21 @@ def _label(filename: str) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument(
-        "--file", nargs="+", default=["7s.wav"],
+        "--file",
+        nargs="+",
+        default=["7s.wav"],
         help="testsegments/*.wav file(s) to use as the base utterance (default: 7s.wav)",
     )
-    parser.add_argument("--occupancy", type=float, default=DEFAULT_OCCUPANCY, help="Target speech occupancy (default 0.60)")
+    parser.add_argument(
+        "--occupancy",
+        type=float,
+        default=DEFAULT_OCCUPANCY,
+        help="Target speech occupancy (default 0.60)",
+    )
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     args = parser.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -74,14 +83,20 @@ def main() -> None:
         label = _label(filename)
 
         cond = build_condition(
-            label, f"{label}_len.wav", gap_s, args.occupancy, audio, sr, text,
+            label,
+            f"{label}_len.wav",
+            gap_s,
+            args.occupancy,
+            audio,
+            sr,
+            text,
             extra={"source_file": filename},
         )
         out_path = args.out_dir / cond["filename"]
         sf.write(out_path, cond.pop("_audio"), sr, subtype="PCM_16")
         conditions.append(cond)
         print(
-            f"  {label:>4}: utterance {speech_dur_s:.3f}s -- \"{text}\"\n"
+            f'  {label:>4}: utterance {speech_dur_s:.3f}s -- "{text}"\n'
             f"        gap={gap_s:.3f}s  N={cond['repeats']}  total={cond['total_duration_s']:.2f}s  "
             f"occupancy actual={cond['occupancy_actual']:.1%}  -> {out_path}"
         )
@@ -89,7 +104,11 @@ def main() -> None:
     metadata_path = args.out_dir / "metadata_length.json"
     existing = []
     if metadata_path.exists():
-        existing = [c for c in json.loads(metadata_path.read_text()) if c["label"] not in {c2["label"] for c2 in conditions}]
+        existing = [
+            c
+            for c in json.loads(metadata_path.read_text())
+            if c["label"] not in {c2["label"] for c2 in conditions}
+        ]
     metadata_path.write_text(json.dumps(existing + conditions, ensure_ascii=False, indent=2))
     print(f"\nWrote {metadata_path}")
 

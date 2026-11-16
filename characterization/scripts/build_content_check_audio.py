@@ -25,7 +25,12 @@ import numpy as np
 import soundfile as sf
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from build_test_audio import DEFAULT_OUT_DIR, TARGET_TOTAL_S, _repeats_for_target, _tile_with_symmetric_gaps  # noqa: E402
+from build_test_audio import (
+    DEFAULT_OUT_DIR,
+    TARGET_TOTAL_S,
+    _repeats_for_target,
+    _tile_with_symmetric_gaps,
+)  # noqa: E402
 from build_speed_audio import time_scale_modify  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent.parent

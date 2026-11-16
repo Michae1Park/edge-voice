@@ -61,19 +61,28 @@ def run_cell(label: str, meta: dict) -> dict:
     driver_log = RESULTS_DIR / "driver_log.txt"
 
     cmd = [
-        sys.executable, str(BENCH_SCRIPT),
-        "--channels", "rx",
-        "--wav", str(wav_path),
-        "--duration-s", str(DURATION_S),
+        sys.executable,
+        str(BENCH_SCRIPT),
+        "--channels",
+        "rx",
+        "--wav",
+        str(wav_path),
+        "--duration-s",
+        str(DURATION_S),
         "--disable-reliability",
-        "--min-silence-duration-ms", str(MIN_SILENCE_MS),
-        "--token-budget-multiplier", str(meta["rate"]),
-        "--csv-out", str(csv_path),
+        "--min-silence-duration-ms",
+        str(MIN_SILENCE_MS),
+        "--token-budget-multiplier",
+        str(meta["rate"]),
+        "--csv-out",
+        str(csv_path),
     ]
 
     start = dt.datetime.now(dt.timezone.utc).isoformat()
     with driver_log.open("a") as dl:
-        dl.write(f"=== STARTING {label} (rate={meta['rate']}x, length={meta['cropped_length_s']}s) at {start} ===\n")
+        dl.write(
+            f"=== STARTING {label} (rate={meta['rate']}x, length={meta['cropped_length_s']}s) at {start} ===\n"
+        )
         dl.flush()
         with log_path.open("w") as lf:
             subprocess.run(cmd, cwd=ROOT, stdout=lf, stderr=subprocess.STDOUT, check=False)
@@ -81,8 +90,17 @@ def run_cell(label: str, meta: dict) -> dict:
         dl.write(f"=== FINISHED {label} at {finish} ===\n")
 
         verdict_proc = subprocess.run(
-            [sys.executable, str(ANALYZE_SCRIPT), label, str(csv_path), str(log_path), str(METADATA_PATH)],
-            cwd=ROOT, capture_output=True, text=True,
+            [
+                sys.executable,
+                str(ANALYZE_SCRIPT),
+                label,
+                str(csv_path),
+                str(log_path),
+                str(METADATA_PATH),
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
         )
         verdict_line = verdict_proc.stdout.strip()
         dl.write(verdict_line + "\n")
@@ -91,7 +109,7 @@ def run_cell(label: str, meta: dict) -> dict:
     with (RESULTS_DIR / "verdicts.txt").open("a") as vf:
         vf.write(verdict_line + "\n")
 
-    result = json.loads(verdict_line[verdict_line.index("{"):]) if "{" in verdict_line else {}
+    result = json.loads(verdict_line[verdict_line.index("{") :]) if "{" in verdict_line else {}
     return result
 
 
@@ -111,11 +129,14 @@ def write_trend(label: str) -> None:
         w.writerow(["window_start_s", "n", "pre_stt_mean_ms", "full_latency_mean_ms"])
         for b in sorted(buckets):
             vals = buckets[b]
-            w.writerow([
-                b * WINDOW_S, len(vals),
-                round(statistics.mean(v[0] for v in vals), 1),
-                round(statistics.mean(v[1] for v in vals), 1),
-            ])
+            w.writerow(
+                [
+                    b * WINDOW_S,
+                    len(vals),
+                    round(statistics.mean(v[0] for v in vals), 1),
+                    round(statistics.mean(v[1] for v in vals), 1),
+                ]
+            )
 
 
 def write_summary_table(labels: list[str], meta_all: dict) -> None:
@@ -136,12 +157,14 @@ def write_summary_table(labels: list[str], meta_all: dict) -> None:
         for line in open(verdict_path):
             lb = line.split(":")[0].strip()
             if "{" in line:
-                verdicts[lb] = json.loads(line[line.index("{"):])
+                verdicts[lb] = json.loads(line[line.index("{") :])
         v = verdicts.get(label, {})
         expected = v.get("expected_segments", "?")
         status = "PASS" if v.get("passed") else "FAIL"
         if not full:
-            lines.append(f"| {label} | {meta['occupancy_actual']:.0%} | {meta['rate']}x | {meta['cropped_length_s']}s | 0 / {expected} | -- | -- | FAIL (no segments) |")
+            lines.append(
+                f"| {label} | {meta['occupancy_actual']:.0%} | {meta['rate']}x | {meta['cropped_length_s']}s | 0 / {expected} | -- | -- | FAIL (no segments) |"
+            )
             continue
         lines.append(
             f"| {label} | {meta['occupancy_actual']:.0%} | {meta['rate']}x | {meta['cropped_length_s']}s | "
@@ -153,7 +176,9 @@ def write_summary_table(labels: list[str], meta_all: dict) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--labels", nargs="*", default=None, help="Subset of cell labels to run (default: all 14)")
+    parser.add_argument(
+        "--labels", nargs="*", default=None, help="Subset of cell labels to run (default: all 14)"
+    )
     args = parser.parse_args()
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)

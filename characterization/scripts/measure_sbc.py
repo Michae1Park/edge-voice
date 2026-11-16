@@ -48,7 +48,7 @@ import re
 import sys
 import threading
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -154,7 +154,9 @@ def run_one(
     settings = Settings.load()
     configured_ids = {c.channel_id for c in settings.mqtt.channels}
     if channel not in configured_ids:
-        raise SystemExit(f"--channel {channel!r} not in configs' mqtt.channels ({sorted(configured_ids)})")
+        raise SystemExit(
+            f"--channel {channel!r} not in configs' mqtt.channels ({sorted(configured_ids)})"
+        )
     settings.mqtt.channels = [c for c in settings.mqtt.channels if c.channel_id == channel]
     port_args = []
     if mqtt_port is not None:
@@ -208,12 +210,23 @@ def run_one(
     drain_thread.start()
     time.sleep(0.5)  # let workers come up before publishing
 
-    logger.info("[repeat %d] warm-up: publishing %s, then a %.1fs settle window", repeat_idx, WARMUP_WAV, warmup_settle_s)
+    logger.info(
+        "[repeat %d] warm-up: publishing %s, then a %.1fs settle window",
+        repeat_idx,
+        WARMUP_WAV,
+        warmup_settle_s,
+    )
     wav_source.main(["--wav", str(WARMUP_WAV), "--channels", channel, *port_args])
     time.sleep(warmup_settle_s)
     in_warmup.clear()
 
-    logger.info("[repeat %d] publishing %s on channel %s (expect %d segments)", repeat_idx, wav_path, channel, n_expected)
+    logger.info(
+        "[repeat %d] publishing %s on channel %s (expect %d segments)",
+        repeat_idx,
+        wav_path,
+        channel,
+        n_expected,
+    )
     publish_started = time.monotonic()
     wav_source.main(["--wav", str(wav_path), "--channels", channel, *port_args])
     publish_done = time.monotonic()
@@ -232,7 +245,10 @@ def run_one(
     if n_got != n_expected:
         logger.warning(
             "[repeat %d] expected %d final segments, got %d -- CER below still computed against "
-            "what actually arrived", repeat_idx, n_expected, n_got,
+            "what actually arrived",
+            repeat_idx,
+            n_expected,
+            n_got,
         )
 
     hypothesis = " ".join(r.text for r in segment_records)
@@ -250,7 +266,9 @@ def run_one(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--wav", type=Path, default=DEFAULT_WAV)
     parser.add_argument("--transcript", type=Path, default=DEFAULT_TRANSCRIPT)
     parser.add_argument("--channel", default="rx")
@@ -296,17 +314,27 @@ def main() -> None:
     all_run_results: list[dict] = []
     for repeat_idx in range(args.repeats):
         result, segments = run_one(
-            args.wav, reference_lines, args.channel, repeat_idx, args.max_wait_s, args.mqtt_port,
+            args.wav,
+            reference_lines,
+            args.channel,
+            repeat_idx,
+            args.max_wait_s,
+            args.mqtt_port,
             args.warmup_settle_s,
         )
         all_run_results.append(result)
         all_segment_records.extend(segments)
         logger.info(
-            "[repeat %d] segments=%d/%d  CER=%.1f%%", repeat_idx, result["n_segments"], result["n_expected"],
+            "[repeat %d] segments=%d/%d  CER=%.1f%%",
+            repeat_idx,
+            result["n_segments"],
+            result["n_expected"],
             result["cer"] * 100,
         )
 
-    latency_rows = [r for r in all_segment_records if r.order != 0]  # see run_experiment.py's note on order==0
+    latency_rows = [
+        r for r in all_segment_records if r.order != 0
+    ]  # see run_experiment.py's note on order==0
     summary = {
         "hostname": platform.node(),
         "machine": platform.machine(),
@@ -316,7 +344,9 @@ def main() -> None:
         "cores": args.cores,
         "affinity": affinity,
         "full_latency_ms": _stats([r.full_latency_ms for r in latency_rows]),
-        "stt_latency_ms": _stats([r.stt_latency_ms for r in latency_rows if r.stt_latency_ms is not None]),
+        "stt_latency_ms": _stats(
+            [r.stt_latency_ms for r in latency_rows if r.stt_latency_ms is not None]
+        ),
         "cer_pct": _stats([r["cer"] * 100 for r in all_run_results]),
         "runs": all_run_results,
     }
@@ -326,7 +356,9 @@ def main() -> None:
     out_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2))
 
     print("\n" + "=" * 100)
-    print(f"SBC: {summary['hostname']} ({summary['machine']})  wav={summary['wav']}  n_repeats={args.repeats}")
+    print(
+        f"SBC: {summary['hostname']} ({summary['machine']})  wav={summary['wav']}  n_repeats={args.repeats}"
+    )
     print("=" * 100)
     print("  " + _fmt_stats("Full E2E latency", summary["full_latency_ms"], "ms"))
     print("  " + _fmt_stats("  of which STT decode", summary["stt_latency_ms"], "ms"))

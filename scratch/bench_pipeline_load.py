@@ -392,7 +392,10 @@ class EarlyStopWatchdog:
                 start_ts = float(m.group(1))
                 prev = self._last_start_by_channel.get(record.channel_id)
                 self._last_start_by_channel[record.channel_id] = start_ts
-                if prev is not None and (start_ts - prev) > MERGE_THRESHOLD_MULT * self._atomic_cycle_s:
+                if (
+                    prev is not None
+                    and (start_ts - prev) > MERGE_THRESHOLD_MULT * self._atomic_cycle_s
+                ):
                     self._fire(
                         f"merge event detected (segment-start gap {start_ts - prev:.2f}s > "
                         f"{MERGE_THRESHOLD_MULT:.1f}x atomic cycle {self._atomic_cycle_s:.2f}s) "
@@ -594,7 +597,8 @@ def main() -> None:
         "--csv-out", default=None, help="Optional path to write one row per segment as CSV"
     )
     parser.add_argument(
-        "--disable-reliability", action="store_true",
+        "--disable-reliability",
+        action="store_true",
         help="Stress-testing only: turn off vad.segment_limits_enabled, vad.idle_flush_s, and "
         "reliability.enabled (script-level override, configs/default.yaml untouched) so a "
         "genuine clog/freeze can manifest instead of being silently recovered from. Combine "
@@ -602,14 +606,17 @@ def main() -> None:
         "single short clip has nothing to pile up behind a stuck segment.",
     )
     parser.add_argument(
-        "--token-budget-multiplier", type=float, default=1.0,
+        "--token-budget-multiplier",
+        type=float,
+        default=1.0,
         help="Multiplies stt.max_tokens_per_second by this factor -- use e.g. 2.0 when --wav "
         "is itself a time-scale-modified (TSM) clip at 2x speed, so the decoder's token budget "
         "matches the compressed audio's actual content instead of starving on it (see "
         "characterization/scripts/run_experiment.py for why this matters). Default 1.0 = no change.",
     )
     parser.add_argument(
-        "--early-stop", action="store_true",
+        "--early-stop",
+        action="store_true",
         help="Stop the run early once a genuine plateau or merge event is detected (see "
         "EarlyStopWatchdog), instead of always running the full --duration-s. Lets a "
         "multi-cell sweep move on from an already-failing cell without burning its whole "
@@ -617,21 +624,27 @@ def main() -> None:
         "want the full duration unconditionally are unaffected.",
     )
     parser.add_argument(
-        "--early-stop-grace-s", type=float, default=10.0,
+        "--early-stop-grace-s",
+        type=float,
+        default=10.0,
         help="Once --early-stop triggers, keep running this much longer (to capture a bit of "
         "post-trigger confirmation) before actually stopping (default 10s). Actual overshoot "
         "can exceed this by up to one more full loop of --wav, since the feed loop only checks "
         "between loops, not mid-playback (wav_source.py's playback call isn't interruptible).",
     )
     parser.add_argument(
-        "--merge-atomic-cycle-s", type=float, default=None,
+        "--merge-atomic-cycle-s",
+        type=float,
+        default=None,
         help="Atomic segment cycle length (atomic_segment_duration_s + gap_s) for --early-stop's "
         "merge-event detection -- the same figure characterization/scripts/build_boundary_audio.py "
         "records per cell in its metadata. Omit to disable merge-event detection (plateau "
         "detection alone still runs if --early-stop is set).",
     )
     parser.add_argument(
-        "--min-silence-duration-ms", type=int, default=None,
+        "--min-silence-duration-ms",
+        type=int,
+        default=None,
         help="Diagnostic override for vad.min_silence_duration_ms (default: whatever's in "
         "configs/default.yaml, currently 100ms). Tests whether Silero's end-of-speech "
         "detection becomes reliable again once the threshold is well below the audio's own "
@@ -662,9 +675,15 @@ def main() -> None:
         logger.info(
             "Restricting orchestrator to channel(s) %s -- not building STT worker(s) for "
             "%s, so this is a true %d-process isolation test, not %d channels with %s idle",
-            sorted(requested_ids), sorted(dropped), len(requested_ids), len(configured_ids), sorted(dropped),
+            sorted(requested_ids),
+            sorted(dropped),
+            len(requested_ids),
+            len(configured_ids),
+            sorted(dropped),
         )
-        settings.mqtt.channels = [c for c in settings.mqtt.channels if c.channel_id in requested_ids]
+        settings.mqtt.channels = [
+            c for c in settings.mqtt.channels if c.channel_id in requested_ids
+        ]
 
     max_segment_s = settings.vad.max_segment_s
     segment_limits_enabled = settings.vad.segment_limits_enabled
@@ -690,7 +709,9 @@ def main() -> None:
         settings.stt.max_tokens_per_second = str(scaled_rate)
         logger.info(
             "Scaling max_tokens_per_second %.1f -> %.1f (multiplier=%.2gx)",
-            base_rate, scaled_rate, args.token_budget_multiplier,
+            base_rate,
+            scaled_rate,
+            args.token_budget_multiplier,
         )
     if args.min_silence_duration_ms is not None:
         old_ms = settings.vad.min_silence_duration_ms
@@ -699,7 +720,8 @@ def main() -> None:
             "Overriding vad.min_silence_duration_ms %d -> %d -- diagnostic only, tests "
             "whether Silero's end-of-speech detection is unreliable at this file's own "
             "gap length specifically, not a recommended production value",
-            old_ms, args.min_silence_duration_ms,
+            old_ms,
+            args.min_silence_duration_ms,
         )
 
     orch = PipelineOrchestrator(settings)
@@ -786,7 +808,9 @@ def main() -> None:
         core_map = _parse_core_map(args.stt_core_map)
         for cid, stt_worker in orch._stt.items():
             if cid not in core_map:
-                logger.warning("--stt-core-map has no entry for channel %s -- leaving unpinned", cid)
+                logger.warning(
+                    "--stt-core-map has no entry for channel %s -- leaving unpinned", cid
+                )
                 continue
             _pin_worker(stt_worker, core_map[cid], f"STTWorker-{cid}")
             all_stt_cores |= core_map[cid]
@@ -855,8 +879,12 @@ def main() -> None:
         logger.warning(
             "EARLY STOP after %d loop(s) / %.0fs: %s (elapsed_s=%.1f), "
             "%.0fs grace period elapsed -- skipping the rest of --duration-s=%.0fs",
-            loops, elapsed, watchdog.trigger_reason, watchdog.trigger_time - run_started,
-            args.early_stop_grace_s, args.duration_s,
+            loops,
+            elapsed,
+            watchdog.trigger_reason,
+            watchdog.trigger_time - run_started,
+            args.early_stop_grace_s,
+            args.duration_s,
         )
     logger.info(
         "%d loop(s) done in %.0fs, waiting %.0fs for trailing decodes", loops, elapsed, args.grace_s
