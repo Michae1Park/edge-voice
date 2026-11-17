@@ -221,7 +221,7 @@ def test_child_process_transcribes_a_segment_end_to_end():
     handle = STTProcessHandle(
         channel_id="rx",
         segment_queue=segment_queue,
-        config=STTWorkerConfig(),
+        config=STTWorkerConfig(model="moonshine"),
         ctx=ctx,
         log_queue=ctx.Queue(),
         log_level=20,

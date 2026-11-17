@@ -100,15 +100,15 @@ class MoonshineAdapter:
 
             settings = Settings.load()
             language = language or settings.stt.language
-            model_arch = model_arch or settings.stt.model_arch
+            model_arch = model_arch or settings.stt.moonshine.model_arch
             if options is None:
                 options = {
-                    "max_tokens_per_second": str(settings.stt.max_tokens_per_second),
-                    "vad_threshold": str(settings.stt.vad_threshold),
-                    "identify_speakers": str(settings.stt.identify_speakers).lower(),
-                    "log_api_calls": str(settings.stt.log_api_calls).lower(),
-                    "save_input_wav_path": settings.stt.save_input_wav_path,
-                    "return_audio_data": str(settings.stt.return_audio_data).lower(),
+                    "max_tokens_per_second": str(settings.stt.moonshine.max_tokens_per_second),
+                    "vad_threshold": str(settings.stt.moonshine.vad_threshold),
+                    "identify_speakers": str(settings.stt.moonshine.identify_speakers).lower(),
+                    "log_api_calls": str(settings.stt.moonshine.log_api_calls).lower(),
+                    "save_input_wav_path": settings.stt.moonshine.save_input_wav_path,
+                    "return_audio_data": str(settings.stt.moonshine.return_audio_data).lower(),
                 }
 
         self.language = language

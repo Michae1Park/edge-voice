@@ -135,6 +135,8 @@ requests==2.34.2
     # via moonshine-voice
 ruff==0.15.20
     # via edge-voice (pyproject.toml)
+sherpa-onnx==2.0.1
+    # via edge-voice (pyproject.toml)
 silero-vad==6.2.1
     # via edge-voice (pyproject.toml)
 sounddevice==0.5.5

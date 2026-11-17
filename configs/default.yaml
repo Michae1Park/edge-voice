@@ -108,29 +108,59 @@ vad:
   max_segment_s: 5.0         # hard cap if no suitable pause is found
 
 stt:
-  # language + model_arch select the model together.
-  #   language:   ar | en | es | ja | ko | uk | vi | zh
-  #   model_arch: tiny | base | tiny-streaming | small-streaming | medium-streaming
-  # en publishes every arch; es publishes "base" only; every other language
-  # publishes "tiny" and "base". An unavailable combination fails at startup
-  # listing what that language does have.
-  # Five combinations ship on moonshine's CDN without a registry row pointing
-  # at them, and work only through _MODEL_REGISTRY_OVERRIDES in stt_worker.py:
-  # ko/base, plus ar|uk|vi|zh + tiny. 
-  # Re-check with scratch/probe_moonshine_models.py after upgrading moonshine.
+  # Which model, on which hardware. Independent axes:
+  #   model:   sensevoice | moonshine
+  #   runtime: auto | npu | cpu
+  # SenseVoice runs on cpu or npu (RK3588); Moonshine is cpu only. "auto" uses
+  # the NPU when present, otherwise the CPU. A requested NPU that can't be
+  # used falls back to the same model on CPU, with the reason logged.
+  model: "sensevoice"
+  runtime: "auto"
+  # sensevoice: auto | zh | en | ja | ko | yue
+  # moonshine:  ar | en | es | ja | ko | uk | vi | zh (see stt.moonshine below)
   language: "ko"
-  model_arch: "tiny"
-  # Decoder token budget. Too low truncates mid-sentence: Korean at 13.0
-  # cut ~20% of every segment's tail ("무엇을 도?" for "무엇을 도와드릴까요?").
-  # Output saturates at ~20 with no latency cost and no repetition up to 75;
-  # 30 leaves headroom for fast speakers. Must be set -- omitting the option
-  # entirely truncates worse than any explicit value.
-  max_tokens_per_second: "18.0"
-  vad_threshold: "0"          # keeps the stt model's internal vad off 
-  identify_speakers: false
-  log_api_calls: false
-  save_input_wav_path: ""
-  return_audio_data: false
+
+  sensevoice:
+    use_itn: true              # inverse text normalization (numbers, punctuation)
+    # Models download here on first start: int8 ONNX (~160 MB) for cpu, the
+    # RK3588 RKNN build (~420 MB) for npu. *_model_dir overrides skip it.
+    cache_dir: "~/.cache/edge_voice/sensevoice"
+    cpu_model_dir: ""
+    cpu_threads: 1             # per channel; channels already run in parallel
+    npu_model_dir: ""
+    # The RKNN build's fixed input window: 5 | 10 | 15 | 20 | 25 | 30. Every
+    # call costs a full window, and longer segments are split into windows,
+    # so match it to vad.max_segment_s.
+    npu_window_s: 5
+    npu_runtime_lib: ""        # absolute path to librknnrt.so; "" = system lib
+    # One channel per NPU core (RK3588: 3). With runtime "npu", more
+    # mqtt.channels than this fails at startup; with "auto", the extra
+    # channels run on CPU. Two streams per core doubled tail latency.
+    npu_max_channels: 3
+    npu_probe_timeout_s: 60
+
+  moonshine:
+    # model_arch: tiny | base | tiny-streaming | small-streaming | medium-streaming
+    # en publishes every arch; es publishes "base" only; every other language
+    # publishes "tiny" and "base". An unavailable combination fails at startup
+    # listing what that language does have.
+    # Five combinations ship on moonshine's CDN without a registry row pointing
+    # at them, and work only through _MODEL_REGISTRY_OVERRIDES in stt_worker.py:
+    # ko/base, plus ar|uk|vi|zh + tiny.
+    # Re-check with scratch/probe_moonshine_models.py after upgrading moonshine.
+    model_arch: "tiny"
+    # Decoder token budget. Too low truncates mid-sentence: Korean at 13.0
+    # cut ~20% of every segment's tail ("무엇을 도?" for "무엇을 도와드릴까요?").
+    # Output saturates at ~20 with no latency cost and no repetition up to 75;
+    # 30 leaves headroom for fast speakers. Must be set -- omitting the option
+    # entirely truncates worse than any explicit value.
+    max_tokens_per_second: "18.0"
+    vad_threshold: "0"          # keeps the stt model's internal vad off
+    identify_speakers: false
+    log_api_calls: false
+    save_input_wav_path: ""
+    return_audio_data: false
+
   # Backpressure guard for vad.partial_interval_s: skip a partial when the
   # segment queue is this deep or deeper. 0 = drop whenever any real work is
   # already waiting. Finals are never dropped.

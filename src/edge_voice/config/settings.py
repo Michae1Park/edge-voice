@@ -15,9 +15,15 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml  # type: ignore[import-untyped]
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+
+from edge_voice.stt.sensevoice.config import (
+    DEFAULT_CACHE_DIR,
+    RK3588_NPU_CORES,
+    SENSEVOICE_LANGUAGES,
+)
 
 
 class MQTTChannels(BaseModel):
@@ -126,10 +132,10 @@ class VADSettings(BaseModel):
         return self
 
 
-class STTSettings(BaseModel):
-    """Moonshine STT tuning.
+class MoonshineSettings(BaseModel):
+    """Moonshine tuning, used when stt.model is "moonshine" (CPU only).
 
-    language + model_arch together select the model -- there's no separate
+    stt.language + model_arch together select the model -- there's no separate
     model-name field, because moonshine resolves downloaded models only via
     get_model_for_language(language, arch). Not every arch exists for every
     language; an unavailable combination raises at startup with the list of
@@ -150,7 +156,8 @@ class STTSettings(BaseModel):
     scratch/probe_moonshine_models.py after upgrading moonshine-voice.
     """
 
-    language: str = "ko"
+    model_config = ConfigDict(extra="forbid")
+
     model_arch: Literal[
         "tiny",
         "base",
@@ -166,6 +173,51 @@ class STTSettings(BaseModel):
     log_api_calls: bool = False
     save_input_wav_path: str = ""
     return_audio_data: bool = False
+
+
+class SenseVoiceSettings(BaseModel):
+    """SenseVoice (via sherpa-onnx), used when stt.model is "sensevoice".
+
+    Model files are downloaded into cache_dir on first start unless a
+    *_model_dir override points at an existing copy.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    use_itn: bool = True
+    cache_dir: str = DEFAULT_CACHE_DIR
+    cpu_model_dir: str = ""
+    cpu_threads: int = Field(default=1, ge=1)
+    npu_model_dir: str = ""
+    # Fixed input window of the RKNN build. Longer segments are split into
+    # consecutive windows, so keep it >= vad.max_segment_s.
+    npu_window_s: Literal[5, 10, 15, 20, 25, 30] = 5
+    # Absolute path to librknnrt.so; empty means the system library.
+    npu_runtime_lib: str = ""
+    # One channel per NPU core: RK3588 has 3, and latency held up to 3
+    # concurrent streams but jumped once two shared a core
+    # (characterization/results/npu_trial), so this caps at 3.
+    npu_max_channels: int = Field(default=RK3588_NPU_CORES, ge=1, le=RK3588_NPU_CORES)
+    npu_probe_timeout_s: float = Field(default=60.0, gt=0)
+
+
+class STTSettings(BaseModel):
+    """Speech-to-text: which model, on which runtime.
+
+    model and runtime are independent axes. SenseVoice runs on cpu or npu;
+    Moonshine is cpu only. runtime "auto" uses the NPU when one is present
+    and the model supports it, otherwise the CPU. An NPU that is requested
+    (npu or auto) but unusable falls back to the same model on CPU with a
+    logged reason.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    model: Literal["sensevoice", "moonshine"] = "sensevoice"
+    runtime: Literal["auto", "npu", "cpu"] = "auto"
+    language: str = "ko"
+    moonshine: MoonshineSettings = MoonshineSettings()
+    sensevoice: SenseVoiceSettings = SenseVoiceSettings()
     # Backpressure guard for vad.partial_interval_s. A partial is throwaway,
     # so when segment_queue is this deep or deeper it's skipped rather than
     # queued ahead of real work -- finals are never dropped. 0 means "drop a
@@ -187,6 +239,17 @@ class STTSettings(BaseModel):
     # spawn and imports. A child that never becomes ready inside this window
     # is reported as a startup failure, distinctly from a stall.
     process_start_timeout_s: float = Field(default=120.0, gt=0)
+
+    @model_validator(mode="after")
+    def _check_model_runtime(self) -> "STTSettings":
+        if self.model == "moonshine" and self.runtime == "npu":
+            raise ValueError('stt.model="moonshine" runs on CPU only; use runtime "cpu" or "auto"')
+        if self.model == "sensevoice" and self.language not in SENSEVOICE_LANGUAGES:
+            raise ValueError(
+                f"stt.language={self.language!r} is not supported by SenseVoice "
+                f"(supported: {', '.join(SENSEVOICE_LANGUAGES)})"
+            )
+        return self
 
 
 class LoggingSettings(BaseModel):
@@ -369,6 +432,21 @@ class Settings(BaseSettings):
                 f"produce vad.window_samples ({self.vad.window_samples}) at "
                 f"audio.sample_rate ({self.audio.sample_rate}Hz), got "
                 f"{expected_samples} samples instead"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _check_npu_channel_cap(self) -> "Settings":
+        """One NPU core per channel. Explicit runtime "npu" refuses more
+        channels than cores; "auto" instead runs the extra channels on CPU
+        (see orchestrator._stt_config)."""
+        stt, n_channels = self.stt, len(self.mqtt.channels)
+        cap = stt.sensevoice.npu_max_channels
+        if stt.model == "sensevoice" and stt.runtime == "npu" and n_channels > cap:
+            raise ValueError(
+                f"stt.runtime='npu' supports at most stt.sensevoice.npu_max_channels={cap} "
+                f"channels (one per NPU core), but mqtt.channels has {n_channels}; "
+                'use runtime "auto" to run the extra channels on CPU'
             )
         return self
 

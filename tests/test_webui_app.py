@@ -35,6 +35,7 @@ def _minimal_settings() -> Settings:
     # Thread-backed STT: the webui reads the same status/health surface
     # either way, and spawning interpreters per test buys nothing here.
     settings.stt.use_processes = False
+    settings.stt.model = "moonshine"
     return settings
 
 

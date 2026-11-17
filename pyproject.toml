@@ -31,6 +31,9 @@ dependencies = [
     # Streaming Moonshine (Transcriber/start-add_audio-stop + listener events).
     # Ships its own ONNX runtime in the wheel, so no separate onnxruntime dep.
     "moonshine-voice",
+    # SenseVoice (the default STT model). PyPI's wheel is CPU-only; on RK3588
+    # boards install.sh pulls the RKNN build from sherpa-onnx's own index.
+    "sherpa-onnx>=2.0.1",
     "paho-mqtt>=2.0",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",

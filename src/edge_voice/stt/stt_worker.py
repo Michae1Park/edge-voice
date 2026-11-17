@@ -82,6 +82,7 @@ Assumptions:
 from __future__ import annotations
 
 import ctypes
+import logging
 import os
 import queue
 import threading
@@ -93,6 +94,7 @@ import numpy as np
 
 from edge_voice.observability.logging import get_stage_logger
 from edge_voice.pipeline.models import SpeechSegment, TranscriptEvent
+from edge_voice.stt.sensevoice.config import SenseVoiceConfig
 
 logger = get_stage_logger(__name__, stage="stt")
 
@@ -164,6 +166,10 @@ class STTWorkerConfig:
     # skipped rather than transcribed (see _handle_partial). Only consulted
     # when vad.partial_interval_s has partials switched on at all.
     partial_max_queue_depth: int = 0
+    # "sensevoice" or "moonshine". language/model_arch/options above are
+    # moonshine's; SenseVoice reads its own block (runtime, language, ...).
+    model: str = "sensevoice"
+    sensevoice: SenseVoiceConfig = field(default_factory=SenseVoiceConfig)
 
 
 class _OrtApiBase(ctypes.Structure):
@@ -535,6 +541,11 @@ class STTWorker(threading.Thread):
         if self._transcriber_factory is not None:
             return self._transcriber_factory()
 
+        if self.config.model == "sensevoice":
+            return self._new_sensevoice_transcriber()
+        return self._new_moonshine_transcriber()
+
+    def _new_moonshine_transcriber(self) -> Any:
         from moonshine_voice import Transcriber
 
         if self._resolved_model is None:
@@ -553,6 +564,28 @@ class STTWorker(threading.Thread):
         # libmoonshine.so, only once a Transcriber actually exists.
         _confirm_onnx_runtime_backend(model_path)
         return transcriber
+
+    def _new_sensevoice_transcriber(self) -> Any:
+        from edge_voice.stt.sensevoice import NoNpuDeviceError, build_sensevoice_transcriber
+
+        config = self.config.sensevoice
+        built = build_sensevoice_transcriber(config)
+        if built.npu_fallback is not None:
+            quiet = config.runtime == "auto" and isinstance(built.npu_fallback, NoNpuDeviceError)
+            logger.log(
+                logging.INFO if quiet else logging.WARNING,
+                "%s: NPU unavailable, running SenseVoice on CPU: %s",
+                self.name,
+                built.npu_fallback,
+            )
+        logger.info(
+            "%s: model=sensevoice runtime=%s%s model_dir=%s",
+            self.name,
+            built.runtime,
+            f" npu_core={config.npu_core}" if built.runtime == "npu" else "",
+            built.model_dir,
+        )
+        return built.transcriber
 
     def _resolve_model(self) -> tuple[str, Any]:
         """(model_path, ModelArch) for the configured language + arch.
