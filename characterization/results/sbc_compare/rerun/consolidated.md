@@ -19,6 +19,11 @@ Per run = mean STT decode of the 3 timed segments (first segment excluded); 90 s
 | OPI5 Plus | 0-3 (A55) | multi | **10489** | 10426 | 12402 | 6336–12682 | 278 | 15501 | 9.4% |
 | RPi5 | 0-3 (all) | single | **1733** | 1770 | 1925 | 1497–1965 | 11 | 1756 | 9.4% |
 | RPi5 | 0-3 (all) | multi | **1525** | 1564 | 1734 | 1237–1775 | 36 | 1548 | 9.4% |
+| OPi6 Plus | 0,1,6-11 (A720) | single | **958** | 975 | 1099 | 790–1124 | 19† | 980 | 9.4% |
+| OPi6 Plus | 0,1,6-11 (A720) | multi | **765** | 777 | 953 | 523–1065 | 50† | 788 | 9.4% |
+| OPi6 Plus | 0-1 (A720 @ 2.6 GHz) | single | **969** | 994 | 1102 | 793–1126 | 20† | 992 | 9.4% |
+| OPi6 Plus | 2-5 (A520) | single | **3808** | 3856 | 4263 | 3293–4268 | 14† | 3834 | 9.4% |
+| OPi6 Plus | 2-5 (A520) | multi | **5864** | 5809 | 7145 | 4640–7468 | 272† | 6199 | 9.4% |
 
 ## Notes
 
@@ -27,6 +32,11 @@ Per run = mean STT decode of the 3 timed segments (first segment excluded); 90 s
 - **Desktop unpinned rows vary by session.** Re-measured after a reboot: unpinned single-thread 178–235 ms (8 runs and 6 runs), pinned 0-3 156–186 ms. The 142 ms above was a favorable session. Bare decoder timing showed no pinning effect, and `OMP_NUM_THREADS=1` (torch VAD) did not change it. Prefer the pinned rows for cross-board comparison.
 - **OPI5 A55 E2E >> decode:** decode exceeds the inter-segment gap, so segments queue.
 - **OPI5 A76 vs RPi5:** the OPI5 is 1.68× slower, but the clock ratio explains only 1.24×. Software, clock and thermals are matched, so the residual is likely hardware (memory/cache) but unverified.
+
+- **OPi6 Plus** = Orange Pi 6 Plus, CIX P1 (CD8180): A720 big cores 0,1 (2.6 GHz), 6-7 (2.3), 8-9 (2.2), 10-11 (2.5); A520 little cores 2-5 (1.8 GHz). Ubuntu 24.04, kernel 6.6.89-cix, `performance` governor, 34–36 °C. Same ORT build (`libonnxruntime-ab8c4363`, moonshine-voice 0.1.5). Confined via cgroup cpuset like OPI5. Run 2026-11-17.
+- **OPi6 A720 single is 1.8× faster than RPi5 and 3.0× faster than OPI5 A76.** Restricting to the two 2.6 GHz cores (0-1) gives no gain over all eight A720s.
+- **OPi6 multi helps on A720 (1.25×) but hurts on A520 (0.65×)**, with high run-to-run spread; E2E exceeds decode by ~335 ms there, so segments queue.
+- † OPi6 std is of per-run **E2E** means: `run.log` has no per-segment decode lines, so OPi6 is omitted from the per-run table below.
 
 ## Per-run decode mean
 
