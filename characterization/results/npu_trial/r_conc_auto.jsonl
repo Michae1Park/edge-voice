@@ -1,0 +1,5 @@
+{"mode": "auto", "n": 1, "calls": 103, "p50_ms": 194.1, "p95_ms": 203.1, "throughput_per_s": 5.15}
+{"mode": "auto", "n": 2, "calls": 178, "p50_ms": 223.9, "p95_ms": 236.0, "throughput_per_s": 8.9}
+{"mode": "auto", "n": 3, "calls": 231, "p50_ms": 259.8, "p95_ms": 274.2, "throughput_per_s": 11.55}
+{"mode": "auto", "n": 4, "calls": 252, "p50_ms": 321.5, "p95_ms": 338.3, "throughput_per_s": 12.6}
+{"mode": "auto", "n": 5, "calls": 300, "p50_ms": 329.4, "p95_ms": 392.6, "throughput_per_s": 15.0}

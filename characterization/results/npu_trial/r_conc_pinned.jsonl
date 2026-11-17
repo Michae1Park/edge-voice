@@ -1,0 +1,5 @@
+{"mode": "pinned", "n": 1, "calls": 103, "p50_ms": 194.4, "p95_ms": 204.4, "throughput_per_s": 5.15}
+{"mode": "pinned", "n": 2, "calls": 179, "p50_ms": 225.8, "p95_ms": 239.3, "throughput_per_s": 8.95}
+{"mode": "pinned", "n": 3, "calls": 238, "p50_ms": 253.2, "p95_ms": 268.9, "throughput_per_s": 11.9}
+{"mode": "pinned", "n": 4, "calls": 254, "p50_ms": 286.1, "p95_ms": 393.9, "throughput_per_s": 12.7}
+{"mode": "pinned", "n": 5, "calls": 306, "p50_ms": 325.7, "p95_ms": 384.2, "throughput_per_s": 15.3}
