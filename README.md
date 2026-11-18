@@ -50,10 +50,10 @@ Real-time, dual-channel (Rx/Tx) transcription for edge devices, using Silero VAD
 ## Architecture
 
 <p align="center">
-  <img src="docs/img/architecture.svg" alt="edge-voice architecture: audio sources publish per-channel PCM to an MQTT broker; inside the edge-voice process MqttAudioIngest, ChannelRouter, VADWorker and STTWorker run as worker threads joined by bounded queues, ending at TranscriptHub which fans out to the web UI and structured logs" width="100%">
+  <img src="docs/img/architecture.svg" alt="edge-voice architecture: audio sources publish per-channel PCM to an MQTT broker; inside the edge-voice process MqttAudioIngest, ChannelRouter and VADWorker run as worker threads and each channel's STTWorker runs in its own child process, joined by bounded queues, ending at TranscriptHub which fans out to the web UI and structured logs" width="100%">
 </p>
 
-Two logically separate pieces talk only over MQTT; everything after ingestion runs in-process on worker threads connected by bounded queues. `MqttAudioIngest → ChannelRouter → VADWorker → STTWorker` communicate via in-memory `queue.Queue`s — no MQTT between pipeline stages, only at the boundary.
+Two logically separate pieces talk only over MQTT; everything after ingestion is connected by bounded in-memory queues. `MqttAudioIngest → ChannelRouter → VADWorker` run as worker threads; each channel's `STTWorker` runs in its own spawned child process. No MQTT between pipeline stages, only at the boundary.
 
 ---
 
@@ -71,7 +71,7 @@ Two logically separate pieces talk only over MQTT; everything after ingestion ru
 ```bash
 git clone https://github.com/Michae1Park/edge-voice.git && cd edge-voice
 python3.12 -m venv venv && source venv/bin/activate
-make install   # apt: mosquitto, mosquitto-clients, libportaudio2 -- then pip install -e ".[dev]"
+make install   # apt: mosquitto, mosquitto-clients, libportaudio2 -- then pip install -e ".[dev]" (RKNN build on an RK3588)
 make test      # optional: confirms the install worked
 ```
 
@@ -85,6 +85,8 @@ git clone https://github.com/Michae1Park/edge-voice.git && cd edge-voice
 systemctl status edge-voice
 make install-service          # redeploy after hand-editing deploy/edge-voice.service
 ```
+
+On an RK3588, both install the NPU build of sherpa-onnx; `librknnrt.so` and the `video` group still need setting up (see **NPU board setup** under *STT models and runtimes*).
 
 Re-run `install.sh` anytime to update deps. The service already runs the pipeline, so skip the next section.
 
@@ -155,15 +157,15 @@ stt:
 - **Model files** download on first start into `stt.sensevoice.cache_dir` (`~/.cache/edge_voice/sensevoice`): the int8 ONNX build (~160 MB) for CPU, and the RK3588 RKNN build (~420 MB) for the NPU. The parent process downloads them once before the STT workers start. `cpu_model_dir` and `npu_model_dir` point at an existing copy instead.
 - **Why SenseVoice for the NPU.** Moonshine's encoder is only ~4–30% of its decode time on the board (the autoregressive decoder dominates), so offloading just the encoder buys little. SenseVoice decodes in one pass, so the whole model runs on the NPU.
 
-**Measured on Orange Pi 5 Plus** (`characterization/results/npu_trial`, Korean clips ≤5 s):
+**Measured on Orange Pi 5 Plus** (`characterization/results/npu_trial/r_worker_check_model_runtime.jsonl`, same 25 segments ≤5 s per row, 3 channels):
 
-| Model, runtime | CER | Mean latency | CPU time |
-|---|---|---|---|
-| Moonshine `tiny-ko`, CPU | 7.8% | 1150 ms | baseline |
-| SenseVoice, CPU (1 thread) | 12.0%* | 350 ms | — |
-| SenseVoice, NPU (5 s window) | 8.7% | 195 ms | ~10× less |
+| Model, runtime | CER | STT latency p50 / p95 |
+|---|---|---|
+| Moonshine `tiny`, CPU | 7.8% | 0.6–1.2 s / 1.6–3.3 s |
+| SenseVoice, CPU (1 thread) | 11.3% | 230 ms / 445 ms |
+| SenseVoice, NPU (5 s window) | 8.7% | 260–270 ms / 275–285 ms |
 
-\* Measured on clips ≤10 s (the other two rows are ≤5 s).
+On the NPU, SenseVoice also uses ~10× less CPU time than Moonshine.
 
 Full pipeline (MQTT → VAD → STT → web UI, 3 channels replayed at once): per-segment STT latency p50 255–277 ms on the NPU vs 2.1–3.7 s on Moonshine, at equal or better CER (`r_e2e_pipeline.jsonl`).
 
@@ -241,7 +243,7 @@ ps --ppid "$PARENT" -o pid,cmd | grep spawn_main   # STT worker child processes
 
 Expect one match per configured channel — two (`rx`, `tx`) by default. Fewer means a channel's STT worker isn't running.
 
-Confirm `MOONSHINE_ORT_SINGLE_THREAD` reached an STT **child** process (the parent always has it — `cli.py` sets it before spawning; `spawn` inherits env at fork time, so a stale shell or service env can silently drop it):
+With `stt.model: moonshine`, confirm `MOONSHINE_ORT_SINGLE_THREAD` reached an STT **child** process (the parent always has it — `cli.py` sets it before spawning; `spawn` inherits env at fork time, so a stale shell or service env can silently drop it):
 
 ```bash
 cat /proc/<pid>/environ | tr '\0' '\n' | grep MOONSHINE_ORT_SINGLE_THREAD
