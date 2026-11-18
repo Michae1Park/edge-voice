@@ -71,7 +71,6 @@ class PipelineOrchestrator:
     def transcripts(self) -> TranscriptHub:
         return self._transcript_hub
 
-
     def build(self) -> None:
         self._stop_event.clear()
         self._running = False
@@ -284,7 +283,6 @@ class PipelineOrchestrator:
     def run_with_timer(self, duration_s: float = 30.0) -> None:
         self.run(duration_s=duration_s)
 
-
     # Order is load-bearing: stop() shuts down producers before their consumers.
     def _get_workers(self) -> list[threading.Thread]:
         workers: list[threading.Thread | None] = [
@@ -297,7 +295,6 @@ class PipelineOrchestrator:
         ]
         return [w for w in workers if w is not None]
 
-
     def _build_supervisor(self) -> Supervisor:
         r = self._settings.reliability
         return Supervisor(
@@ -308,7 +305,6 @@ class PipelineOrchestrator:
             restart_window_s=r.restart_window_s,
             watchdog_enabled=r.watchdog_enabled,
         )
-
 
     def _build_metrics(self) -> MetricsCollector:
         m = self._settings.metrics
@@ -339,7 +335,6 @@ class PipelineOrchestrator:
         for w in self._stt.values():
             merged.update(w.channel_latencies_s())  # type: ignore[attr-defined]
         return merged
-
 
     def _start_stt_receivers(self) -> None:
         self._receivers_stop.clear()
@@ -511,7 +506,6 @@ class PipelineOrchestrator:
             waiter = getattr(new, "wait_ready", None)
             if callable(waiter):
                 waiter(self._settings.stt.process_start_timeout_s)
-
 
     def _build_mqtt_subscriber(self) -> threading.Thread:
         if self._ingest_queue is None:

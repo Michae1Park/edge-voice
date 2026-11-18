@@ -10,9 +10,7 @@ from edge_voice.pipeline.models import AudioPacket
 logger = logging.getLogger(__name__)
 
 PACKET_INTERVAL_S = 0.02
-FAKE_SAMPLE_PAYLOAD = (
-    b"\x00" * 640
-)
+FAKE_SAMPLE_PAYLOAD = b"\x00" * 640
 PUT_TIMEOUT_S = 0.01
 
 

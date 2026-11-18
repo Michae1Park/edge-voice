@@ -298,9 +298,7 @@ def main() -> None:
             result["cer"] * 100,
         )
 
-    latency_rows = [
-        r for r in all_segment_records if r.order != 0
-    ]
+    latency_rows = [r for r in all_segment_records if r.order != 0]
     summary = {
         "hostname": platform.node(),
         "machine": platform.machine(),

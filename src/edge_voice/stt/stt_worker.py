@@ -234,7 +234,6 @@ class STTWorker(threading.Thread):
                 )
         logger.info("%s stopped", self.name)
 
-
     def _handle_segment(self, segment: SpeechSegment) -> None:
         if segment.is_partial:
             self._handle_partial(segment)
@@ -265,7 +264,6 @@ class STTWorker(threading.Thread):
                 end=segment.end,
             )
         )
-
 
     # Never touches the final-latency fields: a prefix timing would make "STT latency" meaningless.
     def _handle_partial(self, segment: SpeechSegment) -> None:
@@ -321,7 +319,6 @@ class STTWorker(threading.Thread):
             transcriber.stop()
 
         return str(collector.text())
-
 
     def _new_transcriber(self) -> Any:
         if self._transcriber_factory is not None:

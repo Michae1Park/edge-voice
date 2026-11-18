@@ -28,5 +28,3 @@ def test_resolve_channel_fallback():
     topic = "unknown/topic"
     channel_id = client._topic_to_channel.get(topic, topic.split("/")[-1])
     assert channel_id == "topic"
-
-

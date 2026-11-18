@@ -200,7 +200,6 @@ class VADWorker(threading.Thread):
         state.vad_iter.reset_states()
         return 1
 
-
     def _handle_packet(self, packet: AudioPacket) -> None:
         state = self._channels[packet.channel_id]
         state.last_packet_at = time.monotonic()
@@ -258,7 +257,6 @@ class VADWorker(threading.Thread):
         if self.config.partial_interval_s > 0:
             self._maybe_emit_partial(packet.channel_id, state, packet)
 
-
     def _maybe_emit_partial(
         self, channel_id: str, state: _ChannelState, packet: AudioPacket
     ) -> None:
@@ -298,7 +296,6 @@ class VADWorker(threading.Thread):
                 channel_id,
                 extra={"channel_id": channel_id, "segment_id": segment.segment_id},
             )
-
 
     # Past soft_cut_s, cut just after the deepest VAD-confidence dip in the lookahead window;
     # at max_segment_s cut unconditionally.
@@ -381,7 +378,6 @@ class VADWorker(threading.Thread):
         state.segment_start_ts = None
         state.segment_id = None
         state.last_partial_s = 0.0
-
 
     # Each channel needs its own model: the LSTM state lives in the model, and sharing it
     # doubled segment counts on recorded calls. A second model costs ~0.06s and ~4MB.

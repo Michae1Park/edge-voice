@@ -14,9 +14,7 @@ from pathlib import Path
 
 THIS_DIR = Path(__file__).resolve().parent
 CHARACTERIZATION_DIR = THIS_DIR.parent.parent
-sys.path.insert(
-    0, str(THIS_DIR.parent)
-)
+sys.path.insert(0, str(THIS_DIR.parent))
 sys.path.insert(0, str(THIS_DIR.parent.parent.parent / "src"))
 
 from rtbench.adapter import build_adapter  # noqa: E402

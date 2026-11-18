@@ -95,7 +95,6 @@ class Supervisor(threading.Thread):
         self._await_restarts()
         logger.info("Supervisor stopped")
 
-
     def _scan(self) -> None:
         now = time.monotonic()
         for ts in list(self._states.values()):
@@ -119,7 +118,6 @@ class Supervisor(threading.Thread):
             stalled_for = now - target.last_activity()
             return f"stalled ({stalled_for:.1f}s no progress with input queued)"
         return None
-
 
     def _trigger_restart(self, ts: _TargetState, reason: str) -> None:
         now = time.monotonic()
@@ -188,7 +186,6 @@ class Supervisor(threading.Thread):
             threads = list(self._restart_threads)
         for t in threads:
             t.join(timeout=self._tick_interval_s)
-
 
     def status(self) -> dict[str, dict[str, object]]:
         with self._lock:

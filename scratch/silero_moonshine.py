@@ -260,7 +260,6 @@ def process_channel(
     vad_scores: List[float] = []
     feed_buf: List[torch.Tensor] = []
 
-
     def feed_window(window: torch.Tensor):
         feed_buf.append(window)
         if len(feed_buf) >= STT_FEED_WINDOWS:
@@ -271,7 +270,6 @@ def process_channel(
         if feed_buf:
             transcriber.add_audio(torch.cat(feed_buf).tolist(), SILERO_SAMPLE_RATE)
             feed_buf.clear()
-
 
     def arm_segment(offset_s: float):
         transcriber.remove_all_listeners()
@@ -293,7 +291,6 @@ def process_channel(
         )
         if save_vad_dir:
             save_segment(speech_buf, seg_index, source_stem, save_vad_dir, ch_label)
-
 
     def do_cut(cut_win: int, offset_s: float, reason: str):
         nonlocal speech_buf, vad_scores, seg_index, seg_start_s, in_speech
@@ -319,7 +316,6 @@ def process_channel(
         for tw in tail_buf:
             feed_window(tw)
 
-
     transcriber.start()
     offset_s = 0.0
 
@@ -335,7 +331,6 @@ def process_channel(
             vad_ms = (time.perf_counter() - t_vad) * 1000
             if vad_ms > 20:
                 tprint(f"  {tag}[VAD] window took {vad_ms:.1f}ms")
-
 
             if event:
                 if "start" in event:
@@ -432,7 +427,6 @@ def main():
     SOFT_CUT_LOOKAHEAD = int(args.soft_cut_lookahead * SILERO_SAMPLE_RATE / VAD_WINDOW_SAMPLES)
     STT_FEED_WINDOWS = args.feed_windows
 
-
     if args.ch0 and args.ch1:
         path_ch0, path_ch1 = args.ch0, args.ch1
         for p in (path_ch0, path_ch1):
@@ -455,7 +449,6 @@ def main():
         stem_ch0 = stem_ch1 = stem
         source_label = wav_path
 
-
     vad_model = load_silero()
     vad_lock = threading.Lock()
 
@@ -474,7 +467,6 @@ def main():
         model_arch=model_arch,
         options=STT_OPTIONS,
     )
-
 
     common_kwargs = dict(
         vad_model=vad_model,

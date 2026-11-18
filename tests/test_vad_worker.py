@@ -40,9 +40,7 @@ def _packet(channel_id: str, amplitude: int, n_samples: int = 512) -> AudioPacke
 
 
 def test_silent_packet_records_rms_gate_latency_not_silero():
-    worker = _make_worker(
-        score=0.01
-    )
+    worker = _make_worker(score=0.01)
     worker._handle_packet(_packet("rx", amplitude=0))
 
     assert "rx" in worker.rms_gate_latencies_s()
@@ -51,9 +49,7 @@ def test_silent_packet_records_rms_gate_latency_not_silero():
 
 
 def test_loud_packet_records_silero_latency_not_rms_gate():
-    worker = _make_worker(
-        score=0.01
-    )
+    worker = _make_worker(score=0.01)
     worker._handle_packet(_packet("tx", amplitude=5000))
 
     assert "tx" in worker.silero_latencies_s()

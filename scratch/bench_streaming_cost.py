@@ -108,5 +108,3 @@ print(f"   {'stop()':>6} {stop_ms:>8.1f}ms")
 print(f"   final: {text[:70]!r}")
 decodes = [t for t in times_nonstreaming if t > DECODE_MS]
 print(f"   decodes: {len(decodes)}  first={decodes[0]:.0f}ms  last={decodes[-1]:.0f}ms\n")
-
-

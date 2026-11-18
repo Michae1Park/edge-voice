@@ -167,7 +167,6 @@ class STTProcessHandle:
             daemon=True,
         )
 
-
     # pid, so orchestrator._join()'s `ident is None` never-started check still works.
     @property
     def ident(self) -> int | None:
@@ -197,7 +196,6 @@ class STTProcessHandle:
             return time.monotonic()
         value = float(self._heartbeat.value)
         return value if value > 0.0 else time.monotonic()
-
 
     @property
     def ready(self) -> bool:
