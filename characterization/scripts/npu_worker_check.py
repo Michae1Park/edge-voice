@@ -1,13 +1,3 @@
-"""On-board check of the NPU STT backend through the production worker path.
-
-Builds per-channel STTWorkerConfig exactly as the orchestrator does, runs one
-STTProcessHandle child per channel, feeds every channel the same clips at
-the same time, and reports per-channel CER and STT latency. Also exercises
-the fallback path with a broken model_dir.
-
-    python npu_worker_check.py DATA_DIR MODEL_DIR RUNTIME_LIB [CHANNELS]
-"""
-
 from __future__ import annotations
 
 import json

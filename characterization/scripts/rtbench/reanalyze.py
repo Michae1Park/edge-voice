@@ -1,22 +1,4 @@
 #!/usr/bin/env python3
-"""Recompute summary.json (and the terminal report) from an existing
-requests.csv + queue_samples.csv, without re-running the benchmark.
-
-The raw per-request/per-sample CSVs are the source of truth (per the
-benchmark's "do not only output aggregate statistics" requirement) --
-this script exists so a classification-threshold or stats change can be
-re-applied to already-collected data instead of burning another ~30
-minutes of real hardware time. Reconstructs one LoadLevelResult per
-experiment label found in the CSVs; nominal_duration_s and audio_duration_s
-must be supplied since the raw rows don't carry them directly (a
-request/sample already knows its OWN elapsed/duration, but not the run's
-configured window length).
-
-Usage:
-    python characterization/scripts/rtbench/reanalyze.py \\
-        --results-dir characterization/results_rtbench_pi \\
-        --nominal-duration-s 180
-"""
 
 from __future__ import annotations
 

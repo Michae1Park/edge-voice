@@ -1,17 +1,3 @@
-"""WAV file audio source that publishes PCM frames to MQTT for the pipeline.
-
-Reads one or more WAV files, converts to target sample rate, splits into
-20ms chunks, and publishes each frame as raw PCM bytes (no envelope) to the
-configured MQTT topics.
-
-Run as a separate process:
-    # One stereo/mono file, split across channels
-    python -m edge_voice.utils.audio_generation.wav_source --wav call.wav --channels rx tx
-
-    # One file per channel
-    python -m edge_voice.utils.audio_generation.wav_source --wav rx.wav tx.wav --channels rx tx
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -30,11 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 def _open_wav(path: str) -> tuple[int, np.ndarray]:
-    """Open WAV and return (sample_rate, data as int16 numpy array).
-
-    Data is 1-D (samples,) for mono files, or 2-D (samples, channels) for
-    multi-channel files — channels are kept separate, never downmixed.
-    """
     data, sr = sf.read(path, dtype="int16")
     return sr, data
 
@@ -48,7 +29,6 @@ def _resample_1d(data: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
 
 
 def _resample(data: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
-    """Resample mono (samples,) or multi-channel (samples, channels) int16 data."""
     if src_sr == dst_sr:
         return data
     if data.ndim == 1:
@@ -111,13 +91,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         n_out_channels = len(args.channels)
 
         if n_wav_channels == n_out_channels:
-            # One WAV channel per MQTT channel, in file order (e.g. left→rx, right→tx).
             channel_data = {
                 ch: (raw_data if raw_data.ndim == 1 else raw_data[:, i])
                 for i, ch in enumerate(args.channels)
             }
         elif n_wav_channels == 1:
-            # Mono file: duplicate the same audio to every MQTT channel.
             channel_data = {ch: raw_data for ch in args.channels}
         else:
             raise ValueError(
@@ -126,7 +104,6 @@ def main(argv: Sequence[str] | None = None) -> None:
                 "or the WAV must be mono."
             )
     elif len(args.wav) == len(args.channels):
-        # One separate WAV file per channel, e.g. --wav rx.wav tx.wav --channels rx tx
         channel_data = {}
         for ch, path in zip(args.channels, args.wav):
             file_sr, data = _open_wav(path)
@@ -139,7 +116,6 @@ def main(argv: Sequence[str] | None = None) -> None:
                 data = _resample(data, file_sr, args.sr)
             channel_data[ch] = data
 
-        # Files may differ slightly in length; pad the shorter ones with silence.
         max_len = max(len(d) for d in channel_data.values())
         for ch, data in channel_data.items():
             if len(data) < max_len:
@@ -175,7 +151,6 @@ def main(argv: Sequence[str] | None = None) -> None:
 
         frame_num += 1
 
-        # Real-time pacing
         elapsed = time.time() - start
         expected = frame_num * frame_duration_s
         time.sleep(max(0, expected - elapsed))

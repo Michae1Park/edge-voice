@@ -1,14 +1,3 @@
-"""WAV file audio source that publishes PCM frames to MQTT for the pipeline.
-
-Reads a WAV file, converts to target sample rate, splits into 20ms chunks,
-and publishes each frame as a JSON envelope to the configured MQTT topics:
-
-{"samples_b64": "<base64>", "timestamp": <float>}
-
-Run as a separate process:
-    python -m edge_voice.utils.audio_generation.wav_source_json --wav file.wav --channels rx tx
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -29,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 
 def _open_wav(path: str) -> tuple[int, np.ndarray]:
-    """Open WAV and return (sample_rate, data as int16 numpy array)."""
     data, sr = sf.read(path, dtype="int16")
     if data.ndim == 2:
         data = (data[:, 0].astype(np.int32) + data[:, 1].astype(np.int32)) // 2
@@ -112,7 +100,6 @@ def main(argv: Sequence[str] | None = None) -> None:
             client.publish(topic, json.dumps(payload).encode(), qos=1)
             frame_num += 1
 
-        # Real-time pacing
         elapsed = time.time() - start
         expected = (frame_num / len(args.channels)) * frame_duration_s
         time.sleep(max(0, expected - elapsed))

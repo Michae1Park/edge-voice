@@ -1,56 +1,4 @@
 #!/usr/bin/env python3
-"""
-Dual-channel Moonshine STT with fully streaming Silero VAD pre-filtering.
-
-Two audio channels are processed in parallel — each in its own thread with
-its own Transcriber instance and VADIterator.
-
-Sharing strategy
-────────────────
-VAD model   — one shared instance.  Silero's network is stateless (pure
-              feedforward); all mutable state lives in VADIterator, which is
-              per-channel.  A vad_lock serialises both the explicit score call
-              AND the VADIterator's internal model call in one critical section,
-              so the two threads never touch the model concurrently.
-              Critical section is ~1 ms per 32 ms window — contention is low.
-
-Transcriber — two independent instances pointing at the same model_path.
-              Moonshine is a streaming, stateful decoder (start/add_audio/stop),
-              so sessions cannot be shared across channels.  The OS will
-              typically memory-map the same weight file for both instances.
-
-Channel assignment
-──────────────────
-Stereo WAV    →  channel 0 = left,  channel 1 = right
-Two mono WAVs →  --ch0 <path>  --ch1 <path>
-Single mono WAV  →  both channels run the same audio (benchmark / debug)
-
-Architecture (per channel):
-    WAV file (lazy packet reader, one per channel)
-        └─► PACKET_DURATION_MS packets
-                └─► VAD_WINDOW_SAMPLES sub-windows (512 samples = 32 ms)
-                        └─► vad_lock: score + VADIterator decision
-                                ├─► speech  → batch into feed_buf → Transcriber
-                                └─► end     → flush → transcriber.stop/start
-
-Soft-cut logic:
-    Once a segment exceeds SOFT_CUT_S the VAD confidence score is tracked per
-    window.  A local minimum within the lookahead is used as the cut point
-    instead of a hard boundary.  The tail is replayed into the next session.
-
-Usage:
-    # Stereo WAV — left/right split automatically
-    python moonshine_silero_vad_dual.py stereo_call.wav
-
-    # Two separate mono WAVs
-    python moonshine_silero_vad_dual.py --ch0 agent.wav --ch1 customer.wav
-
-    # Single mono WAV on both channels (debug / benchmark)
-    python moonshine_silero_vad_dual.py mono.wav
-
-Dependencies:
-    pip install silero-vad torch torchaudio soundfile moonshine-voice
-"""
 
 import argparse
 import os
@@ -68,11 +16,9 @@ from moonshine_voice import (
     get_model_for_language,
 )
 
-# ── General ────────────────────────────────────────────────────────────────────
 
 DEFAULT_AUDIO = "/home/ai/workspace/ai-experiments/asr-coastguard/data/base/conversation_60s.wav"
 
-# ── Silero VAD config ──────────────────────────────────────────────────────────
 """
 Audio packet sizing reference:
 Format: 16-bit PCM, mono (2 bytes/sample)
@@ -90,14 +36,10 @@ Format: 16-bit PCM, mono (2 bytes/sample)
 
 SILERO_SAMPLE_RATE = 16000
 
-# Silero VAD input frame size
-# 512 samples @ 16 kHz = 32 ms = 1024 bytes (16-bit mono PCM)
 VAD_WINDOW_SAMPLES = 512
 VAD_THRESHOLD = 0.5
-# Amount of silence required before ending a speech segment
 VAD_MIN_SILENCE_MS = 300
 
-# ── Segment length / cut config ────────────────────────────────────────────────
 
 MAX_SEGMENT_S = 7.0
 SOFT_CUT_S = 5.0
@@ -108,11 +50,9 @@ SOFT_CUT_SAMPLES = int(SOFT_CUT_S * SILERO_SAMPLE_RATE)
 SOFT_CUT_LOOKAHEAD = int(SOFT_CUT_LOOKAHEAD_S * SILERO_SAMPLE_RATE / VAD_WINDOW_SAMPLES)
 SOFT_CUT_MIN_DIP = 0.10
 
-# ── Streaming packet config ────────────────────────────────────────────────────
 
 PACKET_DURATION_MS = 128
 
-# ── Moonshine STT config ───────────────────────────────────────────────────────
 
 STT_LANGUAGE = "ko"
 STT_MODEL_ARCH = 0
@@ -126,34 +66,21 @@ STT_OPTIONS = {
     "return_audio_data": "false",
 }
 
-# ── Derived constants ──────────────────────────────────────────────────────────
 
 _PACKET_SAMPLES = int(SILERO_SAMPLE_RATE * PACKET_DURATION_MS / 1000)
 _PACKET_SAMPLES = (_PACKET_SAMPLES // VAD_WINDOW_SAMPLES) * VAD_WINDOW_SAMPLES
 _WINDOWS_PER_PACKET = _PACKET_SAMPLES // VAD_WINDOW_SAMPLES
 
-# ── Thread-safe print ──────────────────────────────────────────────────────────
 
 _print_lock = threading.Lock()
 
 
 def tprint(*args, **kwargs):
-    """Print with a global lock so lines from two threads don't interleave."""
     with _print_lock:
         print(*args, **kwargs)
 
 
-# ── Silero VAD loader ──────────────────────────────────────────────────────────
-
-
 def load_silero():
-    """
-    Load a single Silero VAD model instance shared across both channel threads.
-    The model is stateless (pure feedforward); all mutable VAD state lives in
-    VADIterator, which is instantiated per channel.  A vad_lock passed to each
-    channel thread serialises the forward pass so threads never call it
-    concurrently.
-    """
     print("[VAD] Loading Silero VAD model …")
     from silero_vad import load_silero_vad
 
@@ -162,17 +89,10 @@ def load_silero():
     return model
 
 
-# ── Audio source helpers ───────────────────────────────────────────────────────
-
-
 def packet_stream_mono(
     path: str,
     packet_samples: int = _PACKET_SAMPLES,
 ) -> Generator[Tuple[torch.Tensor, float], None, None]:
-    """
-    Yield (packet_tensor, offset_s) from a mono (or already-extracted) WAV.
-    Final partial packet is zero-padded.
-    """
     import soundfile as sf
 
     with sf.SoundFile(path) as f:
@@ -192,7 +112,7 @@ def packet_stream_mono(
         for block in f.blocks(blocksize=src_block, dtype="float32"):
             audio = torch.from_numpy(block)
             if audio.dim() == 2:
-                audio = audio.mean(dim=1)  # fallback: mix to mono
+                audio = audio.mean(dim=1)
             if resampler is not None:
                 audio = resampler(audio.unsqueeze(0)).squeeze(0)
             if len(audio) < packet_samples:
@@ -207,11 +127,6 @@ def packet_stream_stereo_channel(
     channel: int,
     packet_samples: int = _PACKET_SAMPLES,
 ) -> Generator[Tuple[torch.Tensor, float], None, None]:
-    """
-    Yield (packet_tensor, offset_s) from a single channel of a stereo WAV.
-    channel=0 → left,  channel=1 → right.
-    Falls back to mono mix if the file has only one channel.
-    """
     import soundfile as sf
 
     with sf.SoundFile(path) as f:
@@ -245,9 +160,6 @@ def packet_stream_stereo_channel(
             sample_offset += packet_samples
 
 
-# ── VAD segment export ─────────────────────────────────────────────────────────
-
-
 def save_segment(
     audio_buf: List[torch.Tensor],
     seg_index: int,
@@ -263,9 +175,6 @@ def save_segment(
     dur = len(audio) / SILERO_SAMPLE_RATE
     tprint(f"  [VAD] saved seg {seg_index:02d}: {out_path}  ({dur:.3f}s)")
     return out_path
-
-
-# ── Moonshine listener ─────────────────────────────────────────────────────────
 
 
 class OffsetListener(TranscriptEventListener):
@@ -313,9 +222,6 @@ class OffsetListener(TranscriptEventListener):
         return t + self.offset_s
 
 
-# ── Per-channel processing ─────────────────────────────────────────────────────
-
-
 def process_channel(
     stream: Generator[Tuple[torch.Tensor, float], None, None],
     transcriber: Transcriber,
@@ -327,15 +233,6 @@ def process_channel(
     min_silence_ms: int = VAD_MIN_SILENCE_MS,
     save_vad_dir: str = "",
 ):
-    """
-    Full streaming VAD→STT pipeline for a single channel.
-    Designed to run inside a dedicated thread.
-
-    vad_lock must cover both the explicit vad_model() score call AND the
-    VADIterator call (which makes its own internal model call).  Both must
-    be inside the same critical section so the two channel threads never
-    overlap on the shared model.
-    """
     from silero_vad import VADIterator
 
     packet_samples = _PACKET_SAMPLES
@@ -362,7 +259,6 @@ def process_channel(
     vad_scores: List[float] = []
     feed_buf: List[torch.Tensor] = []
 
-    # ── feed buffer helpers ────────────────────────────────────────────────────
 
     def feed_window(window: torch.Tensor):
         feed_buf.append(window)
@@ -375,7 +271,6 @@ def process_channel(
             transcriber.add_audio(torch.cat(feed_buf).tolist(), SILERO_SAMPLE_RATE)
             feed_buf.clear()
 
-    # ── segment lifecycle ──────────────────────────────────────────────────────
 
     def arm_segment(offset_s: float):
         transcriber.remove_all_listeners()
@@ -398,7 +293,6 @@ def process_channel(
         if save_vad_dir:
             save_segment(speech_buf, seg_index, source_stem, save_vad_dir, ch_label)
 
-    # ── soft/hard cut helper ───────────────────────────────────────────────────
 
     def do_cut(cut_win: int, offset_s: float, reason: str):
         nonlocal speech_buf, vad_scores, seg_index, seg_start_s, in_speech
@@ -424,20 +318,15 @@ def process_channel(
         for tw in tail_buf:
             feed_window(tw)
 
-    # ── main loop ─────────────────────────────────────────────────────────────
 
     transcriber.start()
-    offset_s = 0.0  # ensure defined even if stream is empty
+    offset_s = 0.0
 
     for packet, packet_offset_s in stream:
         for w in range(packet_samples // VAD_WINDOW_SAMPLES):
             window = packet[w * VAD_WINDOW_SAMPLES : (w + 1) * VAD_WINDOW_SAMPLES]
             offset_s = packet_offset_s + w * VAD_WINDOW_SAMPLES / SILERO_SAMPLE_RATE
 
-            # Lock covers both calls: our explicit score call AND the
-            # VADIterator's internal model call.  Both must be in the same
-            # critical section or the two threads can collide on the shared
-            # model mid-call.  Section is ~1 ms; contention is negligible.
             t_vad = time.perf_counter()
             with vad_lock, torch.no_grad():
                 score = vad_model(window, SILERO_SAMPLE_RATE).item()
@@ -446,7 +335,6 @@ def process_channel(
             if vad_ms > 20:
                 tprint(f"  {tag}[VAD] window took {vad_ms:.1f}ms")
 
-            # ── VAD state machine ──────────────────────────────────────────────
 
             if event:
                 if "start" in event:
@@ -494,16 +382,12 @@ def process_channel(
                         if min_score < score - SOFT_CUT_MIN_DIP:
                             do_cut(min_win + 1, offset_s, "soft cut")
 
-    # EOF
     if in_speech and speech_buf:
         close_segment(offset_s, "EOF")
     else:
         transcriber.stop()
 
     tprint(f"\n{tag}[Done] {seg_index} segment(s)\n")
-
-
-# ── Entry point ────────────────────────────────────────────────────────────────
 
 
 def main():
@@ -513,7 +397,6 @@ def main():
     parser = argparse.ArgumentParser(
         description="Dual-channel Moonshine STT with streaming Silero VAD"
     )
-    # Input modes (mutually exclusive group)
     input_group = parser.add_mutually_exclusive_group()
     input_group.add_argument(
         "stereo_wav",
@@ -538,7 +421,6 @@ def main():
     parser.add_argument("--save-vad-segments", metavar="DIR", default="")
     args = parser.parse_args()
 
-    # Validate --ch0 / --ch1 usage
     if bool(args.ch0) != bool(args.ch1):
         parser.error("--ch0 and --ch1 must be used together")
 
@@ -549,10 +431,8 @@ def main():
     SOFT_CUT_LOOKAHEAD = int(args.soft_cut_lookahead * SILERO_SAMPLE_RATE / VAD_WINDOW_SAMPLES)
     STT_FEED_WINDOWS = args.feed_windows
 
-    # ── Resolve input streams ──────────────────────────────────────────────────
 
     if args.ch0 and args.ch1:
-        # Two explicit mono files
         path_ch0, path_ch1 = args.ch0, args.ch1
         for p in (path_ch0, path_ch1):
             if not os.path.exists(p):
@@ -564,7 +444,6 @@ def main():
         stem_ch1 = os.path.splitext(os.path.basename(path_ch1))[0]
         source_label = f"{stem_ch0} / {stem_ch1}"
     else:
-        # Single stereo (or mono) WAV
         wav_path = args.stereo_wav or DEFAULT_AUDIO
         if not os.path.exists(wav_path):
             print(f"[!] File not found: {wav_path}", file=sys.stderr)
@@ -575,11 +454,7 @@ def main():
         stem_ch0 = stem_ch1 = stem
         source_label = wav_path
 
-    # ── Load models ────────────────────────────────────────────────────────────
 
-    # One shared VAD model — stateless network, so safe to share.
-    # vad_lock serialises the hot path: both the score call and VADIterator's
-    # internal call are covered in a single critical section per window.
     vad_model = load_silero()
     vad_lock = threading.Lock()
 
@@ -588,7 +463,6 @@ def main():
     print(f"[STT] Source: {source_label}\n")
     print("=" * 72)
 
-    # Two independent Transcriber instances — same weights, separate sessions.
     transcriber_ch0 = Transcriber(
         model_path=model_path,
         model_arch=model_arch,
@@ -600,7 +474,6 @@ def main():
         options=STT_OPTIONS,
     )
 
-    # ── Launch threads ─────────────────────────────────────────────────────────
 
     common_kwargs = dict(
         vad_model=vad_model,

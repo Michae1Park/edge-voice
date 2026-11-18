@@ -1,19 +1,3 @@
-"""ASR adapters: transcribe(audio_path) -> str.
-
-The benchmark engine (engine.py) never assumes how the ASR is invoked -- it
-only ever calls `adapter(audio_path)`. This module supplies:
-
-  - MoonshineAdapter: wraps this project's real STT model (moonshine_voice),
-    loaded ONCE at construction (matching STTWorker's "resolved eagerly, off
-    the real-time path" design in edge_voice/stt/stt_worker.py) -- never
-    reloaded per request.
-  - DummyAdapter: a synthetic stand-in with a configurable service time, for
-    exercising/validating the engine itself without a model or hardware.
-
-Anything else that exposes .transcribe(path) -> str (or a plain function
-with that signature) plugs into the same engine unchanged.
-"""
-
 from __future__ import annotations
 
 import os
@@ -21,11 +5,6 @@ import random
 import time
 from typing import Protocol
 
-# Must be set before moonshine_voice/onnxruntime is imported -- see
-# characterization/scripts/run_experiment.py's docstring for why: without
-# it, onnxruntime spreads a single decode's intra-op work across every core,
-# which is not how this is deployed (configs/default.yaml + cli.py always
-# set this) and would misrepresent single-worker capacity.
 os.environ.setdefault("MOONSHINE_ORT_SINGLE_THREAD", "1")
 
 import soundfile as sf
@@ -36,21 +15,13 @@ class AsrAdapter(Protocol):
 
 
 class DummyAdapter:
-    """Synthetic ASR: sleeps for a configurable service time per request.
-
-    For validating the producer/consumer engine's timing/queueing behavior
-    in isolation from any real model -- no hardware or downloaded weights
-    required. service_s can be a fixed float or (mean_s, jitter_s) for a
-    uniform-jitter service time, so the engine's queueing math can be
-    exercised under variable service times too.
-    """
 
     def __init__(
         self, service_s: float = 1.0, jitter_s: float = 0.0, rtf: float | None = None
     ) -> None:
         self.service_s = service_s
         self.jitter_s = jitter_s
-        self.rtf = rtf  # if set, overrides service_s as rtf * audio_duration_s
+        self.rtf = rtf
 
     def transcribe(self, audio_path: str) -> str:
         if self.rtf is not None:
@@ -65,25 +36,7 @@ class DummyAdapter:
 
 
 class MoonshineAdapter:
-    """Real moonshine_voice Transcriber, loaded once, called per audio file.
 
-    Mirrors STTWorker._transcribe (edge_voice/stt/stt_worker.py) exactly --
-    same start()/add_audio()/stop() bracketing (stop() resets decoder state
-    between calls, verified there byte-for-byte against a fresh instance) and
-    the same repetitive-output guard -- but reads a whole WAV file per call
-    instead of a VAD-delivered in-memory segment, since this benchmark treats
-    the ASR as "complete audio file in, transcription out" with no VAD/queue
-    machinery of its own.
-
-    language/model_arch/options default to configs/default.yaml's stt: block
-    (via Settings.load()) so benchmark numbers reflect the actually-deployed
-    model, not an arbitrary substitute.
-    """
-
-    # Below this unique/total token ratio, a completed line is treated as the
-    # model looping on itself -- same default and logic as STTWorkerConfig
-    # (edge_voice/stt/stt_worker.py); reimplemented locally so this adapter
-    # has no dependency on that module's private helpers.
     REPETITIVE_RATIO = 0.45
 
     def __init__(

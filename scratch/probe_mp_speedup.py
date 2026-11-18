@@ -1,35 +1,4 @@
 #!/usr/bin/env python3
-"""Do two STT *processes* decode in parallel, where two threads did not?
-
-The multiprocessing counterpart to scratch/probe_gil_release.py, and
-**Step 0 / the hard gate of docs/archived/STT_MULTIPROCESS_PLAN.md**: run this
-before writing any src/ code. Same two-Transcriber workload, same
-start/add_audio/stop cycle stt_worker.py's _transcribe() uses -- the only
-variable changed is threading.Thread -> multiprocessing.Process.
-
-    threads   (probe_gil_release.py, RPi5): 1.02x  -- no benefit, GIL-bound
-    processes (this script):                 ?     -- must be >= 1.7x to proceed
-
-Model load is deliberately EXCLUDED from the timing. Each child loads its
-own Transcriber, signals ready, then blocks on a shared "go" barrier; the
-clock starts only once every child is loaded and waiting. Otherwise
-spawn+load (measured at 3.6-7.3s per instance on the RPi5) would swamp the
-decode time this is trying to compare, and the sequential and concurrent
-rounds would pay it differently.
-
-Cross-process intervals use time.monotonic(), which is comparable across
-processes on Linux (CLOCK_MONOTONIC is system-wide) -- verified while
-scoping the plan, and the same assumption STTProcessHandle.last_activity
-relies on.
-
-Run on the RPi5, not a dev box: moonshine_voice ships different compiled
-binaries per platform, and the ARM build's locking behaviour is the one
-that decides this plan.
-
-Usage:
-    python scratch/probe_mp_speedup.py
-    python scratch/probe_mp_speedup.py --language ko --arch tiny --iterations 10
-"""
 
 from __future__ import annotations
 
@@ -68,19 +37,11 @@ def _decode_child(
     go_ev,
     result_q,
 ) -> None:
-    """Child entry point. MUST be module-level: `spawn` pickles the target by
-    qualified name, so a closure/lambda/bound method fails at Process.start().
-
-    Loads its own Transcriber (ONNX sessions are not picklable, so the parent
-    cannot hand one over), signals ready, waits for the shared go barrier,
-    then runs the decode loop and reports monotonic intervals back.
-    """
     from moonshine_voice import Transcriber
 
     from edge_voice.stt.stt_worker import _make_collector
 
     transcriber = Transcriber(model_path, model_arch, options=options)
-    # Same normalization as STTWorker._pcm_to_float32.
     samples = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
     samples_list = samples.clip(-1.0, 1.0).tolist()
 
@@ -100,17 +61,10 @@ def _decode_child(
             transcriber.stop()
         intervals.append((t0, time.monotonic()))
 
-    # Deliberately NO cancel_join_thread() here: it lets the process exit
-    # without flushing, which DROPS this result and hangs the parent's get().
-    # Cost a 300s timeout to learn. The deadlock it would have guarded
-    # against is instead avoided the correct way -- the parent drains before
-    # it joins (see _run_round, and plan §5.7).
     result_q.put((idx, intervals))
 
 
 def _run_round(ctx, n_children: int, child_args: tuple) -> tuple[float, list]:
-    """Spawn n_children, wait for all to load, release the barrier, and time
-    only the decode phase. Returns (wall_seconds, per-child intervals)."""
     ready = [ctx.Event() for _ in range(n_children)]
     go = ctx.Event()
     result_q = ctx.Queue()
@@ -131,8 +85,6 @@ def _run_round(ctx, n_children: int, child_args: tuple) -> tuple[float, list]:
 
     t0 = time.monotonic()
     go.set()
-    # Drain BEFORE joining: a child holding undelivered queue items will not
-    # exit, so joining first would deadlock (plan §5.7).
     results = [result_q.get(timeout=600) for _ in range(n_children)]
     wall = time.monotonic() - t0
     for p in procs:
@@ -172,8 +124,6 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # Set BEFORE spawning: children inherit os.environ at spawn time, and
-    # moonshine reads this when it creates the ONNX session.
     if not args.no_single_thread:
         os.environ["MOONSHINE_ORT_SINGLE_THREAD"] = "1"
     mode = "unset (oversubscribed)" if args.no_single_thread else "1 (production config)"
@@ -188,13 +138,10 @@ def main() -> None:
     pcm = audio[: int(args.sr * args.clip_s)].tobytes()
     child_args = (pcm, args.sr, args.iterations, model_path, model_arch, options)
 
-    # `spawn`, not `fork`: forking a process that has already loaded ONNX
-    # Runtime native state is unsafe (plan D4).
     ctx = mp.get_context("spawn")
 
     print(f"{args.arch}-{args.language}, {args.iterations} decodes/child, model load excluded\n")
 
-    # 1. SEQUENTIAL: one child at a time, two rounds. Same total work.
     seq_wall = 0.0
     for round_idx in range(2):
         wall, _ = _run_round(ctx, 1, child_args)
@@ -202,7 +149,6 @@ def main() -> None:
         seq_wall += wall
     print(f"Sequential total, {args.iterations * 2} calls: {seq_wall:.2f}s")
 
-    # 2. CONCURRENT: both children at once.
     conc_wall, intervals = _run_round(ctx, 2, child_args)
     print(f"Concurrent (2 processes), {args.iterations * 2} calls: {conc_wall:.2f}s")
 
@@ -217,16 +163,6 @@ def main() -> None:
     print("(1.0x = no benefit; 2.0x = perfect two-core parallelism)")
     print("\nFor comparison, two THREADS on the RPi5 measured 1.02x (probe_gil_release.py).")
 
-    # Two independent signals, and they answer different questions:
-    #   overlap_frac -- DID the two processes compute at the same time?
-    #                   This is the direct evidence the GIL is gone.
-    #   speedup      -- how much THROUGHPUT did that actually buy?
-    #                   Can fall well short of 2x even at 100% overlap, if the
-    #                   two processes contend for something below the CPU
-    #                   (memory bandwidth, shared cache, clock throttling).
-    # A high-overlap/low-speedup result is a real, useful outcome: parallelism
-    # works, the hardware just doesn't give a full 2x. That is still a large
-    # win over threads, so it must not be reported as a failure.
     print()
     if overlap_frac >= 0.8 and speedup >= 1.4:
         print(

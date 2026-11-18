@@ -1,14 +1,3 @@
-"""
-Typed application configuration, loaded from YAML + environment overrides.
-
-Design intent (see docs/design.md "Configuration"):
-- One pydantic-settings model is the single source of truth for all tunable
-  parameters (VAD thresholds, segment timing, MQTT topics, model paths, etc).
-- Defaults live in code; overrides come from config/*.yaml, then env vars
-  (EDGE_VOICE_SECTION__FIELD=value), so behavior is reproducible and
-  diffable across deployments.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -57,13 +46,6 @@ class AudioSettings(BaseModel):
 
 
 class RepacketizerSettings(BaseModel):
-    """Re-packetizes incoming audio frames to a fixed outgoing frame size
-    before they hit the VAD/STT pipeline (e.g. 20ms in -> 32ms out).
-
-    sample_rate is intentionally NOT a field here -- it always follows
-    audio.sample_rate (see Settings._check_repacketizer_matches_vad), so
-    there's exactly one place to change the pipeline's sample rate.
-    """
 
     incoming_ms: float = Field(default=20.0, gt=0)
     outgoing_ms: float = Field(default=32.0, gt=0)
@@ -71,54 +53,26 @@ class RepacketizerSettings(BaseModel):
 
 
 class VADSettings(BaseModel):
-    """VADWorker tuning. sample_rate is intentionally NOT a field here -- it
-    always follows audio.sample_rate, same rationale as RepacketizerSettings.
-
-    The segment_limits_* group is gated behind segment_limits_enabled and
-    only engages on speech that runs past soft_cut_s without a pause; see
-    VADWorkerConfig for the mechanism.
-    """
 
     threshold: float = 0.5
     window_samples: int = 512
     rms_gate_enabled: bool = True
-    silence_rms_floor: float = 0.01  # CALIBRATE: normalized float32 RMS, not raw int16
+    silence_rms_floor: float = 0.01
     preroll_chunks: int = 3
-    min_silence_duration_ms: int = 100  # Silero VADIterator: silence needed before `end` fires
-    speech_pad_ms: int = 30  # Silero VADIterator: padding appended around detected speech
-    # Seconds of no packets before an in-progress segment is emitted anyway;
-    # without it the last utterance waits for shutdown. 0 disables.
+    min_silence_duration_ms: int = 100
+    speech_pad_ms: int = 30
     idle_flush_s: float = 2.0
     segment_limits_enabled: bool = False
     max_segment_s: float = 7.0
-    # See VADWorkerConfig.soft_cut_enabled -- the hard cap alone bounds
-    # worst-case backlog; this only controls whether VAD spends effort (and
-    # some real latency on every segment that runs past soft_cut_s) trying
-    # to land the cut on a pause instead of chopping mid-word.
     soft_cut_enabled: bool = True
     soft_cut_s: float = 5.0
     soft_cut_lookahead_s: float = 1.0
     soft_cut_min_dip: float = 0.10
-    # Emit a revisable transcript of the in-progress segment every this many
-    # seconds of accumulated speech. 0 disables (same convention as
-    # idle_flush_s) and is the default: on a non-streaming model every
-    # partial re-transcribes the whole prefix from scratch, so this costs
-    # real inference. Measure on the target device before raising it.
     partial_interval_s: float = Field(default=0.0, ge=0)
-    # Don't emit partials until the segment is at least this long. Short
-    # turns finalize fast enough that a partial adds nothing but load, so
-    # this keeps ordinary turn-taking paying zero.
     partial_min_segment_s: float = Field(default=1.5, gt=0)
 
     @model_validator(mode="after")
     def _check_soft_cut_below_hard_cap(self) -> "VADSettings":
-        """soft_cut_s must leave room before max_segment_s, or the hard cap
-        always fires first and the natural-pause search never runs.
-
-        Only checked when the search can actually run at all -- irrelevant
-        once soft_cut_enabled is off, same as it's irrelevant with
-        segment_limits_enabled off.
-        """
         if (
             self.segment_limits_enabled
             and self.soft_cut_enabled
@@ -133,28 +87,6 @@ class VADSettings(BaseModel):
 
 
 class MoonshineSettings(BaseModel):
-    """Moonshine tuning, used when stt.model is "moonshine" (CPU only).
-
-    stt.language + model_arch together select the model -- there's no separate
-    model-name field, because moonshine resolves downloaded models only via
-    get_model_for_language(language, arch). Not every arch exists for every
-    language; an unavailable combination raises at startup with the list of
-    what is available. What actually exists on moonshine's CDN today:
-
-        en              tiny, base, tiny/small/medium-streaming
-        ar, uk, vi, zh  tiny*, base
-        ja              tiny, base
-        ko              tiny, base*
-        es              base only -- the one language with no tiny
-
-        * published but absent from moonshine's registry; reachable only
-          via _MODEL_REGISTRY_OVERRIDES in stt_worker.py, and only ko/base
-          has actually been run here. See that comment before relying on one.
-
-    No streaming arch exists for any language but en, which is what blocks
-    docs/deferred/STREAMING_STT_PLAN.md. Re-check with
-    scratch/probe_moonshine_models.py after upgrading moonshine-voice.
-    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -166,7 +98,6 @@ class MoonshineSettings(BaseModel):
         "small-streaming",
         "medium-streaming",
     ] = "tiny"
-    # See configs/default.yaml -- 13.0 truncates Korean mid-sentence.
     max_tokens_per_second: str = "20.0"
     vad_threshold: str = "0"
     identify_speakers: bool = False
@@ -176,11 +107,6 @@ class MoonshineSettings(BaseModel):
 
 
 class SenseVoiceSettings(BaseModel):
-    """SenseVoice (via sherpa-onnx), used when stt.model is "sensevoice".
-
-    Model files are downloaded into cache_dir on first start unless a
-    *_model_dir override points at an existing copy.
-    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -189,27 +115,13 @@ class SenseVoiceSettings(BaseModel):
     cpu_model_dir: str = ""
     cpu_threads: int = Field(default=1, ge=1)
     npu_model_dir: str = ""
-    # Fixed input window of the RKNN build. Longer segments are split into
-    # consecutive windows, so keep it >= vad.max_segment_s.
     npu_window_s: Literal[5, 10, 15, 20, 25, 30] = 5
-    # Absolute path to librknnrt.so; empty means the system library.
     npu_runtime_lib: str = ""
-    # One channel per NPU core: RK3588 has 3, and latency held up to 3
-    # concurrent streams but jumped once two shared a core
-    # (characterization/results/npu_trial), so this caps at 3.
     npu_max_channels: int = Field(default=RK3588_NPU_CORES, ge=1, le=RK3588_NPU_CORES)
     npu_probe_timeout_s: float = Field(default=60.0, gt=0)
 
 
 class STTSettings(BaseModel):
-    """Speech-to-text: which model, on which runtime.
-
-    model and runtime are independent axes. SenseVoice runs on cpu or npu;
-    Moonshine is cpu only. runtime "auto" uses the NPU when one is present
-    and the model supports it, otherwise the CPU. An NPU that is requested
-    (npu or auto) but unusable falls back to the same model on CPU with a
-    logged reason.
-    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -218,26 +130,8 @@ class STTSettings(BaseModel):
     language: str = "ko"
     moonshine: MoonshineSettings = MoonshineSettings()
     sensevoice: SenseVoiceSettings = SenseVoiceSettings()
-    # Backpressure guard for vad.partial_interval_s. A partial is throwaway,
-    # so when segment_queue is this deep or deeper it's skipped rather than
-    # queued ahead of real work -- finals are never dropped. 0 means "drop a
-    # partial whenever anything else is already waiting".
     partial_max_queue_depth: int = Field(default=0, ge=0)
-    # Run each channel's STT worker in its own OS process rather than its own
-    # thread. True is the deployed configuration: moonshine's native decode
-    # does not release the GIL, so two STT *threads* serialize (measured 1.02x
-    # speedup on the RPi5 -- i.e. none), while two processes genuinely overlap
-    # (84% of decode time concurrent, 1.70x). See docs/archived/STT_MULTIPROCESS_PLAN.md.
-    #
-    # False keeps the original thread-backed path. Tests default to it so the
-    # suite stays fast and synchronous instead of spawning interpreters and
-    # loading models, and it is the one-line rollback if processes misbehave
-    # on a given device.
     use_processes: bool = True
-    # How long start() waits for every STT child to load its model and signal
-    # ready. Generous on purpose: load alone is 3.6-7.3s on the RPi5, plus
-    # spawn and imports. A child that never becomes ready inside this window
-    # is reported as a startup failure, distinctly from a stall.
     process_start_timeout_s: float = Field(default=120.0, gt=0)
 
     @model_validator(mode="after")
@@ -253,39 +147,19 @@ class STTSettings(BaseModel):
 
 
 class LoggingSettings(BaseModel):
-    # Master switch. False disables logging process-wide via logging.disable()
-    # -- every logger.log() call becomes a cheap no-op check, skipped before
-    # any formatting/handler work happens, regardless of the two sinks below.
-    # For performance-sensitive runs where logging overhead itself matters.
     enabled: bool = True
-    # Independent per-sink toggles, only consulted when enabled above is
-    # true -- same master + narrower sub-toggle shape as
-    # ReliabilitySettings.enabled / watchdog_enabled. File-only avoids
-    # duplicating into journald while keeping a searchable local log;
-    # console-only skips disk writes entirely (today's original behavior).
     console_enabled: bool = True
     file_enabled: bool = True
     level: str = "INFO"
-    # Console formatter only -- JSON, or pretty text for local dev. The file
-    # sink is always JSON regardless, since it exists for later grep/tooling,
-    # not for a human reading the terminal.
     is_json: bool = Field(default=True, alias="json")
-    # Directory the rotating log file is written to -- created on demand if
-    # it doesn't exist. Only relevant when file_enabled is true.
     output_dir: str = "./logs"
-    max_bytes: int = Field(default=10_000_000, gt=0)  # ~10MB per file before rotating
-    backup_count: int = Field(default=5, ge=0)  # rotated files kept beyond the active one
+    max_bytes: int = Field(default=10_000_000, gt=0)
+    backup_count: int = Field(default=5, ge=0)
 
 
 class WebUISettings(BaseModel):
-    # Deployment target has no network at all -- the only client is a kiosk
-    # browser on the device's own attached display -- so this binds loopback
-    # only, not 0.0.0.0. See docs/BUILDPLAN.md Milestone 5.
     host: str = "127.0.0.1"
     port: int = Field(default=8080, ge=1, le=65535)
-    # TranscriptHub backlog: how many recent transcripts a browser that just
-    # (re)connected gets replayed with, so the feed isn't blank after a
-    # kiosk reload. Not "history" in any persistent sense -- in-memory only.
     transcript_backlog: int = Field(default=50, ge=0)
 
 
@@ -294,55 +168,23 @@ class HealthSettings(BaseModel):
 
 
 class MetricsSettings(BaseModel):
-    """Milestone 7 aggregation of queue depths, STT latency, restart budget,
-    and MQTT connectivity into one periodic structured log line + in-memory
-    snapshot. See docs/BUILDPLAN.md."""
 
     enabled: bool = True
-    # How often MetricsCollector aggregates and logs a snapshot.
     emit_interval_s: float = Field(default=10.0, gt=0)
-    # Decimal places the per-channel latency dicts are rounded to in the log
-    # line only -- snapshot() itself always keeps full precision. Sub-ms
-    # readings (router repacketize, typically microseconds) show as 0.0 at
-    # the default 3; raise this if you need to actually see those values.
     latency_log_decimals: int = Field(default=3, ge=0)
 
 
 class ReliabilitySettings(BaseModel):
-    """Milestone 6 supervision + OS watchdog. See docs/BUILDPLAN.md.
-
-    Two independent recovery layers, both configured here:
-      - In-process supervision: restart worker threads that crash or stall,
-        backing off to "degraded" after too many restarts in a window.
-      - OS watchdog: sd_notify WATCHDOG=1 pings so systemd restarts the whole
-        process if it hangs (a case in-process supervision cannot catch).
-        A no-op when not running under systemd (NOTIFY_SOCKET unset), so it's
-        safe in dev/CI/off-device -- see pipeline/systemd_watchdog.py.
-    """
 
     enabled: bool = True
-    # How often the supervisor scans workers AND pings the watchdog. Keep it
-    # well under systemd's WatchdogSec (typically 2-3x margin) so a single
-    # missed tick doesn't trip a spurious process restart.
     tick_interval_s: float = Field(default=2.0, gt=0)
-    # A worker that is alive, has work waiting on its input queue, but hasn't
-    # advanced its last-activity timestamp for this long is treated as stalled
-    # (deadlocked / wedged in a native call) and restarted like a crash. Idle
-    # workers with empty input queues are never flagged -- see Supervisor.
     stall_timeout_s: float = Field(default=10.0, gt=0)
-    # More than max_restarts of one worker within restart_window_s flips it to
-    # "degraded": stop hot-restarting in-process (that just burns CPU on a
-    # constrained board) and let the OS watchdog's full-process restart be the
-    # recovery path instead.
     max_restarts: int = Field(default=3, ge=0)
     restart_window_s: float = Field(default=60.0, gt=0)
-    # Emit sd_notify pings. Independent of `enabled` only in that the whole
-    # supervisor must be running for pings to happen; a no-op without systemd.
     watchdog_enabled: bool = True
 
 
 class DumpSettings(BaseModel):
-    """AudioDumpWorker configuration for debugging/verification."""
 
     enabled: bool = False
     output_dir: str = "./dumped_audio"
@@ -350,14 +192,12 @@ class DumpSettings(BaseModel):
 
 
 class SegmentDumpSettings(BaseModel):
-    """SegmentAudioDumpWorker configuration for debugging VAD output."""
 
     enabled: bool = False
     output_dir: str = "./dumped_vad_segments"
 
 
 class QueuesSettings(BaseModel):
-    """Queue sizes for pipeline stages."""
 
     ingest: int = 256
     routed: int = 128
@@ -366,18 +206,6 @@ class QueuesSettings(BaseModel):
 
 
 class Settings(BaseSettings):
-    """Top-level application settings.
-
-    Loading order (later overrides earlier):
-    1. Code defaults (model field defaults)
-    2. configs/default.yaml
-    3. configs/local.yaml (gitignored)
-    4. Environment variables (EDGE_VOICE__SECTION__<FIELD>)
-
-    Usage:
-        settings = Settings.load()
-        sample_rate = settings.audio.sample_rate
-    """
 
     mqtt: MQTTSettings = MQTTSettings()
     audio: AudioSettings = AudioSettings()
@@ -393,7 +221,6 @@ class Settings(BaseSettings):
     segment_dump: SegmentDumpSettings = SegmentDumpSettings()
     queues: QueuesSettings = QueuesSettings()
 
-    # For overriding configs. e.g. Docker/Kubernetes env vars
     model_config = SettingsConfigDict(
         env_prefix="EDGE_VOICE_",
         env_nested_delimiter="__",
@@ -410,9 +237,6 @@ class Settings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """Precedence (first wins): init kwargs > env vars > local.yaml >
-        default.yaml > code defaults. Sources earlier in this tuple win over
-        later ones (see pydantic_settings.BaseSettings._settings_build_values)."""
         return (
             init_settings,
             env_settings,
@@ -423,8 +247,6 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _check_repacketizer_matches_vad(self) -> "Settings":
-        """repacketizer.outgoing_ms must produce exactly vad.window_samples
-        at audio.sample_rate, or VAD will receive mis-sized frames."""
         expected_samples = self.repacketizer.outgoing_ms * self.audio.sample_rate / 1000.0
         if round(expected_samples) != self.vad.window_samples:
             raise ValueError(
@@ -437,9 +259,6 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _check_npu_channel_cap(self) -> "Settings":
-        """One NPU core per channel. Explicit runtime "npu" refuses more
-        channels than cores; "auto" instead runs the extra channels on CPU
-        (see orchestrator._stt_config)."""
         stt, n_channels = self.stt, len(self.mqtt.channels)
         cap = stt.sensevoice.npu_max_channels
         if stt.model == "sensevoice" and stt.runtime == "npu" and n_channels > cap:
@@ -452,16 +271,12 @@ class Settings(BaseSettings):
 
     @classmethod
     def load(cls) -> "Settings":
-        """Load settings with layered overrides (see settings_customise_sources)."""
         return cls()
 
 
 class _YamlConfigSettingsSource(PydanticBaseSettingsSource):
-    """Deep-merged configs/default.yaml + configs/local.yaml as a settings source."""
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
-        # Required by the base class; unused since __call__ is overridden below
-        # to return the whole merged dict at once rather than per-field.
         return None, field_name, False
 
     def __call__(self) -> dict[str, Any]:
@@ -469,7 +284,6 @@ class _YamlConfigSettingsSource(PydanticBaseSettingsSource):
 
 
 def _load_config_files() -> dict[str, Any]:
-    """Load and merge all local YAML config files."""
     configs = []
     for path in ["configs/default.yaml", "configs/local.yaml"]:
         p = Path(path)
@@ -477,7 +291,6 @@ def _load_config_files() -> dict[str, Any]:
             with open(p) as f:
                 configs.append(yaml.safe_load(f) or {})
 
-    # Deep merge: later configs override earlier
     merged: dict[str, Any] = {}
     for cfg in configs:
         merged = _deep_merge(merged, cfg)
@@ -485,7 +298,6 @@ def _load_config_files() -> dict[str, Any]:
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
-    """Recursively merge override into base."""
     result = base.copy()
     for key, value in override.items():
         if key in result and isinstance(result[key], dict) and isinstance(value, dict):

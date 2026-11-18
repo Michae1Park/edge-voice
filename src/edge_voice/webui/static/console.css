@@ -47,9 +47,6 @@ body {
   background: var(--bg);
 }
 
-/* Soft blurred accent circles behind both panels, echoing the reference
-   mockup's glow -- purely atmospheric, so they sit at z-index 0 under
-   everything and never intercept clicks. */
 .glow {
   position: absolute;
   border-radius: 50%;
@@ -60,7 +57,6 @@ body {
 .glow-a { width: 440px; height: 440px; right: -160px; bottom: -180px; background: var(--accent-a); opacity: 0.32; }
 .glow-b { width: 320px; height: 320px; left: -120px; top: -110px; background: #3b82f6; opacity: 0.16; }
 
-/* ── sidebar: everything that isn't the transcript itself ─────────── */
 
 .sidebar {
   position: relative;
@@ -124,10 +120,6 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Same three-state model throughout: live (green), degraded (amber --
-   worker crash-looped past its restart budget, or MQTT unreachable),
-   stopped (dim gray). Channel staleness never lands here -- see
-   health/reporting.py. */
 .status {
   display: flex;
   align-items: center;
@@ -172,9 +164,6 @@ body {
   font-size: 12.5px;
 }
 .stat-row .stat-name { flex: 0 0 auto; color: var(--ink-dim); }
-/* Fixed width + ellipsis (rather than letting long values like the queue
-   depth list wrap) keeps every value in this section flush to the same
-   right edge, regardless of how long its text is. */
 .stat-row .stat-val {
   flex: 0 1 auto;
   min-width: 0;
@@ -191,10 +180,6 @@ body {
 .stat-row .stat-val.warn { color: var(--warn); }
 .stat-row .stat-val.dim { color: var(--ink-faint); }
 
-/* Queues get their own block rather than a stat-row: the queue set is
-   config-driven (see orchestrator.queue_depths) and can be several
-   entries, which wouldn't fit -- or stay legible -- crammed onto one
-   line the way a single MQTT/Metrics value does. */
 .stat-block { padding: 7px 10px 8px; border-radius: var(--radius-sm); font-size: 12.5px; }
 .stat-block .stat-name { display: block; color: var(--ink-dim); margin-bottom: 5px; }
 .stat-lines { display: flex; flex-direction: column; gap: 3px; }
@@ -214,8 +199,6 @@ body {
 
 .side-list { display: flex; flex-direction: column; gap: 2px; }
 
-/* Channel rows -- one per configured channel (rx/tx), avatar-badge led so
-   they read the same visual language as the feed's message avatars. */
 .srow {
   display: flex;
   align-items: center;
@@ -249,12 +232,6 @@ body {
 .srow .dot.warn { background: var(--warn); }
 .srow .dot.dim { background: var(--ink-faint); opacity: 0.5; }
 
-/* Module rows -- a status indicator leads instead of a channel avatar,
-   since a pipeline stage has no per-channel identity of its own. A halo
-   ring around a solid core reads as a live/status indicator at a glance,
-   rather than as a plain list bullet the way a bare small dot did; the
-   row also picks up a faint tint of the same color so the state is
-   legible even at a glance across the whole row, not just the dot. */
 .mrow {
   border-radius: var(--radius-sm);
 }
@@ -285,9 +262,6 @@ body {
   gap: 12px;
 }
 
-/* align-self here targets the sidebar footer's column layout, where it
-   keeps the button from stretching full-width; the chat header's row
-   layout overrides it below to center the button on that axis instead. */
 .link-btn {
   align-self: flex-start;
   font-family: var(--sans);
@@ -308,7 +282,6 @@ body {
 .legend-item { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--ink-faint); }
 .legend-item .dot { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto; }
 
-/* ── chat panel: the transcript ─────────────────────────────────── */
 
 .chat {
   position: relative;
@@ -356,10 +329,6 @@ body {
 }
 .empty[hidden] { display: none; }
 
-/* One bubble per utterance, avatar-led like the reference: rx on the
-   left in a neutral slate bubble, tx on the right in the purple/blue
-   accent gradient -- the same gradient used for the brand mark, so the
-   two read as one visual system rather than two arbitrary colors. */
 .msg {
   display: flex;
   align-items: flex-end;
@@ -409,9 +378,6 @@ body {
   box-shadow: 0 10px 24px rgba(139, 92, 246, 0.28);
 }
 
-/* In-progress transcript: same bubble, rewritten in place until the final
-   lands. Dimmed/italic/dashed so a revisable line is never mistaken for a
-   settled one, with a pulsing caret to show it's still being spoken. */
 .msg.partial .bubble { opacity: 0.82; font-style: italic; border-style: dashed; }
 .msg.partial .bubble::after {
   content: "▌";
@@ -451,7 +417,6 @@ body {
   50% { opacity: 0; }
 }
 
-/* ── jump-to-latest ─────────────────────────────────── */
 
 .jump {
   position: absolute;
@@ -474,15 +439,7 @@ body {
 .jump:focus-visible { outline: 2px solid var(--accent-a); outline-offset: 2px; }
 .jump[hidden] { display: none; }
 
-/* ── responsive ─────────────────────────────────────── */
-/* Tablet and below: stack the sidebar above the chat instead of beside
-   it -- there isn't enough width for a fixed 308px rail plus a readable
-   feed column, and this is the same content people already read top-down
-   on the kiosk's status strip in an earlier revision, so scrolling it as
-   a capped-height header reads naturally. */
 @media (max-width: 900px) {
-  /* Keep the console viewport-locked (no page scroll) -- only the sidebar
-     and the feed scroll internally, same as the desktop layout. */
   .console { flex-direction: column; }
   .sidebar { width: 100%; max-height: 42vh; border-right: none; border-bottom: 1px solid var(--panel-line); }
   .chat { min-height: 0; }
@@ -490,8 +447,6 @@ body {
   .msg { max-width: 92%; }
 }
 
-/* Phone: tighten padding everywhere and let the header wrap instead of
-   clipping the clear button off-screen. */
 @media (max-width: 560px) {
   .brand { padding: 16px 16px 14px; }
   .side-top { padding: 0 16px 12px; }

@@ -1,44 +1,4 @@
 #!/usr/bin/env python3
-"""Does moonshine_voice's native decode call release the GIL?
-
-Two Transcriber instances, two threads, each hammering the same
-start/add_audio/stop cycle stt_worker.py's _transcribe() uses -- no
-orchestrator, no queues, no VAD, nothing but the two decode calls
-themselves. If the underlying native call releases the GIL for its
-compute-heavy portion, two threads should make real progress at the same
-time and a concurrent run should take noticeably less wall-clock time than
-running the same two workloads one after another. If it doesn't release
-the GIL, concurrent and sequential wall-clock time should be about the
-same -- only one thread can ever actually be executing at once, regardless
-of how many cores or how many Transcriber instances exist.
-
-This isolates the specific question bench_pipeline_load.py's RPi5 run
-couldn't answer on its own: it showed decode calls alternating in lockstep
-(one channel's decode starts the instant the other's ends) even with two
-independent per-channel Transcriber instances on two dedicated cores --
-consistent with GIL serialization, but not a direct test of it, since the
-real pipeline has other moving parts (VAD, queues, real conversational
-turn-taking) that could in principle produce a similar-looking pattern for
-other reasons. This script removes all of those and tests the one claim
-directly: does the call itself release the GIL, yes or no.
-
-Uses stt_worker.py's own _make_collector() for the listener, so the call
-shape matches production exactly -- the only thing skipped is the
-orchestrator/queue plumbing around it, which is irrelevant to whether the
-GIL is held during the call.
-
-Run this on the RPi5, not a dev box -- moonshine_voice ships different
-compiled binaries per platform, and a dev-machine result (e.g. x86, many
-cores) doesn't necessarily say anything about the ARM build's locking
-behavior. A smoke test on a 32-core x86 dev box showed partial speedup
-(~1.4x, real but incomplete overlap) with this same script -- that's not
-"no GIL issue," it's a different binary; the RPi5 number is the one that
-actually answers the question for deployment.
-
-Usage:
-    python scratch/probe_gil_release.py
-    python scratch/probe_gil_release.py --language ko --arch tiny --iterations 10
-"""
 
 from __future__ import annotations
 
@@ -55,9 +15,6 @@ def _load_audio(path: str, sample_rate: int) -> np.ndarray:
     if data.ndim > 1:
         data = data[:, 0]
     if file_sr != sample_rate:
-        # Same resample path wav_source.py/bench_ort_threads.py use --
-        # the wav/*.wav fixtures aren't all natively at the pipeline's
-        # configured rate.
         import torch
         import torchaudio
 
@@ -68,16 +25,12 @@ def _load_audio(path: str, sample_rate: int) -> np.ndarray:
 
 
 def _pcm_to_float32(samples: np.ndarray) -> np.ndarray:
-    # Same normalization as STTWorker._pcm_to_float32 -- int16 range to [-1, 1].
     return (samples.astype(np.float32) / 32768.0).clip(-1.0, 1.0)
 
 
 def _decode_loop(
     transcriber, samples_list: list, sample_rate: int, iterations: int, intervals: list
 ) -> None:
-    """One full start/add_audio/stop cycle per iteration -- same shape as
-    stt_worker.py's _transcribe(), repeated back to back with no gap, so
-    any GIL release shows up as real wall-clock overlap between threads."""
     from edge_voice.stt.stt_worker import _make_collector
 
     for i in range(iterations):
@@ -125,7 +78,6 @@ def main() -> None:
     from moonshine_voice import Transcriber, get_model_for_language, string_to_model_arch
 
     model_path, model_arch = get_model_for_language(args.language, string_to_model_arch(args.arch))
-    # Same options as production (configs/default.yaml's stt: block).
     options = {"max_tokens_per_second": "18.0", "vad_threshold": "0"}
 
     audio = _load_audio(args.wav, args.sr)
@@ -136,9 +88,6 @@ def main() -> None:
     tr_a = Transcriber(model_path, model_arch, options=options)
     tr_b = Transcriber(model_path, model_arch, options=options)
 
-    # 1. SEQUENTIAL baseline: A's whole loop, then B's whole loop, no
-    # threading at all -- the true cost of the work with zero concurrency
-    # to possibly exploit, whatever the GIL situation turns out to be.
     intervals_a_seq: list = []
     intervals_b_seq: list = []
     t0 = time.perf_counter()
@@ -147,7 +96,6 @@ def main() -> None:
     sequential_wall_s = time.perf_counter() - t0
     print(f"\nSequential (no threads), {args.iterations * 2} total calls: {sequential_wall_s:.2f}s")
 
-    # 2. CONCURRENT: same work, two threads, at the same time.
     intervals_a: list = []
     intervals_b: list = []
     thread_a = threading.Thread(

@@ -1,84 +1,3 @@
-"""STTWorker: single thread consuming one channel's segment_queue and
-emitting TranscriptEvents. One dedicated instance per channel -- see
-"One Transcriber per channel" below.
-
-Drop-in replacement for FakeSTTWorker(segment_queue, on_transcript).
-
-Relationship to scratch/silero_moonshine.py
-───────────────────────────────────────────
-The scratch script fuses VAD and STT in one loop: it streams 32ms windows
-into a Transcriber as Silero detects them, and manages session boundaries
-(arm/close/soft-cut) from live VAD events. Here that work is already done --
-VADWorker owns segmentation and hands us finalized SpeechSegments -- so all
-the VAD state machine, score tracking, and soft/hard-cut logic is absent by
-design. What carries over is the session lifecycle (start -> add_audio ->
-stop) and the repetitive-output guard.
-
-One add_audio() call per segment, not windowed
-────────────────────────────────────────────────
-The scratch script fed Moonshine in small windows because it had no choice --
-audio arrived live, as Silero produced it, packet by packet. STTWorker
-already has the entire finalized segment before _transcribe runs, so that
-constraint doesn't apply, and measuring it (scratch/demo_segment_cut_latency.py
-et al.) showed windowed feeding was strictly worse on real audio: ~2.7x
-slower (Moonshine's decoder redoes real work per add_audio() call, not just
-call overhead) and prone to word/phrase duplication right at window
-boundaries -- a duplication _is_repetitive can't catch, since it judges a
-whole completed line's unique/total token ratio, not a short repeated phrase
-inside an otherwise-fine line. moonshine_voice's own mic_transcriber.py
-agrees: it coalesces queued audio into as few add_audio() calls as possible
-specifically because that "lowers latency and avoids redundant work."
-
-One Transcriber per channel, not one shared across channels
-──────────────────────────────────────────────────────────
-This used to be one shared STTWorker/Transcriber handling every channel's
-segments sequentially off a single mixed segment_queue, on the reasoning
-that there was "no concurrency to isolate" and that a second Transcriber
-would cost too much memory (~175MB estimated). Both turned out to be wrong
-in practice, measured on the actual RPi5 target hardware, not assumed:
-
-  - Throughput: one sequential decoder cannot sustain real-time dual-channel
-    transcription. Total STT decode demand for two concurrent channels sums
-    to ~95%+ of the real-time wall-clock budget on a single decoder, so its
-    input queue backs up without bound (bench_pipeline_load.py's queue-depth
-    trend goes GROWING within seconds). A single channel alone, given its
-    own dedicated decoder, comfortably uses only ~65% of budget with real
-    margin -- the fix has to be genuine parallelism, not a faster shared
-    decoder. Giving one decoder more CPU cores doesn't help either:
-    multi-threading a single Transcriber across cores was measured *slower*
-    than single-threaded (bench_ort_threads.py) -- thread-sync overhead on
-    a model this small outweighs the benefit, so the only lever left is a
-    second independent decoder instance.
-  - Memory: a second tiny-ko Transcriber costs ~56MB marginal RSS, measured
-    directly (scratch/probe_decoder_memory.py), not the ~175MB assumed --
-    trivial against the RPi5's ~2.6GB available at genuine idle.
-
-So each channel now gets its own STTWorker instance (own thread, own
-Transcriber, own segment_queue -- see orchestrator.py's per-channel
-_build_stt(channel_id)) and channels are decoded in true parallel. Moonshine's
-decoder being stateful is why this needs a distinct Transcriber per worker
-at all (concurrent sessions can't share one instance) -- but it's also *why
-this is safe*: start()/stop() fully resets decoder state between segments
-(verified empirically, byte-for-byte, against a fresh Transcriber per
-segment), so nothing about per-channel context correctness changes from the
-old design -- a channel's own segments were always processed strictly in
-order by whichever worker(s) touch that channel, and still are.
-
-Each instance's Transcriber is resolved eagerly, in __init__, off the
-real-time path -- not lazily on the first segment. `import edge_voice.stt.stt_worker`
-stays safe either way (nothing above module level touches moonshine_voice),
-but *constructing* an STTWorker now requires it to be importable, unless
-`transcriber_factory` bypasses that entirely (tests, benchmarks). In
-production this is never a real constraint: orchestrator.build() -- the only
-caller that doesn't inject a factory -- always has moonshine_voice available.
-
-Assumptions:
-  - SpeechSegment.audio is raw PCM bytes, int16 mono, at config.sample_rate
-    (what VADWorker emits -- it concatenates the AudioPacket.samples it was
-    fed). Adjust _pcm_to_float32 if that ever changes.
-  - Moonshine wants float32 in [-1, 1]; add_audio takes a plain list.
-"""
-
 from __future__ import annotations
 
 import ctypes
@@ -100,36 +19,8 @@ logger = get_stage_logger(__name__, stage="stt")
 
 QUEUE_GET_TIMEOUT_S = 0.2
 
-# Models moonshine_voice publishes on its CDN but omits from its own registry.
-#
-# moonshine-voice hardcodes a MODEL_INFO table mapping (language, arch) to a
-# download URL, and its Korean entry is wrong: one model named "base-ko" but
-# tagged ModelArch.TINY and pointing at the tiny-ko URL. So asking for
-# ("ko", BASE) raises ValueError("Model not found...") even though base-ko is
-# published and works -- verified by downloading it and transcribing with it
-# (~2.2x tiny's decode time, slightly better punctuation). Checked 0.0.73 and
-# 0.1.0: same entry, and 0.1.0 moved the table into libmoonshine.so, so an
-# upgrade doesn't fix it. Drop an entry here once upstream lists it.
-#
-# ko/base is not a one-off. Probing the CDN key space directly
-# (scratch/probe_moonshine_models.py) found 18 models published against 13
-# listed; the five below are the difference. All five carry the same component
-# set (encoder_model.ort + decoder_model_merged.ort + tokenizer.bin), and none
-# appears in upstream's own README model table either -- so unlike the listed
-# models, they ship with no published WER/CER and no support commitment, and
-# could be withdrawn without a version bump. Re-run that script after
-# upgrading moonshine-voice to see whether any row here can be deleted.
-#
-# VERIFIED: only ("ko", "base"), which is the one this project has actually
-# run. The other four resolve and download, but have never been loaded or
-# measured here -- treat a first run on one as unproven, not as a config
-# change.
 _MODEL_REGISTRY_OVERRIDES: dict[tuple[str, str], str] = {
     ("ko", "base"): "https://download.moonshine.ai/model/base-ko/quantized/base-ko",
-    # Unverified (see above). Each language's *other* arch is listed normally:
-    # upstream documents ar/uk/vi/zh as base-only, so these tiny variants are
-    # the lighter option it never advertised -- 26M params against base's 58M,
-    # which is the tradeoff that matters on a Pi.
     ("ar", "tiny"): "https://download.moonshine.ai/model/tiny-ar/quantized/tiny-ar",
     ("uk", "tiny"): "https://download.moonshine.ai/model/tiny-uk/quantized/tiny-uk",
     ("vi", "tiny"): "https://download.moonshine.ai/model/tiny-vi/quantized/tiny-vi",
@@ -139,8 +30,6 @@ _MODEL_REGISTRY_OVERRIDES: dict[tuple[str, str], str] = {
 
 def _default_options() -> dict[str, str]:
     return {
-        # 13.0 (the scratch script's value) truncates Korean mid-sentence;
-        # see configs/default.yaml for the measurements behind 30.0.
         "max_tokens_per_second": "20.0",
         "vad_threshold": "0",
         "identify_speakers": "false",
@@ -153,51 +42,20 @@ def _default_options() -> dict[str, str]:
 @dataclass
 class STTWorkerConfig:
     language: str = "ko"
-    # Readable arch name ("tiny", "medium-streaming", ...), converted to
-    # moonshine's ModelArch enum in _new_transcriber. See STTSettings for
-    # which archs each language publishes.
     model_arch: str = "tiny"
     sample_rate: int = 16000
     options: dict[str, str] = field(default_factory=_default_options)
-    # Below this unique/total token ratio a line is treated as the model
-    # looping on itself; see _is_repetitive.
     repetitive_ratio: float = 0.45
-    # Segment-queue depth at or above which an in-progress partial is
-    # skipped rather than transcribed (see _handle_partial). Only consulted
-    # when vad.partial_interval_s has partials switched on at all.
     partial_max_queue_depth: int = 0
-    # "sensevoice" or "moonshine". language/model_arch/options above are
-    # moonshine's; SenseVoice reads its own block (runtime, language, ...).
     model: str = "sensevoice"
     sensevoice: SenseVoiceConfig = field(default_factory=SenseVoiceConfig)
 
 
 class _OrtApiBase(ctypes.Structure):
-    # First two fields of ONNX Runtime's stable C ABI struct (the rest is a
-    # large, version-sensitive function table we don't need):
-    # struct OrtApiBase { const OrtApi*(*GetApi)(uint32_t); const char*(*GetVersionString)(void); };
     _fields_ = [("GetApi", ctypes.c_void_p), ("GetVersionString", ctypes.c_void_p)]
 
 
 def _confirm_onnx_runtime_backend(model_path: str) -> None:
-    """One-time startup proof the model is served by ONNX Runtime.
-
-    moonshine_voice ships no torch/tf dependency, and its only inference
-    path is libmoonshine.so -> onnxruntime's C API -- confirmed with gdb by
-    breaking on libmoonshine.so's exported `ort_run` symbol and tracing a
-    real transcription: moonshine_transcribe_stream ->
-    Transcriber::transcribe_stream -> MoonshineModel::transcribe -> ort_run.
-
-    Must run *after* Transcriber() is constructed: onnxruntime is dlopen'd
-    lazily (verified absent from /proc/self/maps right after `import
-    moonshine_voice`, present right after construction), so calling this any
-    earlier would find nothing mapped.
-
-    Reports the version via ONNX Runtime's own C API
-    (OrtGetApiBase().GetVersionString()) against the exact .so mapped into
-    this process, rather than parsing it out of a filename -- so it can't
-    silently drift out of sync with what's actually loaded.
-    """
     try:
         with open(f"/proc/{os.getpid()}/maps") as f:
             onnx_lib_paths = sorted({line.split()[-1] for line in f if "libonnxruntime" in line})
@@ -233,12 +91,6 @@ def _confirm_onnx_runtime_backend(model_path: str) -> None:
 
 
 def _is_repetitive(text: str, threshold: float) -> bool:
-    """Detect the degenerate 'model loops on one phrase' failure mode.
-
-    Carried over from the scratch script: short lines are always accepted
-    (too few tokens to judge), longer ones are rejected when the ratio of
-    unique tokens falls below `threshold`.
-    """
     tokens = text.split()
     if len(tokens) < 4:
         return False
@@ -249,13 +101,6 @@ _collector_cls: Any = None
 
 
 def _collector_base() -> type:
-    """moonshine_voice's listener base if installed, else plain object.
-
-    Subclassing the real base matters in production (moonshine may check
-    the type when registering a listener); falling back to `object` keeps
-    the worker exercisable with an injected transcriber_factory on machines
-    without moonshine_voice -- see the module docstring.
-    """
     try:
         from moonshine_voice import TranscriptEventListener
 
@@ -265,11 +110,6 @@ def _collector_base() -> type:
 
 
 def _make_collector(repetitive_ratio: float, segment_id: str) -> Any:
-    """Build a listener that accumulates completed lines into one transcript.
-
-    The class is defined lazily (and cached) so the base class above is only
-    resolved on first use, keeping this module importable either way.
-    """
     global _collector_cls
 
     if _collector_cls is None:
@@ -300,7 +140,6 @@ def _make_collector(repetitive_ratio: float, segment_id: str) -> Any:
                     self.lines.append(text)
 
             def text(self) -> str:
-                # A segment can decode into several lines; join them back up.
                 return " ".join(self.lines).strip()
 
         _collector_cls = _Collector
@@ -309,7 +148,6 @@ def _make_collector(repetitive_ratio: float, segment_id: str) -> Any:
 
 
 class STTWorker(threading.Thread):
-    """Drop-in replacement for FakeSTTWorker(segment_queue, on_transcript)."""
 
     def __init__(
         self,
@@ -324,37 +162,13 @@ class STTWorker(threading.Thread):
         self._on_transcript = on_transcript
         self.config = config or STTWorkerConfig()
         self._transcriber_factory = transcriber_factory
-        # Resolved once -- get_model_for_language re-checks/downloads assets
-        # and re-prints the license notice on every call, so this exists to
-        # avoid doing that twice. Must be set before _new_transcriber() runs,
-        # since that method reads it.
         self._resolved_model: tuple[str, Any] | None = None
-        # Eager: the one shared Transcriber (see module docstring) is loaded
-        # right here, at construction, off the real-time path -- not on
-        # whichever thread's first segment happens to arrive. Requires
-        # moonshine_voice to be importable unless transcriber_factory bypasses
-        # it (tests/benchmarks); orchestrator.build() always has it in
-        # production, so this only ever blocks startup, never a live segment.
         self._transcriber: Any = self._new_transcriber()
         self._stop_event = threading.Event()
-        # Monotonic timestamp of the last segment handled, read by the
-        # supervisor's stall check (docs/BUILDPLAN.md Milestone 6). A plain
-        # float write/read is atomic under the GIL, so no lock is needed.
         self._last_activity = time.monotonic()
-        # Wall-clock duration of the most recent _transcribe() call -- pure
-        # inference time, not queue-to-transcript (queue_depths() already
-        # answers "is there a backlog"; see Milestone 7 decision in
-        # docs/BUILDPLAN.md). None until the first segment is transcribed.
         self._last_latency_s: float | None = None
-        # Per-channel view of the same latency, for observability/metrics.py.
-        # Needs its own lock (unlike the plain float above): a dict insert
-        # (first segment on a channel) can resize the table, and
-        # MetricsCollector's cross-thread dict(...) copy would race with that.
         self._channel_latency_lock = threading.Lock()
         self._channel_latency_s: dict[str, float] = {}
-        # Partial-path counters, kept separate from every latency field above
-        # so the two never mix (see _handle_partial). Written only by this
-        # worker's own thread; readers tolerate a stale count.
         self._partials_transcribed = 0
         self._partials_dropped = 0
 
@@ -367,36 +181,23 @@ class STTWorker(threading.Thread):
 
     @property
     def last_activity(self) -> float:
-        """Monotonic time of the last segment handled (for supervisor stall check)."""
         return self._last_activity
 
     @property
     def last_latency_s(self) -> float | None:
-        """Inference time of the most recent _transcribe() call, or None if
-        no segment has been transcribed yet (for observability/metrics.py)."""
         return self._last_latency_s
 
     def channel_latencies_s(self) -> dict[str, float]:
-        """Per-channel view of the same latency last_latency_s reports in
-        aggregate (for observability/metrics.py). Finals only -- partials
-        never write here, so this stays a like-for-like series."""
         with self._channel_latency_lock:
             return dict(self._channel_latency_s)
 
     def partial_stats(self) -> dict[str, int]:
-        """How many in-progress partials were transcribed vs skipped under
-        backpressure. A high dropped:transcribed ratio means
-        vad.partial_interval_s is asking for more than this device can do."""
         return {
             "transcribed": self._partials_transcribed,
             "dropped": self._partials_dropped,
         }
 
     def run(self) -> None:
-        # self.name, not a hardcoded "STTWorker" -- with one dedicated
-        # worker per channel (see orchestrator.py's _build_stt), two threads
-        # would otherwise log identical, indistinguishable start/stop/error
-        # lines. self.name is e.g. "STTWorker-rx".
         logger.info("%s started", self.name)
         while not self._stop_event.is_set():
             try:
@@ -404,7 +205,7 @@ class STTWorker(threading.Thread):
             except queue.Empty:
                 continue
 
-            if segment is None:  # shutdown sentinel
+            if segment is None:
                 break
 
             self._last_activity = time.monotonic()
@@ -421,15 +222,12 @@ class STTWorker(threading.Thread):
                 )
         logger.info("%s stopped", self.name)
 
-    # ── Per-segment handling ────────────────────────────────────
 
     def _handle_segment(self, segment: SpeechSegment) -> None:
         if segment.is_partial:
             self._handle_partial(segment)
             return
 
-        # No lazy load here: __init__ already resolved the one shared
-        # Transcriber, off the real-time path.
         transcriber = self._transcriber
         start = time.monotonic()
         text = self._transcribe(transcriber, segment)
@@ -456,20 +254,9 @@ class STTWorker(threading.Thread):
             )
         )
 
-    # ── Partial (in-progress prefix) handling ───────────────────
 
     def _handle_partial(self, segment: SpeechSegment) -> None:
-        """Transcribe an in-progress prefix for display, then discard it.
-
-        Deliberately does NOT touch _last_latency_s or _channel_latency_s.
-        Those feed metrics.py and the TRANSCRIPT log line, and a partial
-        times a *prefix* against a different model entry point -- blending
-        the two would make "STT latency" mean nothing. Partials get their
-        own counters instead; see partial_stats().
-        """
         if self._segment_queue.qsize() > self.config.partial_max_queue_depth:
-            # Throwaway work, and something real is already waiting. Skipping
-            # is the whole backpressure story: finals never take this branch.
             self._partials_dropped += 1
             logger.debug(
                 "STTWorker: dropping partial segment=%s (queue depth %d)",
@@ -496,30 +283,15 @@ class STTWorker(threading.Thread):
         )
 
     def _transcribe_partial(self, transcriber: Any, segment: SpeechSegment) -> str:
-        """One stateless pass over the prefix.
-
-        transcribe_without_streaming() works off the transcriber handle
-        rather than the default stream, so it cannot perturb the state the
-        final pass depends on -- the reason partials are safe to run on the
-        same shared Transcriber instead of a second ~175MB copy. Safe
-        because this worker is single-threaded and _transcribe brackets
-        start()/stop() around one segment, so no stream is ever open here.
-        """
         samples = self._pcm_to_float32(segment.audio).tolist()
         transcript = transcriber.transcribe_without_streaming(samples, self.config.sample_rate)
         lines = [line.text for line in getattr(transcript, "lines", [])]
         text = " ".join(t for t in lines if t).strip()
-        # A looping partial is noise the user would watch get worse; the
-        # final applies the same guard with a best_partial fallback, which
-        # doesn't apply here because there's nothing to fall back to.
         return "" if _is_repetitive(text, self.config.repetitive_ratio) else text
 
     def _transcribe(self, transcriber: Any, segment: SpeechSegment) -> str:
         collector = _make_collector(self.config.repetitive_ratio, segment.segment_id)
 
-        # remove_all_listeners() first: the transcriber is reused across
-        # every segment on this channel, so a stale collector would keep
-        # receiving events.
         transcriber.remove_all_listeners()
         transcriber.add_listener(collector)
 
@@ -528,14 +300,10 @@ class STTWorker(threading.Thread):
             samples = self._pcm_to_float32(segment.audio).tolist()
             transcriber.add_audio(samples, self.config.sample_rate)
         finally:
-            # stop() flushes the decoder and resets its state (verified in
-            # the module docstring); skipping it on error would leave the
-            # session open and corrupt this worker's next segment.
             transcriber.stop()
 
         return str(collector.text())
 
-    # ── Helpers ──────────────────────────────────────────────────
 
     def _new_transcriber(self) -> Any:
         if self._transcriber_factory is not None:
@@ -560,8 +328,6 @@ class STTWorker(threading.Thread):
             model_arch=model_arch,
             options=self.config.options,
         )
-        # After construction, not before: onnxruntime is dlopen'd lazily by
-        # libmoonshine.so, only once a Transcriber actually exists.
         _confirm_onnx_runtime_backend(model_path)
         return transcriber
 
@@ -588,14 +354,6 @@ class STTWorker(threading.Thread):
         return built.transcriber
 
     def _resolve_model(self) -> tuple[str, Any]:
-        """(model_path, ModelArch) for the configured language + arch.
-
-        moonshine's own resolver first; _MODEL_REGISTRY_OVERRIDES fills the
-        gaps its registry has. Overridden entries still go through
-        download_model_from_info(), so they share the same cache directory,
-        component list and download logic as everything else -- the override
-        supplies only the table row moonshine is missing.
-        """
         from moonshine_voice import (
             download_spelling_model_for_language,
             get_model_for_language,
@@ -623,10 +381,6 @@ class STTWorker(threading.Thread):
                 "download_url": override_url,
             }
         )
-        # get_model_for_language() prefetches this alongside the transcriber;
-        # do the same here so the two paths differ only in the table row. Also
-        # best-effort: the spelling model is optional, and today only "en"
-        # publishes one at all.
         try:
             download_spelling_model_for_language(language)
         except Exception as exc:
@@ -634,5 +388,4 @@ class STTWorker(threading.Thread):
         return resolved
 
     def _pcm_to_float32(self, pcm_bytes: bytes) -> np.ndarray:
-        # int16 mono PCM -> float32 normalized to [-1, 1]
         return np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0

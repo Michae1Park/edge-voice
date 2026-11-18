@@ -1,11 +1,3 @@
-"""Tests for edge_voice.observability.metrics.
-
-Drives MetricsCollector with fake callables rather than a real orchestrator/
-workers, same approach test_supervisor.py takes for Supervisor: the
-collector is generic over its input callables, so a controllable fake
-exercises each aggregated field deterministically and fast.
-"""
-
 import time
 
 import pytest
@@ -88,7 +80,7 @@ def test_snapshot_reflects_live_queue_depths(running_collector):
 
 
 def test_no_supervisor_means_restart_fields_are_none(running_collector):
-    collector = running_collector()  # default supervisor=lambda: None
+    collector = running_collector()
     assert _wait_until(lambda: collector.snapshot() is not None)
     snapshot = collector.snapshot()
     assert snapshot.restart_status is None
@@ -111,7 +103,7 @@ def test_supervisor_present_surfaces_restart_budget(running_collector):
 
 
 def test_mqtt_connected_defaults_to_none(running_collector):
-    collector = running_collector()  # default mqtt_connected=lambda: None
+    collector = running_collector()
     assert _wait_until(lambda: collector.snapshot() is not None)
     assert collector.snapshot().mqtt_connected is None
 
@@ -123,7 +115,7 @@ def test_mqtt_connected_passes_through_bool(running_collector):
 
 
 def test_per_channel_latencies_default_to_empty(running_collector):
-    collector = running_collector()  # all four default to lambda: {}
+    collector = running_collector()
     assert _wait_until(lambda: collector.snapshot() is not None)
     snapshot = collector.snapshot()
     assert snapshot.vad_silero_latencies_s == {}
@@ -166,10 +158,7 @@ def test_latency_log_decimals_controls_log_line_rounding_not_snapshot(running_co
     )
     assert _wait_until(lambda: collector.snapshot() is not None)
 
-    # snapshot() always keeps full precision regardless of the log setting.
     assert collector.snapshot().vad_silero_latencies_s == {"rx": 0.000225313}
-    # The log line respects latency_log_decimals (6 here, not the default 3),
-    # so this sub-millisecond value is visible instead of rounding to 0.0.
     assert any("vad_silero={'rx': 0.000225}" in record.getMessage() for record in caplog.records)
 
 

@@ -1,6 +1,3 @@
-"""Tests for the per-channel repacketize latency tracking added to
-ChannelRouter."""
-
 import queue
 import time
 
@@ -9,7 +6,6 @@ import pytest
 from edge_voice.channel.router import ChannelRouter
 from edge_voice.pipeline.models import AudioPacket
 
-# 20ms @ 16kHz, int16 mono -- matches RepacketizerConfig's default incoming_ms.
 INCOMING_BYTES = 640
 
 
@@ -57,15 +53,13 @@ def test_unknown_channel_does_not_record_latency(running_router):
     router = running_router(ingest, channel_ids=("rx",))
     ingest.put(AudioPacket(channel_id="unknown", timestamp=0.0, samples=bytes(INCOMING_BYTES)))
 
-    time.sleep(0.2)  # give the router a moment to (not) process it
+    time.sleep(0.2)
     assert router.repacketize_latencies_s() == {}
 
 
 def test_rejected_packet_does_not_record_latency(running_router):
     ingest = queue.Queue()
     router = running_router(ingest)
-    # Wrong size for the default RepacketizerConfig -> Repacketizer.process
-    # raises ValueError, which run() catches and drops without recording.
     ingest.put(AudioPacket(channel_id="rx", timestamp=0.0, samples=bytes(10)))
 
     time.sleep(0.2)

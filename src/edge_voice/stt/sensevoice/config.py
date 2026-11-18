@@ -10,11 +10,6 @@ DEFAULT_CACHE_DIR = "~/.cache/edge_voice/sensevoice"
 
 @dataclass
 class SenseVoiceConfig:
-    """Plain, picklable SenseVoice settings for one STT worker.
-
-    Process mode ships this to the child at spawn, and the NPU probe
-    subprocess receives it as JSON, so it must hold only primitive values.
-    """
 
     runtime: str = "auto"
     language: str = "ko"

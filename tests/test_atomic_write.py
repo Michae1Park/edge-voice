@@ -1,5 +1,3 @@
-"""Tests for edge_voice.audio_ingest.atomic_write."""
-
 import numpy as np
 import soundfile as sf
 
@@ -20,7 +18,6 @@ def test_writes_readable_wav(tmp_path):
 def test_leaves_no_temp_file_behind(tmp_path):
     dest = tmp_path / "seg.wav"
     atomic_sf_write(str(dest), np.zeros(320, dtype=np.int16), 16000, subtype="PCM_16")
-    # Only the destination should exist -- no stray .tmp-<pid> sibling.
     assert [p.name for p in tmp_path.iterdir()] == ["seg.wav"]
 
 
@@ -38,8 +35,6 @@ def test_replaces_existing_file_atomically(tmp_path):
 
 def test_failed_write_cleans_up_temp(tmp_path):
     dest = tmp_path / "seg.wav"
-    # An unwritable subtype makes soundfile raise mid-write; the temp file it
-    # opened must not be left behind.
     try:
         atomic_sf_write(str(dest), np.zeros(320, dtype=np.int16), 16000, subtype="NOT_A_SUBTYPE")
     except Exception:

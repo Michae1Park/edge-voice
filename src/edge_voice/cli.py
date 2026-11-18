@@ -1,8 +1,3 @@
-"""
-Entry point for `edge-voice` console script: parses CLI args, loads
-config, and starts the pipeline (and optionally the web UI) as configured.
-"""
-
 import argparse
 import logging
 import os
@@ -19,8 +14,6 @@ from edge_voice.webui.app import create_app
 
 logger = logging.getLogger(__name__)
 
-# Read by libmoonshine's onnxruntime session setup (native getenv, not an
-# edge_voice setting) to force onnxruntime's intra-op thread pool to 1
 os.environ.setdefault("MOONSHINE_ORT_SINGLE_THREAD", "1")
 
 
@@ -47,15 +40,10 @@ def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
 
     settings = Settings.load()
-    # Field is `logging_` (alias "logging") -- Settings avoids a plain
-    # `logging` attribute name on the model.
     configure_logging(settings.logging_, debug=args.debug)
 
     orchestrator = PipelineOrchestrator(settings)
 
-    # A live mic is a separate process publishing over MQTT, same as a real
-    # call leg -- see mic_source.py's docstring. --mic just spawns it for
-    # convenience rather than folding capture into the orchestrator.
     mic_process: subprocess.Popen | None = None
     if args.mic:
         logger.info(
@@ -77,17 +65,8 @@ def main(argv: list[str] | None = None) -> None:
 
     try:
         if args.run_secs > 0:
-            # Headless, bounded-duration run -- no web UI. Used by
-            # tests/CI (tests/test_pipeline_integration.py) where nothing
-            # binds a port or needs a browser.
             orchestrator.run_with_timer(duration_s=args.run_secs)
         else:
-            # Default path: the kiosk UI (see docs/BUILDPLAN.md Milestone 5).
-            # uvicorn.run() blocks in this thread and handles Ctrl-C itself;
-            # the pipeline's own worker threads run in the background the
-            # whole time, started here rather than via orchestrator.run()
-            # (which has its own blocking wait loop -- redundant with
-            # uvicorn's).
             orchestrator.build()
             orchestrator.start()
             app = create_app(orchestrator)

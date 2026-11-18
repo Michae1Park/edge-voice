@@ -1,25 +1,4 @@
 #!/usr/bin/env python3
-"""Builds test files for the utterance-LENGTH question, holding occupancy
-fixed -- isolates "does the base speech unit's own duration matter" from
-density (already tested with a 3s unit) and speaking rate (already tested
-via TSM on a 3s unit). No TSM here: these are real, unmodified recordings
-of different natural lengths from characterization/testsegments/.
-
-Same symmetric N-speech+N-gap tiling as build_test_audio.py /
-build_speed_audio.py (trailing gap included, fit to ~30s total), with the
-gap computed from the utterance's *actual measured* duration to hit the
-requested occupancy exactly -- same convention as build_speed_audio.py.
-
-Usage:
-    python characterization/scripts/build_utterance_length_audio.py --file 7s.wav
-    python characterization/scripts/build_utterance_length_audio.py --file 7s.wav --occupancy 0.6
-    python characterization/scripts/build_utterance_length_audio.py --file 0s.wav 1s.wav 7s.wav
-
-Output:
-    characterization/testaudio/{label}_len.wav  (label = e.g. "7s")
-    characterization/testaudio/warmup.wav  -- built if not already present
-    characterization/testaudio/metadata_length.json
-"""
 
 from __future__ import annotations
 
@@ -42,7 +21,7 @@ DEFAULT_OCCUPANCY = 0.60
 
 
 def _label(filename: str) -> str:
-    return Path(filename).stem  # "7s.wav" -> "7s"
+    return Path(filename).stem
 
 
 def main() -> None:
@@ -67,8 +46,6 @@ def main() -> None:
 
     warmup_path = args.out_dir / "warmup.wav"
     if not warmup_path.exists():
-        # Any utterance works for warm-up -- reuse whichever this run's
-        # first file is, no need to fix it to 3s.wav specifically.
         w_audio, w_sr, _ = _load_base_utterance(args.file[0])
         warmup_path = build_warmup(w_audio, w_sr, args.out_dir)
         print(f"  warmup: built -> {warmup_path}")

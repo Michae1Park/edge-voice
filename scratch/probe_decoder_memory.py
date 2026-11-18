@@ -1,31 +1,4 @@
 #!/usr/bin/env python3
-"""How much RSS does a second Transcriber instance actually cost, on THIS
-hardware/model/moonshine-voice version -- not the "~175MB" figure in
-stt_worker.py's module docstring, which wasn't necessarily measured on this
-device or this package version. Exists to turn "does memory afford a second
-decoder" from a guess into a number, before committing to the src/ change a
-real two-decoder architecture would require.
-
-Loads N Transcriber instances one at a time (not concurrently -- concurrent
-use isn't the point, just each one's added memory footprint) and samples RSS
-from /proc/self/status before and after each. The first instance's jump
-includes one-time cost (ONNX Runtime's own runtime init) that a real second
-channel wouldn't pay again -- the SECOND instance's delta is the number that
-actually answers "what would one more channel cost."
-
-Run this on the RPi5, not a dev box (model/runtime memory footprint can
-differ by platform), and after a clean `sudo swapoff -a && sudo swapon -a`
-(or a reboot) so `free -h` alongside it isn't reading residual swap from
-earlier heavy runs -- see the conversation that produced this script.
-
-No pipeline, no MQTT broker, no VAD/torch needed -- just moonshine_voice.
-
-Usage:
-    python scratch/probe_decoder_memory.py
-    python scratch/probe_decoder_memory.py --language ko --arch tiny --count 3
-    # cross-check against this script's own numbers:
-    free -h
-"""
 
 from __future__ import annotations
 
@@ -62,7 +35,7 @@ def main() -> None:
 
     model_path, model_arch = get_model_for_language(args.language, string_to_model_arch(args.arch))
 
-    instances = []  # kept alive on purpose -- gc'ing one before measuring would understate the cost
+    instances = []
     prev_rss = baseline
     first_instance_rss = None
     for i in range(1, args.count + 1):

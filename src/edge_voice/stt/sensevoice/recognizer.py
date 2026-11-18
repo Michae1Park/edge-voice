@@ -1,5 +1,3 @@
-"""SenseVoice via sherpa-onnx, on CPU or the RK3588 NPU (RKNN provider)."""
-
 from __future__ import annotations
 
 import ctypes
@@ -10,8 +8,6 @@ import numpy as np
 from edge_voice.stt.sensevoice.config import RK3588_NPU_CORES, SenseVoiceConfig
 from edge_voice.stt.sensevoice.models import MODEL_FILES, TOKENS_FILE
 
-# sherpa-onnx overloads num_threads as the RKNN core mask on the rknn provider
-# (sherpa-onnx/csrc/rknn/utils.cc SetCoreMask): 1 = auto, 0/-1/-2 = core 0/1/2.
 _AUTO_CORE_MASK = 1
 _CORE_MASKS = {0: 0, 1: -1, 2: -2}
 
@@ -25,12 +21,6 @@ def core_mask(core: int | None) -> int:
 
 
 def preload_npu_runtime(runtime_lib: str) -> None:
-    """Load librknnrt.so by absolute path before sherpa-onnx is imported.
-
-    sherpa-onnx's RKNN build links librknnrt.so by soname; once a library with
-    that soname is already mapped, the dynamic linker reuses it, so a copy in
-    a user directory works without sudo or LD_LIBRARY_PATH.
-    """
     ctypes.CDLL(runtime_lib or "librknnrt.so", mode=ctypes.RTLD_GLOBAL)
 
 
@@ -42,8 +32,6 @@ class SenseVoiceRecognizer:
         else:
             provider, threads = "cpu", config.cpu_threads
             if config.npu_runtime_lib:
-                # sherpa-onnx's RKNN build links librknnrt.so even when it
-                # only ever runs on CPU.
                 preload_npu_runtime(config.npu_runtime_lib)
         import sherpa_onnx
 

@@ -1,24 +1,3 @@
-"""Live microphone audio source that publishes PCM frames to MQTT for the
-pipeline.
-
-Captures from a system microphone, splits into 20ms chunks, and publishes
-each frame as raw PCM bytes (no envelope) to the configured MQTT topics --
-same wire format as wav_source.py, which MqttAudioIngest consumes
-directly as PCM samples (audio_ingest/mqtt_client.py:_on_message). This is
-what lets edge-voice (run via cli.py, listening on stt/audio_chunks_*)
-simply receive and transcribe whatever this script captures.
-
-Run as a separate process, alongside the real edge-voice pipeline:
-    python -m edge_voice.utils.audio_generation.mic_source --channel rx
-    python -m edge_voice.utils.audio_generation.mic_source --list-devices
-
-Not imported by cli.py/orchestrator.py -- a live mic is a single ongoing
-capture, not something the pipeline itself owns; it's a separate process
-publishing over MQTT, just like a real call leg (or wav_source.py) would.
-`edge-voice --mic` spawns this file as a subprocess for convenience; it
-still runs and shuts down as its own process, not in-process capture.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -33,8 +12,6 @@ import torchaudio
 
 logger = logging.getLogger(__name__)
 
-# Matches configs/default.yaml audio.sample_rate / the 20ms chunk every
-# other audio_generation source uses.
 SAMPLE_RATE = 16000
 CHUNK_SAMPLES = 320
 MQTT_QOS = 1
@@ -111,10 +88,6 @@ def main(argv: Sequence[str] | None = None) -> None:
     while not connected:
         time.sleep(0.05)
 
-    # Most mic hardware (esp. USB mics) only supports fixed native rates
-    # (44100/48000), not arbitrary ones -- so capture at whatever the
-    # device actually supports and resample down to the target rate per
-    # chunk, same idea as wav_source.py's whole-file resample.
     native_sr = int(sd.query_devices(args.device, "input")["default_samplerate"])
     resampler = None
     native_chunk = args.chunk
@@ -143,9 +116,6 @@ def main(argv: Sequence[str] | None = None) -> None:
     start = time.time()
     try:
         while True:
-            # A blocking read paces this loop at real time on its own --
-            # unlike wav_source.py, which reads a file near-instantly
-            # and has to throttle itself to match.
             raw, _overflowed = stream.read(native_chunk)
             data = np.frombuffer(bytes(raw), dtype=np.int16)
             if resampler is not None:

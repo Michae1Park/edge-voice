@@ -1,139 +1,4 @@
 #!/usr/bin/env python3
-"""End-to-end (mic -> transcript) latency and RAM/CPU footprint, on the real
-pipeline under sustained dual-channel load -- not the STT-only harness in
-bench_streaming_cost.py.
-
-Builds and starts the real PipelineOrchestrator in-process (same pattern as
-demo_supervisor.py), then repeatedly replays a dual-channel WAV pair through
-it via wav_source.py (real-time paced, same as a live feed) to simulate
-sustained mic input on both channels for --duration-s total.
-
-Why segment length isn't swept like bench_streaming_cost.py's 1s..10s buffer
-------------------------------------------------------------------------------
-That sweep is specific to the non-streaming STT model re-decoding a growing
-buffer from scratch -- an artifact of that harness, not something the real
-pipeline does. Here, VAD hands STT a bounded segment (capped at
-`vad.max_segment_s`, usually shorter, cut on a detected pause) exactly once.
-So segment length is a real *outcome* of natural conversational audio, not a
-knob to sweep -- this script records it per segment instead (see CONDITIONS
-below) so its effect on latency is visible without inventing an input that
-doesn't occur in production.
-
-Three things are measured per segment, all read off instrumentation the
-pipeline already has -- nothing changed in src/:
-
-  - full_latency_ms = created_at - end. `AudioPacket.timestamp` is
-    `time.time()` at MQTT ingest (audio_ingest/mqtt_client.py) and
-    propagates UNCHANGED through ChannelRouter -> SpeechSegment.start/end ->
-    TranscriptEvent.start/end (channel/router.py, vad/vad_worker.py,
-    stt/stt_worker.py) -- so `.end` is real wall-clock time, not
-    audio-relative. `.created_at` is `time.time()` when STT produces the
-    event. Final transcripts only -- partials are revisable, not settled.
-
-  - stt_latency_ms: the orchestrator's own per-segment STT decode time
-    (`last_latency_s`, the same number in its "TRANSCRIPT ... latency=" log
-    line), captured via a logging.Handler attached to that logger --
-    SYNCHRONOUS with the STT worker thread, so it can't race the transcript
-    itself: `_on_transcript` (orchestrator.py) logs it before publishing to
-    TranscriptHub, and this script's async drain thread only ever sees an
-    event after it's published. Reading `orch._stt.last_latency_s` directly
-    instead would race across channels (it's one shared mutable attribute,
-    last writer wins) -- the log capture sidesteps that entirely.
-
-  - pre_stt_latency_ms = full - stt: everything before STT even started --
-    VAD's pause/idle-flush wait plus any queue backpressure. The prior
-    smoke test showed this dominating (~2s) on a segment VAD idle-flushed,
-    against ~150ms of STT decode -- non-STT latency is not trivial.
-
-CONDITIONS recorded per segment, since latency isn't just one number:
-  - duration_s (end - start) and hit_cap (duration_s at/near
-    settings.vad.max_segment_s) -- segment length, and whether it was a
-    hard-cap cut rather than a natural pause.
-  - channel_id -- rx/tx may have different speech patterns (e.g. one side
-    talks in longer stretches).
-  - chars -- transcript length, a rough proxy for decode cost.
-  - queue depths (ingest/routed/segment) at the moment this script observed
-    the transcript -- backpressure context, not an exact at-decode-time
-    reading (there's no cheap synchronous hook for that without reaching
-    further into orchestrator internals than this does).
-  - elapsed_s since the run started -- to eyeball drift/warmup/thermal
-    effects over a long sustained run, e.g. on the RPi5.
-
-RAM/CPU are summed across this process AND the STT child processes, read
-from /proc/<pid>/{status,stat}. Summing is essential once STT runs in its
-own processes (settings.stt.use_processes): sampling /proc/self alone would
-exclude the most expensive stage entirely and hide the very thing this
-measures -- CPU rising past 100% as two decoders run in parallel. A
-separately running MQTT broker is still not included (check `ps aux | grep
-mosquitto` if that's wanted too). RSS and CPU are sampled at DIFFERENT
-cadences on purpose -- they fail differently, so they need different
-resolution:
-
-  - RSS (--rss-interval-s, default 0.2s): what kills a process is hitting a
-    ceiling (OOM), not the average, and segment decode is often shorter
-    than a 1s sampling gap -- a transient spike (e.g. both channels
-    decoding at once) could be allocated and freed between two 1s-apart
-    samples and never show up. Sampled densely so a real peak isn't missed;
-    reported as both a summary stat and the single highest reading with
-    when it happened.
-
-  - CPU (--cpu-interval-s, default 1.0s): the failure mode here isn't a
-    spike, it's the pipeline systematically falling behind real-time --
-    which only shows up as SUSTAINED utilization, not an instant reading
-    (a 100%-for-50ms burst while a segment decodes is normal and fine).
-    Averaging over a shorter window than this just adds noise without
-    adding signal.
-
-Queue depths (already recorded per segment -- see CONDITIONS) are printed
-as a first-half-of-run vs second-half-of-run comparison too: growing queues
-over the course of a sustained run are the actual leading indicator of
-"running out of CPU" on an edge device, more directly than the CPU% number
-itself.
-
-Requires a real MQTT broker at the configured host/port (configs/default.yaml,
-localhost:1883 by default -- `make install` sets this up via mosquitto on
-Debian/RPi) and loads the real VAD/STT models, same as running `edge-voice`
-directly. This is deliberately the real pipeline, not a mock.
-
-Optional CPU pinning (--stt-cores / --other-cores)
----------------------------------------------------
-Works for both STT modes, because Linux puts thread IDs and process IDs in
-one namespace and sched_setaffinity takes either. Which attribute holds the
-usable id differs, and _pin_worker() handles that: a `threading.Thread`
-exposes the OS thread id as `native_id` (its `ident` is Python's own handle
-and is NOT valid here), while an `STTProcessHandle` deliberately exposes
-the child's pid as `ident`. --stt-cores confines the STT workers;
---other-cores (optional) confines every other worker
-(ingest/router/VAD/supervisor/metrics) plus this script's own main thread
-to a disjoint set, for a true dedication test rather than a preference.
-Linux-only (os.sched_setaffinity).
-
-Pinning alone does NOT stop ONNX Runtime from spawning its own internal
-threads per inference call. That matters more than it sounds: with two STT
-processes each spawning a full thread pool, they oversubscribe the machine
-and end up SLOWER than sequential (measured 0.73x vs 1.69x on a 32-core dev
-box -- see scratch/probe_mp_speedup.py). Always set
-MOONSHINE_ORT_SINGLE_THREAD=1 alongside these flags.
-
-Looping the same clip means segments near each loop boundary can be cut
-oddly (abrupt silence->speech at the splice) -- a small fraction of samples,
-not corrected for here.
-
-Usage:
-    python scratch/bench_pipeline_load.py
-    python scratch/bench_pipeline_load.py --duration-s 300 --rss-interval-s 0.1
-    python scratch/bench_pipeline_load.py --wav wav/rx_recorded_2.wav wav/tx_recorded_2.wav
-    python scratch/bench_pipeline_load.py --csv-out /tmp/segments.csv
-
-    # Single channel, to isolate whether the pipeline keeps up with ONE
-    # channel of speech before blaming dual-channel concurrency:
-    python scratch/bench_pipeline_load.py --channels rx --wav wav/rx_recorded_1.wav
-
-    # Dedicate cores 2-3 to STT, everything else confined to 0-1 (combine
-    # with MOONSHINE_ORT_SINGLE_THREAD=1, see scratch/bench_ort_threads.py):
-    MOONSHINE_ORT_SINGLE_THREAD=1 python scratch/bench_pipeline_load.py \\
-        --stt-cores 2,3 --other-cores 0,1
-"""
 
 from __future__ import annotations
 
@@ -158,18 +23,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(na
 logger = logging.getLogger("bench_pipeline_load")
 
 CLK_TCK = os.sysconf("SC_CLK_TCK")
-# How close duration_s has to be to max_segment_s to count as a hard-cap cut
-# rather than a coincidentally-long natural pause-based one.
 CAP_EPSILON_S = 0.15
 
 
 def _read_proc(pid: str = "self") -> tuple[float, int]:
-    """(rss_mb, cpu_ticks) for one process, from /proc/<pid>/{status,stat}.
-
-    cpu_ticks is cumulative (utime+stime) since process start -- callers diff
-    two readings to get CPU used over an interval. Linux-only, same
-    assumption as the rest of this repo's deployment target (RPi5).
-    """
     rss_kb = 0
     with open(f"/proc/{pid}/status") as f:
         for line in f:
@@ -177,23 +34,12 @@ def _read_proc(pid: str = "self") -> tuple[float, int]:
                 rss_kb = int(line.split()[1])
                 break
     with open(f"/proc/{pid}/stat") as f:
-        # Fields are 1-indexed in proc(5); utime=14, stime=15. Split off the
-        # comm field by its LAST ')' rather than by position -- comm can
-        # itself contain spaces/parens, but never a ')' after the real one.
         after_comm = f.read().rsplit(")", 1)[1].split()
         utime, stime = int(after_comm[11]), int(after_comm[12])
     return rss_kb / 1024.0, utime + stime
 
 
 def _read_proc_tree(extra_pids: list[int]) -> tuple[float, int]:
-    """Summed (rss_mb, cpu_ticks) across this process and `extra_pids`.
-
-    Load-bearing since STT moved to child processes: sampling /proc/self
-    alone would exclude the single most expensive part of the pipeline, and
-    would make the whole point of the change -- CPU rising above 100% as two
-    decoders run in parallel -- invisible. A dead pid is skipped rather than
-    raising: children come and go across a supervisor restart.
-    """
     rss_mb, ticks = _read_proc("self")
     for pid in extra_pids:
         try:
@@ -206,10 +52,6 @@ def _read_proc_tree(extra_pids: list[int]) -> tuple[float, int]:
 
 
 class ResourceSampler:
-    """Background RSS/CPU%% sampler across the pipeline's whole process tree
-    -- see _read_proc_tree() and the module docstring's RAM/CPU section for
-    why RSS and CPU run on different cadences.
-    """
 
     def __init__(
         self,
@@ -221,13 +63,9 @@ class ResourceSampler:
         self._rss_interval_s = rss_interval_s
         self._cpu_interval_s = cpu_interval_s
         self._run_started = run_started
-        # Re-read every sample rather than captured once: a supervisor
-        # restart replaces a child, and its pid changes with it.
         self._extra_pids = extra_pids or (lambda: [])
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
-        # (elapsed_s, rss_mb) so a peak can be reported with *when* it
-        # happened, not just its value.
         self.rss_samples: list[tuple[float, float]] = []
         self.cpu_pct_samples: list[float] = []
 
@@ -247,9 +85,6 @@ class ResourceSampler:
             rss_mb, ticks = _read_proc_tree(self._extra_pids())
             now = time.monotonic()
             self.rss_samples.append((now - self._run_started, rss_mb))
-            # CPU only recomputed once cpu_interval_s has actually elapsed --
-            # sampling RSS densely doesn't mean we also want a CPU% reading
-            # over a window too short to be meaningful (see docstring).
             if now - last_cpu_t >= self._cpu_interval_s:
                 dt = now - last_cpu_t
                 cpu_pct = 100.0 * ((ticks - last_cpu_ticks) / CLK_TCK) / dt if dt > 0 else 0.0
@@ -262,7 +97,6 @@ def _parse_cores(spec: str) -> set[int]:
 
 
 def _parse_core_map(spec: str) -> dict[str, set[int]]:
-    """Parse 'rx=2,tx=3' or 'rx=2+3,tx=4' into {'rx': {2}, 'tx': {3}}."""
     result: dict[str, set[int]] = {}
     for pair in spec.split(","):
         pair = pair.strip()
@@ -274,18 +108,6 @@ def _parse_core_map(spec: str) -> dict[str, set[int]]:
 
 
 def _pin_worker(worker: Any, cores: set[int], label: str) -> None:
-    """Pin a worker to `cores`, whether it's a thread or an STT process.
-
-    Linux puts thread IDs and process IDs in one namespace, so
-    sched_setaffinity takes either. Which attribute holds the usable id
-    differs though, and getting it wrong silently pins the wrong thing:
-      - threading.Thread: `native_id` is the OS TID. (`ident` is Python's
-        own thread handle and is NOT valid here.)
-      - STTProcessHandle: `ident` is the child's pid, by design -- see its
-        docstring.
-    So `native_id` must be preferred, falling back to `ident` only for the
-    process handles that have no `native_id` at all.
-    """
     if not hasattr(os, "sched_setaffinity"):
         logger.warning("os.sched_setaffinity unavailable on this platform -- skipping (%s)", label)
         return
@@ -307,16 +129,11 @@ def _pin_worker(worker: Any, cores: set[int], label: str) -> None:
 def _pin_main_thread(cores: set[int]) -> None:
     if not hasattr(os, "sched_setaffinity"):
         return
-    os.sched_setaffinity(0, cores)  # 0 = calling thread, not "the process"
+    os.sched_setaffinity(0, cores)
     logger.info("Pinned main thread to cores %s", sorted(cores))
 
 
 class _SttLatencyCapture(logging.Handler):
-    """Captures stt_latency_s per segment_id off the orchestrator's own
-    TRANSCRIPT log line (orchestrator.py's `_on_transcript`) -- see the
-    module docstring's stt_latency_ms entry for why this, not
-    `orch._stt.last_latency_s`, is race-free.
-    """
 
     def __init__(self) -> None:
         super().__init__(level=logging.INFO)
@@ -330,33 +147,12 @@ class _SttLatencyCapture(logging.Handler):
 
 
 SEGMENT_ID_RE = re.compile(r"^[a-z]+-([0-9]+\.[0-9]+)-([0-9]+)$")
-# 3+ consecutive segments this far past their own STT decode time before
-# calling it a plateau, not a blip -- same rule already validated in
-# characterization/scripts/analyze_boundary_run.py's backlog_fail check.
 PLATEAU_LATENCY_MULT = 3.0
 PLATEAU_CONSECUTIVE = 3
-# Merge-event fingerprint: a segment-start-to-segment-start gap this far past
-# one atomic cycle means a burst got silently fused into the prior segment --
-# see characterization/scripts/analyze_boundary_run.py's module docstring for
-# the root-caused mechanism (dropped silence-gap packet -> VAD never fires
-# end/start there).
 MERGE_THRESHOLD_MULT = 1.3
 
 
 class EarlyStopWatchdog:
-    """Detects a genuine plateau or merge event live, during the run, so a
-    cell that's already failing doesn't have to burn its full --duration-s.
-
-    Deliberately NOT triggered by a single slow segment -- a one-off queueing
-    hiccup (the benign 10s-segment split found in the original boundary
-    search) recovers on its own and shouldn't cut a run short. Only two
-    signals count, both already validated as "real, sustained" rather than
-    noise in analyze_boundary_run.py:
-      1. pre_stt_latency_ms > PLATEAU_LATENCY_MULT x that segment's own
-         stt_latency_ms, for PLATEAU_CONSECUTIVE consecutive segments.
-      2. A segment-start gap > MERGE_THRESHOLD_MULT x atomic_cycle_s
-         (only checked if the caller knows the cell's atomic cycle length).
-    """
 
     def __init__(self, atomic_cycle_s: float | None) -> None:
         self._atomic_cycle_s = atomic_cycle_s
@@ -372,7 +168,7 @@ class EarlyStopWatchdog:
 
     def observe(self, record: "SegmentRecord") -> None:
         if self.trigger_time is not None:
-            return  # already triggered, nothing left to detect
+            return
 
         if record.stt_latency_ms and record.pre_stt_latency_ms is not None:
             if record.pre_stt_latency_ms > PLATEAU_LATENCY_MULT * record.stt_latency_ms:
@@ -420,9 +216,6 @@ class SegmentRecord:
 
 
 def _percentile(values: list[float], pct: float) -> float:
-    # No numpy dependency here -- nearest-rank on a sorted copy is precise
-    # enough for a benchmark summary, and stdlib-only matches the rest of
-    # this script's no-new-deps constraint.
     ordered = sorted(values)
     idx = min(len(ordered) - 1, max(0, round(pct / 100 * (len(ordered) - 1))))
     return ordered[idx]
@@ -439,23 +232,12 @@ def _summary(label: str, values: list[float], unit: str) -> str:
         f"p95={_percentile(values, 95):.1f}{unit}  "
         f"max={max(values):.1f}{unit}"
     )
-    # p99 is noise below ~20 samples (nearest-rank just returns the max) --
-    # only show it once it can say something p95/max don't already.
     if len(values) >= 20:
         line += f"  p99={_percentile(values, 99):.1f}{unit}"
     return line
 
 
 def _queue_depth_trend(records: list[SegmentRecord]) -> str:
-    """First-half-of-run vs second-half-of-run mean total queue depth.
-
-    Records are already in the order they were observed (chronological), so
-    splitting the list in half is splitting the run in half. This is the
-    "running out of CPU" signal, not CPU% itself -- see module docstring:
-    queues staying flat means the pipeline is draining work as fast as it
-    arrives; queues growing over the run means it's systematically falling
-    behind, regardless of what any single CPU% reading says.
-    """
     if len(records) < 4:
         return "not enough segments to compare halves (need >= 4)"
 
@@ -480,8 +262,6 @@ def _queue_depth_trend(records: list[SegmentRecord]) -> str:
 
 
 def _duration_bucket(duration_s: float) -> str:
-    # Fixed, config-independent buckets -- unlike hit_cap, this says nothing
-    # about whether a limit was enforced, just how long the segment was.
     if duration_s < 1.0:
         return "0-1s"
     if duration_s < 2.0:
@@ -655,14 +435,6 @@ def main() -> None:
     settings = Settings.load()
     settings.stt.model = "moonshine"
 
-    # Restrict the orchestrator's own channel set to the ones actually being
-    # replayed. Without this, PipelineOrchestrator.build() spins up an STT
-    # worker process per channel_id in settings.mqtt.channels regardless of
-    # --channels here -- so e.g. --channels rx alone still builds a second,
-    # permanently-idle STTWorker-tx process. That made "single-channel"
-    # resource numbers (RSS in particular) actually measure two decoder
-    # processes the whole time, not one -- confirmed via `ps` showing both
-    # multiprocessing-fork children present even with one channel replayed.
     configured_ids = {c.channel_id for c in settings.mqtt.channels}
     requested_ids = set(args.channels)
     unknown = requested_ids - configured_ids
@@ -765,10 +537,6 @@ def main() -> None:
                     else None,
                     q_ingest=depths.get("ingest", -1),
                     q_routed=depths.get("routed", -1),
-                    # Per-channel since orchestrator.queue_depths() moved to
-                    # one segment queue per channel (each channel now has its
-                    # own dedicated STTWorker) -- this row's own channel's
-                    # queue is the relevant one, not some other channel's.
                     q_segment=depths.get(f"segment_{ev.channel_id}", -1),
                 )
             )
@@ -778,16 +546,9 @@ def main() -> None:
     drain_thread = threading.Thread(target=_drain, daemon=True)
 
     def _stt_child_pids() -> list[int]:
-        """pids of the STT children, if STT is running in process mode.
-
-        Empty in thread mode (workers have no `ident`-as-pid), which is
-        exactly right: there everything already lives in this process.
-        """
         pids = []
         for worker in orch._stt.values():
             pid = getattr(worker, "ident", None)
-            # A thread also has `ident`, but no `transcript_queue` -- that's
-            # what distinguishes a process handle from a worker thread here.
             if pid is not None and hasattr(worker, "transcript_queue"):
                 pids.append(pid)
         return pids
@@ -799,13 +560,10 @@ def main() -> None:
     orch.start()
     drain_thread.start()
     sampler.start()
-    time.sleep(0.5)  # let workers actually come up before publishing / before native_id exists
+    time.sleep(0.5)
 
     all_stt_cores: set[int] = set()
     if args.stt_core_map:
-        # Strict per-channel isolation: each channel's STT worker gets its
-        # OWN disjoint core(s), so concurrent decodes can't contend for the
-        # same core the way a shared --stt-cores set allows.
         core_map = _parse_core_map(args.stt_core_map)
         for cid, stt_worker in orch._stt.items():
             if cid not in core_map:
@@ -816,11 +574,6 @@ def main() -> None:
             _pin_worker(stt_worker, core_map[cid], f"STTWorker-{cid}")
             all_stt_cores |= core_map[cid]
     elif args.stt_cores:
-        # orch._stt is now one dedicated worker per channel (dict), not a
-        # single attribute -- pin every channel's STT worker to the same
-        # core set, since "dedicate cores to STT" means all of them, not
-        # just one channel's. Note this is a SHARED set, not one core each --
-        # see --stt-core-map for strict per-channel isolation.
         all_stt_cores = _parse_cores(args.stt_cores)
         for cid, stt_worker in orch._stt.items():
             _pin_worker(stt_worker, all_stt_cores, f"STTWorker-{cid}")
@@ -848,12 +601,6 @@ def main() -> None:
         args.duration_s,
         args.speed,
     )
-    # wav_source.py's --speed flag has been removed from the repo since this
-    # was written (a change outside this session, not this script's own
-    # edits) -- forwarding it unconditionally breaks even the 1.0x default.
-    # Only pass it when actually needed, so this degrades gracefully instead
-    # of hard-depending on a flag that may not exist; re-add unconditional
-    # forwarding once wav_source.py's --speed support is confirmed present.
     wav_source_argv = ["--wav", *args.wav, "--channels", *args.channels]
     if args.speed != 1.0:
         wav_source_argv += ["--speed", str(args.speed)]
@@ -931,8 +678,6 @@ def main() -> None:
     stt_ms = [r.stt_latency_ms for r in records if r.stt_latency_ms is not None]
     pre_ms = [r.pre_stt_latency_ms for r in records if r.pre_stt_latency_ms is not None]
 
-    # Caveats first, so the numbers that follow are the last thing on screen
-    # rather than trailing off after them.
     print("\nNote: RSS/CPU cover this process only -- the MQTT broker is a")
     print("separate OS process (check with `ps aux | grep mosquitto` if needed).")
     print(

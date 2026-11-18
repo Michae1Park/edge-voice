@@ -1,9 +1,3 @@
-"""Tests for edge_voice.pipeline.systemd_watchdog.
-
-The helper must be a safe no-op off systemd (the dev/CI/off-device case) and
-send a real datagram when a NOTIFY_SOCKET is present.
-"""
-
 import os
 import socket
 
@@ -36,6 +30,5 @@ def test_notify_sends_datagram_to_socket(monkeypatch, tmp_path):
 
 
 def test_notify_does_not_raise_on_dead_socket(monkeypatch, tmp_path):
-    # Path set but nothing bound -> connect/send fails; must swallow, not raise.
     monkeypatch.setenv("NOTIFY_SOCKET", str(tmp_path / "nonexistent.sock"))
     assert systemd_watchdog.notify("WATCHDOG=1") is False

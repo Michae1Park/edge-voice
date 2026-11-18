@@ -1,11 +1,3 @@
-"""Tests for edge_voice.pipeline.supervisor.
-
-These drive the Supervisor with fake targets rather than real worker threads
-(Milestone 8's "kill a fake thread, assert it restarts" approach): the
-supervisor is generic over SupervisedTarget callables, so a controllable fake
-exercises crash/stall/degrade paths deterministically and fast.
-"""
-
 import threading
 import time
 from typing import Callable
@@ -22,7 +14,6 @@ from edge_voice.pipeline.supervisor import (
 
 
 class FakeWorker:
-    """A stand-in worker whose liveness/activity the test drives directly."""
 
     def __init__(self) -> None:
         self.alive = True
@@ -84,47 +75,41 @@ def running_supervisor():
         sup.join(timeout=3)
 
 
-# ── crash detection ──────────────────────────────────────────
-
-
 def test_healthy_worker_is_not_restarted(running_supervisor):
     fake = FakeWorker()
     running_supervisor([fake.target()])
-    time.sleep(0.2)  # several ticks
+    time.sleep(0.2)
     assert fake.restart_calls == 0
 
 
 def test_crashed_worker_is_restarted(running_supervisor):
     fake = FakeWorker()
     running_supervisor([fake.target()])
-    fake.alive = False  # simulate a crash (thread exited, not asked to stop)
+    fake.alive = False
     assert _wait_until(lambda: fake.restart_calls >= 1)
-    assert fake.alive is True  # revived by restart
+    assert fake.alive is True
 
 
 def test_intentional_stop_is_not_a_crash(running_supervisor):
     fake = FakeWorker()
-    fake._stopping = True  # we asked it to stop
-    fake.alive = False  # ...and it exited
+    fake._stopping = True
+    fake.alive = False
     running_supervisor([fake.target()])
     time.sleep(0.2)
     assert fake.restart_calls == 0
 
 
-# ── stall detection ──────────────────────────────────────────
-
-
 def test_stalled_worker_with_queued_input_is_restarted(running_supervisor):
     fake = FakeWorker()
     fake.input_has_work = True
-    fake.activity = time.monotonic() - 100  # no progress for ages
+    fake.activity = time.monotonic() - 100
     running_supervisor([fake.target()], stall_timeout_s=0.1)
     assert _wait_until(lambda: fake.restart_calls >= 1)
 
 
 def test_idle_worker_with_empty_input_is_not_stalled(running_supervisor):
     fake = FakeWorker()
-    fake.input_has_work = False  # nothing waiting -> idle, not stalled
+    fake.input_has_work = False
     fake.activity = time.monotonic() - 100
     running_supervisor([fake.target()], stall_timeout_s=0.1)
     time.sleep(0.3)
@@ -140,20 +125,15 @@ def test_stall_detection_can_be_disabled_per_target(running_supervisor):
     assert fake.restart_calls == 0
 
 
-# ── degraded backoff ─────────────────────────────────────────
-
-
 def test_worker_degrades_after_exceeding_restart_budget(running_supervisor):
     fake = FakeWorker()
-    fake.alive = False  # crashed...
-    fake.revive_on_restart = False  # ...and every restart leaves it crashed
+    fake.alive = False
+    fake.revive_on_restart = False
     sup = running_supervisor([fake.target()], max_restarts=3, restart_window_s=60.0)
     assert _wait_until(sup.is_degraded)
-    # Exactly the budget's worth of restarts, then it gives up in-process.
-    # (restart_calls is bumped on the restart thread, so let it settle.)
     assert _wait_until(lambda: fake.restart_calls == 3)
     time.sleep(0.2)
-    assert fake.restart_calls == 3  # no further restarts once degraded
+    assert fake.restart_calls == 3
     assert sup.status()["Fake"]["state"] == STATE_DEGRADED
 
 
@@ -165,9 +145,6 @@ def test_status_reports_running_for_healthy_worker(running_supervisor):
     assert sup.is_degraded() is False
 
 
-# ── pending-loss logging ─────────────────────────────────────
-
-
 def test_pending_loss_is_logged_on_restart(running_supervisor, caplog):
     fake = FakeWorker()
     target = fake.target(pending_loss=lambda: "rx=1.50s")
@@ -176,9 +153,6 @@ def test_pending_loss_is_logged_on_restart(running_supervisor, caplog):
     assert _wait_until(lambda: fake.restart_calls >= 1)
     assert _wait_until(lambda: "lost in-progress audio" in caplog.text)
     assert "rx=1.50s" in caplog.text
-
-
-# ── watchdog pings ───────────────────────────────────────────
 
 
 def test_watchdog_pings_when_enabled(monkeypatch):
@@ -211,9 +185,6 @@ def test_no_watchdog_pings_when_disabled(monkeypatch):
     assert calls == []
 
 
-# ── clean shutdown ───────────────────────────────────────────
-
-
 def test_supervisor_stops_cleanly():
     fake = FakeWorker()
     sup = Supervisor([fake.target()], tick_interval_s=0.05, watchdog_enabled=False)
@@ -222,4 +193,4 @@ def test_supervisor_stops_cleanly():
     sup.stop()
     sup.join(timeout=3)
     assert not sup.is_alive()
-    assert isinstance(threading.current_thread(), threading.Thread)  # sanity
+    assert isinstance(threading.current_thread(), threading.Thread)

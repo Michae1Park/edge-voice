@@ -1,10 +1,3 @@
-"""Build a SenseVoice transcriber on the configured runtime.
-
-runtime "npu" or "auto" tries the NPU first and falls back to SenseVoice on
-CPU, reporting why; "cpu" goes straight to CPU. The CPU path has no further
-fallback: if it can't load, the worker fails to start with the reason.
-"""
-
 from __future__ import annotations
 
 import importlib.util
@@ -114,8 +107,6 @@ def _build_cpu(config: SenseVoiceConfig) -> BuiltTranscriber:
 
 
 def prefetch_models(configs: list[SenseVoiceConfig]) -> None:
-    """Download whatever model files these workers will load first: the NPU
-    build when the NPU will be tried and is present, otherwise the CPU one."""
     npu_present = rknpu_present()
     runtimes = {"npu" if c.runtime != "cpu" and npu_present else "cpu": c for c in configs}
     for runtime, config in runtimes.items():

@@ -1,5 +1,3 @@
-"""Tests for edge_voice.webui.app."""
-
 import asyncio
 import json
 import time
@@ -32,8 +30,6 @@ def _minimal_settings() -> Settings:
         audio=AudioSettings(sample_rate=16000, chunk_samples=320),
         queues=QueuesSettings(),
     )
-    # Thread-backed STT: the webui reads the same status/health surface
-    # either way, and spawning interpreters per test buys nothing here.
     settings.stt.use_processes = False
     settings.stt.model = "moonshine"
     return settings
@@ -55,11 +51,6 @@ def client(orchestrator):
 
 @pytest.fixture
 def make_client():
-    """Build a client over a fresh orchestrator with settings overrides.
-
-    The plain `client` fixture covers the default case; this one exists for
-    tests that need metrics off, or a tick fast enough to observe.
-    """
     built: list[PipelineOrchestrator] = []
 
     def _make(metrics_enabled: bool = True, emit_interval_s: float | None = None) -> TestClient:
@@ -88,9 +79,6 @@ def _wait_until(predicate, timeout: float = 3.0, interval: float = 0.05) -> bool
     return False
 
 
-# -- HTTP endpoints -----------------------------
-
-
 def test_index_serves_console_html(client):
     resp = client.get("/")
     assert resp.status_code == 200
@@ -113,9 +101,6 @@ def test_start_then_stop_via_api(client):
     assert resp.json()["running"] is False
 
 
-# -- /api/status health object (Milestone 7) -----------------------------
-
-
 def test_status_is_a_superset_of_get_status(client, orchestrator):
     body = client.get("/api/status").json()
     for key, value in orchestrator.get_status().items():
@@ -125,7 +110,6 @@ def test_status_is_a_superset_of_get_status(client, orchestrator):
 def test_status_reports_configured_channels(client):
     channels = client.get("/api/status").json()["channels"]
     assert set(channels) == {"rx", "tx"}
-    # Built but never started: no packets have been seen on either channel.
     assert channels["rx"] == {"freshness_s": None, "stale": False}
 
 
@@ -142,20 +126,11 @@ def test_status_metrics_disabled(make_client):
 
 
 def test_status_reports_queue_depths_even_when_metrics_disabled(make_client):
-    # Queue depths are read live, not from the metrics snapshot.
     body = make_client(metrics_enabled=False).get("/api/status").json()
     assert set(body["queue_depths"]) == {"ingest", "routed", "segment_rx", "segment_tx"}
 
 
 def test_status_surfaces_snapshot_fields_after_a_tick(make_client):
-    """Once a tick lands, the snapshot-derived fields stop being None.
-
-    Deliberately does not assert *which* way mqtt_connected goes: whether a
-    broker is reachable is a property of the machine running the tests, not
-    of this code. The verdict logic for each case is pinned deterministically
-    in test_health_reporting.py; what matters here is that the wiring
-    surfaces a real value and that the verdict agrees with it.
-    """
     client = make_client(emit_interval_s=0.05)
     client.post("/api/start")
 
@@ -163,19 +138,15 @@ def test_status_surfaces_snapshot_fields_after_a_tick(make_client):
     body = client.get("/api/status").json()
 
     assert body["metrics"]["age_s"] is not None
-    assert isinstance(body["mqtt_connected"], bool)  # not None: metrics has ticked
+    assert isinstance(body["mqtt_connected"], bool)
     assert body["restarts"]["max"] == 3
     assert body["restarts"]["window_s"] == 60.0
-    # "Supervisor" is in `workers` (its own thread liveness) but not in
-    # `restarts.counts` (which tracks the targets it supervises, not itself).
     assert set(body["restarts"]["counts"]) == set(body["workers"]) - {"Supervisor"}
     assert set(body["latencies"]) == {"router", "vad_silero", "vad_rms_gate", "stt"}
     assert body["status"] == ("warn" if body["mqtt_connected"] is False else "ok")
 
 
 def test_status_reports_worker_state_even_while_metrics_pending(client):
-    """Module state is live; module latency needs a tick. The UI renders the
-    two independently, so the payload must too."""
     body = client.get("/api/status").json()
     assert body["metrics"]["state"] == "pending"
     assert body["latencies"] is None
@@ -187,9 +158,6 @@ def test_status_reports_worker_state_even_while_metrics_pending(client):
         "STTWorker-tx",
         "Supervisor",
     }
-
-
-# -- SSE transcript stream -----------------------------
 
 
 class _FakeRequest:

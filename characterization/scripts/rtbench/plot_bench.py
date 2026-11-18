@@ -1,26 +1,4 @@
 #!/usr/bin/env python3
-"""Plots for run_bench.py's output -- reads requests.csv, queue_samples.csv,
-and summary.json from a results directory, writes PNGs to <results-dir>/plots.
-
-Experiment 2 (offered load on the x-axis, one point per load level):
-    queue depth vs elapsed time (one line per load level)
-    end-to-end latency vs offered load
-    p50/p95/p99 latency vs offered load
-    actual throughput vs offered load
-    RTF vs offered load
-
-Experiment 3 (elapsed time on the x-axis, one line per load level):
-    queue depth vs elapsed time
-    end-to-end latency vs elapsed time
-    queue wait time vs elapsed time
-    service time vs elapsed time
-    RSS vs elapsed time
-    temperature vs elapsed time
-    CPU frequency vs elapsed time
-
-Usage:
-    python characterization/scripts/rtbench/plot_bench.py --results-dir characterization/results/rtbench
-"""
 
 from __future__ import annotations
 
@@ -96,7 +74,6 @@ def plot_exp2(
     levels = _sorted_levels(summaries)
     loads = [lv["offered_load"] for lv in levels]
 
-    # 1. Queue depth vs elapsed time, one line per load level.
     fig, ax = plt.subplots(figsize=(9, 5))
     for lv in levels:
         samples = samples_by_exp.get(lv["experiment"], [])
@@ -113,7 +90,6 @@ def plot_exp2(
     fig.savefig(out_dir / "exp2_queue_depth_vs_time.png", dpi=130)
     plt.close(fig)
 
-    # 2. End-to-end latency vs offered load (raw scatter + mean line).
     fig, ax = plt.subplots(figsize=(7, 5))
     for lv in levels:
         reqs = requests_by_exp.get(lv["experiment"], [])
@@ -134,7 +110,6 @@ def plot_exp2(
     fig.savefig(out_dir / "exp2_latency_vs_load.png", dpi=130)
     plt.close(fig)
 
-    # 3. p50/p95/p99 latency vs offered load.
     fig, ax = plt.subplots(figsize=(7, 5))
     for pct in ("p50", "p95", "p99"):
         ax.plot(loads, [lv["latency_ms"][pct] for lv in levels], marker="o", label=pct)
@@ -146,7 +121,6 @@ def plot_exp2(
     fig.savefig(out_dir / "exp2_latency_percentiles_vs_load.png", dpi=130)
     plt.close(fig)
 
-    # 4. Actual throughput vs offered load, with a y=x "keeping up" reference.
     fig, ax = plt.subplots(figsize=(7, 5))
     actual = [lv["actual_throughput_x_realtime"] for lv in levels]
     ax.plot(loads, actual, marker="o", label="actual throughput")
@@ -160,7 +134,6 @@ def plot_exp2(
     fig.savefig(out_dir / "exp2_throughput_vs_load.png", dpi=130)
     plt.close(fig)
 
-    # 5. RTF vs offered load.
     fig, ax = plt.subplots(figsize=(7, 5))
     ax.plot(loads, [lv["rtf"]["mean"] for lv in levels], marker="o", label="mean RTF")
     ax.plot(loads, [lv["rtf"]["p95"] for lv in levels], marker="o", label="p95 RTF")

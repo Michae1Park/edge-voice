@@ -1,10 +1,3 @@
-"""Adapter that gives any whole-utterance recognizer the slice of
-moonshine_voice.Transcriber's surface STTWorker consumes, so STTWorker's
-segment, partial and repetition-guard logic stays model-agnostic.
-
-A recognizer only has to implement UtteranceRecognizer.transcribe().
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -33,13 +26,6 @@ class _Transcript:
 
 
 class UtteranceTranscriber:
-    """Buffers one segment between start() and stop(), then recognizes it.
-
-    With window_s set, audio longer than the window is split into
-    consecutive window-sized chunks: fixed-shape NPU models silently truncate
-    anything past their window, so chunking keeps a long segment from
-    dropping speech.
-    """
 
     def __init__(self, recognizer: UtteranceRecognizer, window_s: float | None = None) -> None:
         self._recognizer = recognizer

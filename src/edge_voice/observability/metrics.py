@@ -1,30 +1,3 @@
-"""
-Milestone 7: periodic aggregation of queue depths, STT latency, restart
-budget, and MQTT connectivity into one structured log line + in-memory
-snapshot for health/reporting.py (not yet built) to read directly, instead
-of round-tripping through logs for that.
-
-Runs as its own thread, same shape as `VADWorker`/`Supervisor` -- not folded
-into `Supervisor`'s tick, since `Supervisor` is deliberately generic ("a
-thread died, restart it," see the package-map note in docs/BUILDPLAN.md) and
-has no business knowing about STT latency or MQTT.
-
-Optional signals
-─────────────────
-Two of the four aggregated metrics are optional, following the same
-duck-typed pattern the BUILDPLAN calls for:
-  - MQTT connectivity: `mqtt_connected` returns None only if the audio source
-    has no `.connected` attribute at all -- WavSource/MicSource in dev/test
-    still publish real MQTT into the broker, so they report a real
-    connected/disconnected state, not None. Not a hard requirement either way.
-  - Restart budget: `supervisor` returns None when ReliabilitySettings.enabled
-    is False, i.e. no Supervisor exists at all.
-
-No Prometheus/metrics endpoint here (see docs/BUILDPLAN.md's out-of-scope
-list) -- just one aggregated log line per tick, plus the latest snapshot kept
-in memory.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -38,8 +11,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class MetricsSnapshot:
-    """One tick's aggregated view. `restart_status`/`max_restarts`/
-    `restart_window_s` are all None together when no Supervisor exists."""
 
     queue_depths: dict[str, int]
     stt_last_latency_s: float | None
@@ -47,8 +18,6 @@ class MetricsSnapshot:
     restart_status: dict[str, dict[str, object]] | None
     max_restarts: int | None
     restart_window_s: float | None
-    # Per-channel latency breakdown -- VAD/router/STT always exist (unlike
-    # the Supervisor/MQTT fields above), so these are required, not optional.
     vad_silero_latencies_s: dict[str, float]
     vad_rms_gate_latencies_s: dict[str, float]
     router_repacketize_latencies_s: dict[str, float]
@@ -57,21 +26,10 @@ class MetricsSnapshot:
 
 
 def _rounded(latencies: dict[str, float], decimals: int) -> dict[str, float]:
-    """Round per-channel latencies to `decimals` places, for log readability
-    only -- see the call site in _tick(). Sub-millisecond values (router
-    repacketize, typically microseconds) will show as 0.0 at the default
-    precision (MetricsSettings.latency_log_decimals); that's expected, not a
-    bug -- read snapshot() for full precision."""
     return {channel: round(value, decimals) for channel, value in latencies.items()}
 
 
 class MetricsCollector(threading.Thread):
-    """Aggregates pipeline metrics on a tick and logs/holds one snapshot.
-
-    Takes plain callables rather than a PipelineOrchestrator reference (same
-    decoupling `SupervisedTarget` uses) so it stays exercisable with fakes in
-    tests, and so the orchestrator controls exactly what it's allowed to read.
-    """
 
     def __init__(
         self,
@@ -140,11 +98,6 @@ class MetricsCollector(threading.Thread):
             else None,
             snapshot.mqtt_connected,
             snapshot.restart_status,
-            # Rounded (MetricsSettings.latency_log_decimals) for the log line
-            # only -- sub-ms readings (router/VAD are typically microseconds)
-            # show as 0.0 rather than the full float repr at the default 3.
-            # snapshot()'s own fields keep full precision for any
-            # programmatic reader.
             _rounded(snapshot.vad_silero_latencies_s, self._latency_log_decimals),
             _rounded(snapshot.vad_rms_gate_latencies_s, self._latency_log_decimals),
             _rounded(snapshot.router_repacketize_latencies_s, self._latency_log_decimals),
@@ -152,6 +105,5 @@ class MetricsCollector(threading.Thread):
         )
 
     def snapshot(self) -> MetricsSnapshot | None:
-        """Latest aggregated snapshot, or None before the first tick."""
         with self._lock:
             return self._snapshot

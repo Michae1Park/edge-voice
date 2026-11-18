@@ -1,19 +1,4 @@
 #!/usr/bin/env python3
-"""Same cell as ss_len10_max (97% occupancy, 2.0x rate, 10s crop) but with a
-few DIFFERENT source recordings, to test how often the repetitive-decode
-collapse (found in p2_b_max, absent in ss_len10_max) actually triggers --
-i.e. is it specific to 10s.wav's content, or a property of the 97%/2.0x
-operating point itself that most content will eventually hit.
-
-Reuses the exact same crop/TSM/tile pipeline as
-build_boundary_singlesource_audio.py, just parameterized by source file.
-
-Output: characterization/testaudio/boundary_content_<name>_len10_max.wav
-plus characterization/testaudio/metadata_content_check.json.
-
-Usage:
-    python characterization/scripts/build_content_check_audio.py
-"""
 
 from __future__ import annotations
 

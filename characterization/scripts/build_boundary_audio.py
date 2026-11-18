@@ -1,52 +1,4 @@
 #!/usr/bin/env python3
-"""Builds test files for the systematic boundary-search experiment.
-
-Three independent variables:
-
-  - Speaking rate: pitch-preserving TSM on the base utterance (same method
-    as build_speed_audio.py). Capped at 2x in this experiment -- TSM's own
-    audio quality degrades past that (confirmed in the speaking-rate
-    experiment), which would confound "system can't keep up" with "the
-    audio itself became unintelligible."
-
-  - Segment length: real recordings at each target length
-    (testsegments/{6s,7s,10s}.wav), TSM-adjusted for the cell's rate. An
-    earlier version of this script tried to control length synthetically
-    -- repeating a short clip M times with ZERO gap so VAD would perceive
-    one continuous segment -- but that failed empirically: VAD split the
-    zero-gap splice right back into separate segments every time (found
-    via captured segment counts being exactly 2x expected, then confirmed
-    by checking captured duration_s ~= the original short clip's length,
-    not the intended longer one). It also produced 100% repetitive/garbage
-    decodes at 1.5x rate, likely the splice landing somewhere acoustically
-    incoherent once time-stretched. Reverted to real recordings, which are
-    already proven to work (used throughout the density/rate/length and
-    combo experiments) -- this reintroduces a content confound (a 10s
-    recording is a different sentence than the 6s one, not the same
-    sentence stretched), which should be stated explicitly as a limitation
-    rather than papered over with a synthetic method that turned out to be
-    broken.
-
-  - Density (occupancy): the segment is tiled with silence gaps (same
-    symmetric N+trailing-gap pattern used throughout this project) to hit
-    a target occupancy. Gaps are kept at >=4x vad.min_silence_duration_ms=
-    50ms (the fix validated in the sustained-load investigation, itself
-    confirmed safe at ~3.9x margin) -- a failure at a gap close to that
-    floor would just be re-discovering that already-fixed VAD-threshold
-    bug, not a new finding. 99% occupancy was dropped to 97% for this
-    reason: at 99%, the shorter segments produce gaps as tight as 1.4x the
-    floor (checked before running, not after) -- 97% clears >=4.2x
-    everywhere this design uses it.
-
-Output is WAV files only (no metadata.json consumed downstream -- these
-feed scratch/bench_pipeline_load.py's sustained/looped playback directly,
-not run_experiment.py's one-shot CER-oriented harness). A companion
-metadata_boundary.json records exact achieved parameters per cell for
-reference/reporting.
-
-Usage:
-    python characterization/scripts/build_boundary_audio.py
-"""
 
 from __future__ import annotations
 
@@ -69,10 +21,6 @@ from build_test_audio import (  # noqa: E402
 )
 from build_speed_audio import time_scale_modify  # noqa: E402
 
-# (label, density, rate, source_file) -- see conversation for the
-# phase 1 (single-axis escalation from baseline) / phase 2 (combined
-# extremes) design. Length varies via real recordings (6s/7s/10s.wav),
-# not synthetically -- see module docstring for why.
 CELLS = [
     ("p1_baseline", 0.85, 1.0, "6s.wav"),
     ("p1_density_95", 0.95, 1.0, "6s.wav"),

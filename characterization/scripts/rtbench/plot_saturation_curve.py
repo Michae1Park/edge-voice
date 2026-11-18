@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""Combines summary.json from multiple rtbench result directories (e.g. a
-coarse sweep plus a denser follow-up sweep over a narrower load range) into
-one utilization/queue-growth-vs-offered-load curve -- for pinning down the
-saturation boundary precisely across separate runs instead of re-plotting
-each run's own narrow load range in isolation.
-
-Usage:
-    python characterization/scripts/rtbench/plot_saturation_curve.py \\
-        --results-dir characterization/results/rtbench \\
-        --out characterization/results/rtbench/plots/saturation_curve.png
-"""
 
 from __future__ import annotations
 
@@ -28,7 +17,7 @@ def _collect(results_dirs: list[Path]) -> list[dict]:
     for d in results_dirs:
         summary = json.loads((d / "summary.json").read_text())
         for lv in summary.get("exp2", []) + summary.get("exp3", []):
-            by_load[lv["offered_load"]] = lv  # later dirs win on overlap
+            by_load[lv["offered_load"]] = lv
     return [by_load[k] for k in sorted(by_load)]
 
 
@@ -44,8 +33,6 @@ def main() -> None:
 
     levels = _collect(args.results_dirs)
     loads = [lv["offered_load"] for lv in levels]
-    # rho = service_time_s / arrival_interval_s = service_time_s * offered_rate_per_s
-    # (offered_rate_per_s == 1 / arrival_interval_s by construction).
     rhos = [(lv["service_time_ms"]["mean"] / 1000.0) * lv["offered_rate_per_s"] for lv in levels]
     growth = [lv["queue_growth_rate_per_s"] for lv in levels]
     colors = {"SUSTAINABLE": "tab:green", "BORDERLINE": "tab:orange", "UNSUSTAINABLE": "tab:red"}

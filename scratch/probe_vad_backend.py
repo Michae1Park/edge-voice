@@ -1,34 +1,4 @@
 #!/usr/bin/env python3
-"""torch.hub Silero vs onnxruntime Silero: which explains the RPi5 speedup?
-
-vad_worker.py switched its VAD backend from torch.hub.load(...) to
-silero_vad.load_silero_vad(onnx=True) (see git log for
-src/edge_voice/vad/vad_worker.py). Inference sped up noticeably on the
-RPi5 afterward. Two candidate explanations:
-
-  (1) onnxruntime's per-call inference is just faster than torch eager/JIT
-      for this tiny (512-sample) window size.
-  (2) torch's forward pass was GIL-bound and blocking some other thread
-      from making progress, and onnxruntime releases the GIL more cleanly.
-
-This script measures both directly, the same way probe_gil_release.py does
-for the STT decoder: no orchestrator, no queues, just the model calls
-themselves.
-
-Note going in: VADWorker itself is single-threaded (see its module
-docstring) -- one thread demultiplexes both channels off routed_queue, so
-there is no VAD-internal channel parallelism to lose or gain here. This
-script still measures (2) directly (two independent model instances, two
-threads) since it's a fair general question about the backend, even though
-the current architecture doesn't have two VAD threads to begin with.
-
-Run this on the RPi5, not a dev box -- see docs/BENCHMARK.md's note on
-probe_gil_release.py for why a many-core x86 box doesn't transfer.
-
-Usage:
-    python scratch/probe_vad_backend.py
-    python scratch/probe_vad_backend.py --solo-iterations 500 --concurrent-seconds 3.0
-"""
 
 from __future__ import annotations
 
@@ -101,9 +71,6 @@ def _worker_loop(model, stop_flag: threading.Event, counter: list, idx: int) -> 
 
 
 def bench_concurrent(name: str, load_fn, n_warmup: int, seconds: float) -> float:
-    # Fresh model instance per thread -- same as VADWorker's per-channel
-    # model (vad_worker.py's _new_channel_state docstring explains why one
-    # shared model across channels corrupts LSTM state).
     model_a = load_fn()
     model_b = load_fn()
     x = _make_window()
@@ -156,9 +123,6 @@ def main() -> None:
     parser.add_argument("--concurrent-seconds", type=float, default=3.0)
     args = parser.parse_args()
 
-    # Isolate GIL/thread effects from torch's own intra-op parallelism --
-    # otherwise a torch.hub call could win or lose purely on how many
-    # threads it internally spins up, unrelated to the GIL question.
     torch.set_num_threads(1)
 
     print("Loading models...")

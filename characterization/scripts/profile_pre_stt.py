@@ -1,29 +1,4 @@
 #!/usr/bin/env python3
-"""Where does "pre-STT overhead" (full latency - STT decode) go?
-
-measure_sbc.py reports full_latency = transcript.created_at - segment.end and
-stt_latency = decode only; the gap is ~22 ms on an RPi5 but ~800 ms on an OPI5.
-This runs the same real-pipeline scenario with in-process instrumentation (no
-src/ changes; methods are wrapped at class level) and splits the gap into:
-
-  end -> finalize   segment.end (audio clock) -> VADWorker._finalize_segment.
-                    Ingest + router + VAD detection lag: how far behind real
-                    time the audio is being processed, plus VAD's own hold-off.
-  finalize -> decode  queue + IPC + transcriber start, up to decode start
-                    (created_at - stt_latency, i.e. decode start in wall time).
-  decode            STT decode itself.
-
-Also records, per stage, how far behind wall clock each packet is
-(time.time() - packet.timestamp) at router input and VAD input, the wall time
-of every VADWorker._handle_packet call (Silero real-time factor vs the 32 ms
-window), and peak queue depths.
-
-Works whether the checkout's package is `edge_voice` or `ondevice_stt`.
-
-Usage:
-    python characterization/scripts/profile_pre_stt.py --cores 4-7
-    MOONSHINE_ORT_SINGLE_THREAD=0 python characterization/scripts/profile_pre_stt.py --cores 4-7
-"""
 
 from __future__ import annotations
 
@@ -92,7 +67,6 @@ def _stats(v: list[float]) -> dict[str, float]:
 
 
 class Probe:
-    """Collects timings once `armed` (i.e. after warm-up)."""
 
     def __init__(self) -> None:
         self.armed = False
@@ -101,7 +75,7 @@ class Probe:
         self.router_lag_ms: list[float] = []
         self.vad_lag_ms: list[float] = []
         self.vad_call_ms: list[float] = []
-        self.finalize: dict[str, tuple[float, float]] = {}  # segment_id -> (end_ts, wall)
+        self.finalize: dict[str, tuple[float, float]] = {}
         self.peak_depth: dict[str, int] = {}
         self.depth_series: list[tuple[float, dict[str, int]]] = []
 

@@ -1,32 +1,4 @@
 #!/usr/bin/env python3
-"""Does cutting long VAD segments shorter reduce *total* STT inference time,
-or does it just spread the same total latency across more, smaller numbers?
-
-Feeds the same long, pause-free recording through the real pipeline once per
-max_segment_s cutoff in CUTOFFS (plus one run with segment_limits_enabled=False
-as an "unlimited" baseline), and sums stt_latency_s across every TRANSCRIPT
-line in each run. Plots total latency and per-segment latency against cutoff.
-
-If Moonshine's encoder cost is roughly linear in audio length, total latency
-should stay flat across cutoffs. If it's superlinear (e.g. full self-attention
-over the whole segment, O(n^2)-ish), shorter cutoffs should show a lower
-total. This only measures wall-clock inference time as STTWorker already
-defines it (see stt_worker.py:_handle_segment) -- pure _transcribe() time, no
-queueing.
-
-No MQTT broker needed -- same trick as scratch/demo_observability.py: builds
-the real PipelineOrchestrator but pushes AudioPacket frames straight onto
-ingest_queue instead of going through MqttAudioIngest.
-
-Each run is settled by waiting on VADWorker's own idle-flush (config.vad.
-idle_flush_s), not by tearing the pipeline down -- orchestrator.stop()'s
-per-worker join has a 10s timeout (WORKER_JOIN_TIMEOUT_S), which a single
-long segment's transcription can easily exceed. Waiting for idle-flush before
-ever calling stop() sidesteps that entirely.
-
-Usage:
-    python scratch/demo_segment_cut_latency.py
-"""
 
 from __future__ import annotations
 
@@ -44,25 +16,15 @@ from edge_voice.observability.logging import JsonFormatter, configure_logging
 from edge_voice.pipeline.models import AudioPacket
 from edge_voice.pipeline.orchestrator import PipelineOrchestrator
 
-# One continuous, pause-free utterance -- see scratch/demo_observability.py's
-# comment on why this fixture (unlike rx_recorded_1.wav) is the interesting
-# one here: with segment_limits_enabled=False it never gets a natural VAD
-# `end`, so the *entire* recording becomes a single segment. That's the
-# extreme "unlimited" baseline the swept cutoffs are compared against.
 WAV_PATH = "wav/conversation_60s.wav"
 CHANNEL_ID = "rx"
 DRAIN_TIMEOUT_S = 240.0
 PLOT_PATH = "scratch/segment_cut_latency.png"
 
-# max_segment_s values to sweep, shortest first. None = segment_limits_enabled
-# False (unlimited baseline, i.e. one segment for the whole file).
 CUTOFFS: list[float | None] = [2.0, 3.0, 5.0, 7.0, 10.0, None]
 
 
 class _CaptureHandler(logging.Handler):
-    """Collects every formatted JSON line in memory so totals can be computed
-    after the run, without scraping the terminal. Same pattern as
-    scratch/demo_observability.py."""
 
     def __init__(self, formatter: logging.Formatter) -> None:
         super().__init__()
@@ -78,8 +40,6 @@ def section(title: str) -> None:
 
 
 def _extract_latencies(json_lines: list[str]) -> list[float]:
-    """Every stt_latency_s value logged so far -- one per TRANSCRIPT line
-    (see orchestrator.py:_on_transcript)."""
     latencies: list[float] = []
     for line in json_lines:
         try:
@@ -95,10 +55,6 @@ def _extract_latencies(json_lines: list[str]) -> list[float]:
 def feed_wav(
     orch: PipelineOrchestrator, path: str, channel_id: str, incoming_ms: float, sample_rate: int
 ) -> None:
-    """Chunk a WAV file into incoming_ms frames and push them straight onto
-    ingest_queue, bypassing MqttAudioIngest entirely. Ported from
-    scratch/demo_observability.py -- see that module for why a fake
-    monotonically-advancing clock is fine here."""
     data, file_sr = sf.read(path, dtype="int16")
     if data.ndim > 1:
         data = data[:, 0]
@@ -124,23 +80,16 @@ def feed_wav(
 
 
 def run_once(max_segment_s: float | None) -> tuple[int, float, list[float]]:
-    """Runs the pipeline over WAV_PATH with the given max_segment_s cutoff
-    (None = segment_limits_enabled False, i.e. unlimited) and returns
-    (segment_count, total_stt_latency_s, per_segment_latencies).
-    """
     settings = Settings.load()
-    settings.logging_.is_json = True  # force JSON regardless of configs/local.yaml
-    settings.logging_.console_enabled = False  # keep this script's own output readable
-    settings.logging_.file_enabled = False  # this is throwaway data, not worth a log file
-    settings.reliability.watchdog_enabled = False  # no systemd here
+    settings.logging_.is_json = True
+    settings.logging_.console_enabled = False
+    settings.logging_.file_enabled = False
+    settings.reliability.watchdog_enabled = False
     if max_segment_s is None:
         settings.vad.segment_limits_enabled = False
     else:
         settings.vad.segment_limits_enabled = True
         settings.vad.max_segment_s = max_segment_s
-        # Keep soft_cut_s meaningfully below the hard cap so there's room to
-        # find a natural pause, same shape as configs/default.yaml's
-        # soft_cut_s=3.0/max_segment_s=5.0 (2s of headroom).
         settings.vad.soft_cut_s = max(1.0, max_segment_s - 2.0)
 
     configure_logging(settings.logging_)
@@ -161,13 +110,6 @@ def run_once(max_segment_s: float | None) -> tuple[int, float, list[float]]:
         sample_rate=settings.audio.sample_rate,
     )
 
-    # Settle by watching for VADWorker's own idle-flush (config.vad.
-    # idle_flush_s) to fire and STT to catch up -- not by tearing the
-    # pipeline down. A single long segment's transcription can exceed
-    # orchestrator.stop()'s WORKER_JOIN_TIMEOUT_S (10s), so this script never
-    # calls stop() until it has already confirmed every expected segment
-    # landed. "Settled" = queues empty and segment count unchanged for a
-    # full idle_flush_s + 1s margin.
     deadline = time.time() + DRAIN_TIMEOUT_S
     last_count = -1
     stable_since: float | None = None
@@ -187,7 +129,7 @@ def run_once(max_segment_s: float | None) -> tuple[int, float, list[float]]:
     else:
         print(f"WARNING: settle timed out after {DRAIN_TIMEOUT_S}s -- results may be incomplete")
 
-    orch.stop()  # queues are already empty and STT idle by now, so this is a clean, fast teardown
+    orch.stop()
     orch.wait()
     root.removeHandler(capture)
 

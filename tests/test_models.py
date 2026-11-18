@@ -1,11 +1,3 @@
-"""Milestone 0 throwaway tests.
-
-Just enough to confirm the shared dataclasses construct correctly. Real
-unit tests (channel routing, VAD segmentation, config validation) arrive in
-Milestone 8.
-"""
-
-# from src.edge_voice.pipeline.models import AudioPacket, SpeechSegment, TranscriptEvent
 from edge_voice.pipeline.models import (
     AudioPacket,
     SpeechSegment,

@@ -1,14 +1,3 @@
-"""Debug tool: collect AudioPackets from a queue and save as WAV files.
-
-Usage:
-    # From Python:
-    from edge_voice.audio_ingest.audio_dump import AudioDumpWorker
-    dump = AudioDumpWorker(dump_queue, output_dir="./dumped_audio")
-    dump.start(); ...; dump.stop()
-
-    # Or as a standalone process with a queue created via IPC.
-"""
-
 from __future__ import annotations
 
 import queue
@@ -23,11 +12,10 @@ from edge_voice.pipeline.models import AudioPacket
 
 logger = get_stage_logger(__name__, stage="audio_ingest")
 
-BYTES_PER_SAMPLE = 2  # int16 PCM
+BYTES_PER_SAMPLE = 2
 
 
 class AudioDumpWorker(threading.Thread):
-    """Consume packets from a dump queue and write per-channel rolling WAV files."""
 
     def __init__(
         self,
@@ -36,13 +24,6 @@ class AudioDumpWorker(threading.Thread):
         channel_sample_rate: int = 16_000,
         segment_secs: float = 10.0,
     ) -> None:
-        """
-        Args:
-            dump_queue: queue of AudioPackets to dump (e.g. ChannelRouter's dump_queue).
-            output_dir: directory where WAV files will be written.
-            channel_sample_rate: sample rate for the output WAV.
-            segment_secs: number of seconds of audio per output file.
-        """
         super().__init__(name="AudioDumpWorker", daemon=False)
         self._queue = dump_queue
         self._output_dir = Path(output_dir)
@@ -55,11 +36,6 @@ class AudioDumpWorker(threading.Thread):
         self._lock = threading.Lock()
 
     def _flush_full_segment(self, ch: str) -> tuple[np.ndarray, Path] | None:
-        """Extract one full segment from *ch*'s buffer. Truncates in-place.
-
-        Returns ``(segment_array, path)`` or ``None`` if buffer has fewer
-        than threshold samples.
-        """
         if len(self._buffers[ch]) < self._threshold:
             return None
         segment_id = self._segments[ch]
@@ -69,7 +45,6 @@ class AudioDumpWorker(threading.Thread):
         return segment, self._output_dir / f"{ch}_{segment_id:03d}.wav"
 
     def _flush_end(self, ch: str) -> None:
-        """Write trailing partial buffer for *ch* after stop."""
         with self._lock:
             remaining = self._buffers.get(ch)
             if not remaining:

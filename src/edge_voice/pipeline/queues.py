@@ -1,9 +1,3 @@
-"""Bounded queues connecting pipeline stages.
-
-Queue sizes are supplied by the caller (typically from
-``Settings.queues`` — see config/settings.py).
-"""
-
 from __future__ import annotations
 
 import queue

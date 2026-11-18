@@ -1,16 +1,3 @@
-"""Tests for in-progress partial transcripts (vad.partial_interval_s).
-
-The load-bearing property here is isolation: a partial is a throwaway
-prefix, so it must not reach the segment dump, must not move any STT
-latency metric, and must not fire the one-per-segment TRANSCRIPT log line.
-Those three are what the feature is allowed to touch, and everything below
-either asserts a partial does its job or asserts it stays out of the way.
-
-Fakes follow the two existing suites: _FakeSileroModel from
-test_vad_worker.py (VADWorker(model=...) skips the real load) and a
-transcriber_factory from test_stt_worker.py (no Moonshine needed).
-"""
-
 import queue
 
 import torch
@@ -20,11 +7,8 @@ from edge_voice.stt.stt_worker import STTWorker, STTWorkerConfig
 from edge_voice.vad.vad_worker import VADWorker, VADWorkerConfig
 
 SAMPLE_RATE = 16000
-CHUNK_SAMPLES = 512  # 32ms
+CHUNK_SAMPLES = 512
 CHUNK_S = CHUNK_SAMPLES / SAMPLE_RATE
-
-
-# ── VAD side: emission cadence and gating ───────────────────────
 
 
 class _FakeSileroModel:
@@ -64,11 +48,6 @@ def _packet(amplitude: int = 5000) -> AudioPacket:
 
 
 def _feed_mid_speech(worker: VADWorker, n_chunks: int) -> None:
-    """Drive _continue_segment directly with a segment already in progress.
-
-    Going through _handle_packet would make the test depend on Silero's
-    trigger state machine; the partial logic lives past that decision.
-    """
     state = worker._channels["rx"]
     state.triggered = True
     state.segment_start_ts = 0.0
@@ -87,21 +66,19 @@ def _drain(q: "queue.Queue") -> list:
 
 def test_disabled_by_default_emits_no_partials():
     worker = _vad_worker(partial_interval_s=0.0)
-    _feed_mid_speech(worker, n_chunks=200)  # 6.4s of speech
+    _feed_mid_speech(worker, n_chunks=200)
 
     assert _drain(worker.segment_queues["rx"]) == []
 
 
 def test_partials_emitted_on_cadence_once_past_minimum():
     worker = _vad_worker(partial_interval_s=1.0, partial_min_segment_s=1.5)
-    _feed_mid_speech(worker, n_chunks=157)  # ~5.0s
+    _feed_mid_speech(worker, n_chunks=157)
 
     partials = _drain(worker.segment_queues["rx"])
     assert partials, "expected at least one partial past the 1.5s minimum"
     assert all(p.is_partial for p in partials)
-    # First lands at the minimum, not before it.
     assert partials[0].end >= 1.5
-    # ~1s apart: 5.0s of speech, first at 1.5s -> 1.5/2.5/3.5/4.5
     assert len(partials) == 4
     gaps = [b.end - a.end for a, b in zip(partials, partials[1:])]
     assert all(abs(g - 1.0) < CHUNK_S for g in gaps)
@@ -109,13 +86,12 @@ def test_partials_emitted_on_cadence_once_past_minimum():
 
 def test_partial_shorter_than_minimum_is_never_emitted():
     worker = _vad_worker(partial_interval_s=0.5, partial_min_segment_s=1.5)
-    _feed_mid_speech(worker, n_chunks=30)  # ~0.96s, under the minimum
+    _feed_mid_speech(worker, n_chunks=30)
 
     assert _drain(worker.segment_queues["rx"]) == []
 
 
 def test_partials_carry_the_in_progress_segment_id():
-    """The final replaces the partial in the UI, so the ids must match."""
     worker = _vad_worker(partial_interval_s=1.0)
     _feed_mid_speech(worker, n_chunks=157)
 
@@ -124,7 +100,6 @@ def test_partials_carry_the_in_progress_segment_id():
 
 
 def test_partials_never_reach_the_dump_queue():
-    """Prefixes would bury real segments in segment_audio_dump."""
     dump: queue.Queue = queue.Queue()
     worker = _vad_worker(partial_interval_s=1.0, dump_queue=dump)
     _feed_mid_speech(worker, n_chunks=157)
@@ -146,9 +121,6 @@ def test_partial_clock_resets_so_a_new_segment_starts_fresh():
     assert state.last_partial_s == 0.0
 
 
-# ── STT side: isolation from finals ─────────────────────────────
-
-
 class _FakeLine:
     def __init__(self, text: str) -> None:
         self.text = text
@@ -160,7 +132,6 @@ class _FakeTranscript:
 
 
 class _FakeTranscriber:
-    """Records which entry point each call took."""
 
     def __init__(self, partial_text: str = "안녕하세요") -> None:
         self.partial_text = partial_text
@@ -171,7 +142,6 @@ class _FakeTranscriber:
         self.without_streaming_calls += 1
         return _FakeTranscript(self.partial_text)
 
-    # Streaming path, used by finals only.
     def remove_all_listeners(self) -> None:
         pass
 
@@ -226,7 +196,6 @@ def test_partial_emits_a_non_final_transcript_event():
 
 
 def test_partial_uses_the_stateless_entry_point_not_the_stream():
-    """transcribe_without_streaming can't perturb the final's decoder state."""
     transcriber = _FakeTranscriber()
     worker = _stt_worker(transcriber, [])
 
@@ -237,7 +206,6 @@ def test_partial_uses_the_stateless_entry_point_not_the_stream():
 
 
 def test_partial_does_not_move_stt_latency_metrics():
-    """The isolation this whole feature is gated on."""
     worker = _stt_worker(_FakeTranscriber(), [])
 
     worker._handle_segment(_segment("rx-1", is_partial=True))
@@ -265,8 +233,6 @@ def test_final_still_records_latency_and_is_final():
     worker._handle_segment(_segment("rx-1", is_partial=False))
 
     assert worker.last_latency_s is not None
-    # The fake fires no listener events, so no transcript is published --
-    # matching test_stt_worker.py's fake. Latency is the assertion here.
     assert all(e.is_final for e in events)
 
 
@@ -297,7 +263,6 @@ def test_partial_is_kept_when_queue_is_within_the_allowance():
 
 
 def test_repetitive_partial_is_suppressed():
-    """A looping prefix is noise the user would watch get worse."""
     events: list[TranscriptEvent] = []
     worker = _stt_worker(_FakeTranscriber("잘 말하고 잘 말하고 잘 말하고 잘 말하고"), events)
 

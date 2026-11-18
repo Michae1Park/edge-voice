@@ -1,25 +1,4 @@
 #!/usr/bin/env python3
-"""Manual demo of Milestone 7's observability/metrics.py (see docs/BUILDPLAN.md).
-
-Feeds a real WAV recording through the live pipeline and watches
-MetricsCollector's periodic snapshots as they tick: queue depths draining,
-STT latency turning non-null once the first segment is transcribed, and the
-supervisor's restart budget. mqtt_connected reflects whatever the real
-MqttAudioIngest reports -- True/False if a broker happens to be reachable,
-and would only read as None if the configured source were WavSource/MicSource
-instead (no MQTT involved at all), the optional case docs/BUILDPLAN.md calls
-for.
-
-No MQTT broker needed to *run* this demo -- like scratch/demo_supervisor.py
-and scratch/demo_observability.py, audio is pushed straight onto
-ingest_queue, bypassing MqttAudioIngest's subscribe path entirely, so it
-works whether or not a broker happens to be reachable (MqttAudioIngest still
-attempts its own connection in the background regardless, which is what
-mqtt_connected is reading).
-
-Usage:
-    python scratch/demo_metrics.py
-"""
 
 from __future__ import annotations
 
@@ -34,10 +13,6 @@ from edge_voice.observability.logging import configure_logging
 from edge_voice.pipeline.models import AudioPacket
 from edge_voice.pipeline.orchestrator import PipelineOrchestrator
 
-# Same fixture demo_observability.py / tests/test_pipeline_integration.py use --
-# documented to produce several distinct VAD segments over 30s of real
-# speech-with-pauses, so there's more than one STT latency reading to watch
-# land in the snapshots below.
 WAV_PATH = "wav/rx_recorded_1.wav"
 CHANNEL_ID = "rx"
 
@@ -49,13 +24,6 @@ def section(title: str) -> None:
 def feed_wav(
     orch: PipelineOrchestrator, path: str, channel_id: str, incoming_ms: float, sample_rate: int
 ) -> None:
-    """Chunk a WAV file into incoming_ms frames and push them straight onto
-    ingest_queue, bypassing MqttAudioIngest entirely -- same trick
-    demo_observability.py uses. Only the first packet's timestamp matters
-    (it anchors the repacketizer's clock; see channel/router.py's
-    Repacketizer.process), so a monotonically-advancing fake clock is as
-    good as a real one.
-    """
     data, file_sr = sf.read(path, dtype="int16")
     if data.ndim > 1:
         data = data[:, 0]
@@ -81,9 +49,6 @@ def feed_wav(
 
 
 def print_snapshot(orch: PipelineOrchestrator, label: str) -> None:
-    # Reaching into the orchestrator's internals on purpose, same as the
-    # other scratch demos -- there's no public accessor yet (health/reporting.py,
-    # a later Milestone 7 item, is what will eventually wrap this).
     collector = orch._metrics  # type: ignore[attr-defined]
     snapshot = collector.snapshot() if collector is not None else None
     if snapshot is None:
@@ -100,9 +65,7 @@ def print_snapshot(orch: PipelineOrchestrator, label: str) -> None:
 
 def main() -> None:
     settings = Settings.load()
-    settings.reliability.watchdog_enabled = False  # no systemd here
-    # Fast tick so this demo shows several snapshots in well under a minute,
-    # instead of matching configs/default.yaml's production-tuned 10.0s.
+    settings.reliability.watchdog_enabled = False
     settings.metrics.emit_interval_s = 1.0
 
     configure_logging(settings.logging_)
@@ -113,7 +76,7 @@ def main() -> None:
     time.sleep(0.5)
 
     section("1. Before any audio: queues empty, STT latency unset")
-    time.sleep(1.5)  # let at least one tick land
+    time.sleep(1.5)
     print_snapshot(orch, "snapshot")
 
     section("2. Feeding audio directly onto ingest_queue (bypassing MQTT)")
@@ -135,7 +98,7 @@ def main() -> None:
         time.sleep(settings.metrics.emit_interval_s)
 
     section("4. Final snapshot -- STT latency should now be non-null")
-    time.sleep(settings.metrics.emit_interval_s + 0.5)  # one more tick past the last segment
+    time.sleep(settings.metrics.emit_interval_s + 0.5)
     print_snapshot(orch, "final")
 
     section("Shutting down")

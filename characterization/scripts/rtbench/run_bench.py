@@ -1,43 +1,4 @@
 #!/usr/bin/env python3
-"""Maximum-sustainable-throughput and overload characterization for a
-non-streaming ASR (complete audio file/chunk in, transcription out).
-
-Answers three questions, not just "how fast is one request":
-  1. How much real-time workload can the system sustainably handle?
-  2. Where does it become overloaded?
-  3. What happens after it becomes overloaded?
-
-Architecture (see engine.py for the implementation):
-
-    audio producer (wall-clock paced, never waits on the ASR)
-          |
-          v
-    request queue  <-- queue depth is the overload signal
-          |
-          v
-    ASR worker (sequential, calls adapter.transcribe(audio_path))
-
-The ASR itself is reached only through an adapter -- adapter.py -- so this
-script never assumes how the ASR is invoked. Swap --adapter dummy in for
-engine validation without a model, or point MoonshineAdapter at a different
-language/model_arch/options if the deployed config changes.
-
-Two experiments, run against the SAME 17.3s / ~92%-speech-occupancy audio
-chunk (characterization/testaudio/natural17s_gap150ms.wav):
-
-  Experiment 2 (primary) -- offered loads 0.75x/1.0x/1.25x/1.5x/2.0x
-  realtime, ~3 min each: is throughput bounded at each load, or does the
-  queue grow without bound?
-
-  Experiment 3 -- offered loads 1.5x/2.0x/3.0x realtime, ~3 min each:
-  once overloaded, what actually happens to the backlog, latency, service
-  time, memory, CPU frequency, and temperature?
-
-Usage:
-    python characterization/scripts/rtbench/run_bench.py
-    python characterization/scripts/rtbench/run_bench.py --adapter dummy --dummy-rtf 0.3
-    python characterization/scripts/rtbench/run_bench.py --exp 2 --exp2-duration-s 60
-"""
 
 from __future__ import annotations
 
@@ -52,7 +13,7 @@ THIS_DIR = Path(__file__).resolve().parent
 CHARACTERIZATION_DIR = THIS_DIR.parent.parent
 sys.path.insert(
     0, str(THIS_DIR.parent)
-)  # for `import edge_voice...` via src on sys.path already, and rtbench as a package
+)
 sys.path.insert(0, str(THIS_DIR.parent.parent.parent / "src"))
 
 from rtbench.adapter import build_adapter  # noqa: E402
@@ -73,47 +34,14 @@ EXP2_LOADS = [0.75, 1.0, 1.25, 1.5, 2.0]
 EXP3_LOADS = [1.5, 2.0, 3.0]
 DEFAULT_LEVEL_DURATION_S = 180.0
 
-# ── Classification thresholds ───────────────────────────────────────────
-# Queue-depth slope during the ARRIVAL window only (drain phase excluded --
-# it always trends down by construction and would bias this). Units: queue
-# items per second.
-SLOPE_SUSTAINABLE_MAX = 0.02  # ~<=3.6 items grown over a 180s window: noise
-SLOPE_UNSUSTAINABLE_MIN = 0.08  # ~>=14.4 items grown over 180s: clear runaway
-DEPTH_BOUND_SMALL = 5.0  # end-of-window depth this small reads as "bounded"
-# Server utilization rho = mean_service_time / arrival_interval (a single
-# sequential worker is a bounded queue iff rho < 1 -- standard M/D/1-style
-# reasoning). This is the PRIMARY signal, not a request-counting ratio: an
-# earlier version counted "requests whose finish time fell before the
-# window's exact end" and divided by offered rate, which sounds equivalent
-# but isn't -- on a short run (8-30 requests per level) the one request
-# straddling the window boundary swings that ratio by 1/n (5-10% here),
-# enough to cross a 0.97 threshold on pure edge noise even when queue depth
-# measured continuously every 0.5s stayed at exactly 0 the entire run (this
-# is exactly what happened the first time this classifier ran against real
-# RPi5 data -- see git history). rho has no such edge case: it's a ratio of
-# two per-request quantities, immune to where the observation window happens
-# to end.
+SLOPE_SUSTAINABLE_MAX = 0.02
+SLOPE_UNSUSTAINABLE_MIN = 0.08
+DEPTH_BOUND_SMALL = 5.0
 UTIL_SUSTAINABLE_MAX = 0.90
 UTIL_UNSUSTAINABLE_MIN = 1.02
 
 
 def classify_load(level: LoadLevelResult) -> tuple[str, str]:
-    """(verdict, reason) -- SUSTAINABLE / BORDERLINE / UNSUSTAINABLE.
-
-    Two independent signals:
-      1. Utilization rho = mean_service_time_s / arrival_interval_s -- is
-         the worker's own duty cycle below 1 with real margin, at 1, or
-         over 1? (equivalent to RTF * offered_load).
-      2. Queue-depth slope over the arrival window (elapsed_s <=
-         nominal_duration_s -- the post-arrival drain phase always trends
-         toward zero by construction and would make every level look
-         healthy if included) -- catches cases rho alone wouldn't, e.g.
-         service time itself degrading over the run (thermal throttling).
-
-    Per the spec this bench implements: a load is NOT sustainable merely
-    because the process is still alive -- rho and the slope are what catch
-    a worker that's technically making progress but steadily losing ground.
-    """
     window = [s for s in level.samples if s.elapsed_s <= level.nominal_duration_s]
     depths = [s.queue_depth for s in window]
     ts = [s.elapsed_s for s in window]
@@ -274,10 +202,6 @@ def _half_means(values: list[float]) -> tuple[float, float]:
 
 
 def overload_narrative(level: LoadLevelResult) -> dict:
-    """Describes what happened during ONE overload run, for the final
-    "what happens after overload" summary -- queue growth shape, latency/
-    service-time/RSS trend, temperature, and CPU frequency, comparing the
-    first half of the arrival window against the second half."""
     window = [s for s in level.samples if s.elapsed_s <= level.nominal_duration_s]
     depths = [s.queue_depth for s in window]
     ts = [s.elapsed_s for s in window]
@@ -298,7 +222,7 @@ def overload_narrative(level: LoadLevelResult) -> dict:
     freq_first, freq_second = _half_means([s.cpu_freq_mhz for s in window])
 
     throttling = (
-        freq_first == freq_first  # not NaN
+        freq_first == freq_first
         and freq_second == freq_second
         and freq_first > 0
         and freq_second < 0.92 * freq_first
@@ -327,18 +251,10 @@ def overload_narrative(level: LoadLevelResult) -> dict:
 
 
 def print_final_summary(all_summaries: list[dict], exp3_levels: list[LoadLevelResult]) -> None:
-    """all_summaries: EVERY tested load level (Experiment 2 AND 3 combined)
-    -- the sustainable/saturation boundary can be pinned down by either
-    experiment's data (e.g. Exp2 tops out at 2.0x sustainable, but only
-    Exp3's 3.0x point reveals where it actually breaks), so both must be
-    considered together, not just Experiment 2 in isolation."""
     print("\n" + "=" * 70)
     print("FINAL SUMMARY")
     print("=" * 70)
 
-    # One verdict per distinct offered load (Exp2/Exp3 overlap on some
-    # loads, e.g. both test 1.5x/2.0x -- they always agree since both are
-    # measuring the same worker capacity, so keeping either copy is fine).
     by_load = {s["offered_load"]: s for s in sorted(all_summaries, key=lambda s: s["offered_load"])}
     summaries = list(by_load.values())
     sustainable = [s for s in summaries if s["verdict"] == "SUSTAINABLE"]
@@ -491,7 +407,6 @@ def main() -> None:
         )
         all_levels.extend(exp3_levels)
 
-    # ── Output: per-request CSV, per-sample CSV, per-level summary JSON ──
     all_requests = [r for lv in all_levels for r in lv.requests]
     all_samples = [s for lv in all_levels for s in lv.samples]
     write_csv(args.results_dir / "requests.csv", all_requests, RequestRecord)

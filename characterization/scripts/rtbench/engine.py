@@ -1,32 +1,3 @@
-"""Producer/consumer throughput-benchmark engine.
-
-    audio producer (wall-clock paced)
-          |
-          v
-    +-------------+
-    | request     |
-    | queue       |
-    +-------------+
-          |
-          v
-    +-------------+
-    | ASR worker  |  (single thread, sequential, calls adapter(audio_path))
-    +-------------+
-          |
-          v
-    transcription
-
-The producer determines request arrival times purely from wall-clock time
-(a monotonic schedule, drift-corrected) and NEVER waits on the ASR worker.
-If the worker falls behind, the queue grows -- that growth is the whole
-point of this benchmark, not something to paper over with a closed loop
-(transcribe(); sleep(interval); repeat), which would silently throttle
-arrivals to match service time and hide overload entirely.
-
-Everything here is generic over `adapter`: any callable/object exposing
-`transcribe(audio_path) -> str` plugs in -- see adapter.py.
-"""
-
 from __future__ import annotations
 
 import csv
@@ -41,10 +12,6 @@ from pathlib import Path
 from typing import Callable
 
 _CLK_TCK = os.sysconf("SC_CLK_TCK")
-
-
-# ── System metrics (no psutil dependency -- /proc + /sys, matching the
-#    convention already used by characterization/scripts/run_experiment.py) ──
 
 
 def _read_rss_mb(pid: str = "self") -> float:
@@ -62,7 +29,7 @@ def _read_cpu_ticks(pid: str = "self") -> int:
     try:
         with open(f"/proc/{pid}/stat") as f:
             after_comm = f.read().rsplit(")", 1)[1].split()
-        return int(after_comm[11]) + int(after_comm[12])  # utime + stime
+        return int(after_comm[11]) + int(after_comm[12])
     except FileNotFoundError:
         return 0
 
@@ -86,9 +53,6 @@ def _read_cpu_temp_c() -> float:
 
 
 class _CpuPercentTracker:
-    """% of one CPU core busy, for this process, since the last call --
-    same tick-delta approach as run_experiment.py's ResourceSampler, just
-    inlined here so engine.py has no cross-import on that script."""
 
     def __init__(self) -> None:
         self._last_ticks = _read_cpu_ticks()
@@ -101,9 +65,6 @@ class _CpuPercentTracker:
         pct = 100.0 * ((ticks - self._last_ticks) / _CLK_TCK) / dt if dt > 0 else 0.0
         self._last_ticks, self._last_t = ticks, now
         return pct
-
-
-# ── Records ──────────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -152,12 +113,9 @@ class LoadLevelResult:
     n_offered: int
     n_completed: int
     n_failed: int
-    wallclock_s: float  # producer window + drain, this level's own clock
+    wallclock_s: float
     drain_s: float
     drain_timed_out: bool
-
-
-# ── Stats helpers ────────────────────────────────────────────────────────
 
 
 def percentile(values: list[float], pct: float) -> float:
@@ -169,7 +127,7 @@ def percentile(values: list[float], pct: float) -> float:
 
 
 def stats(values: list[float]) -> dict[str, float]:
-    values = [v for v in values if v == v]  # drop NaN
+    values = [v for v in values if v == v]
     if not values:
         return {k: float("nan") for k in ("n", "mean", "std", "p50", "p95", "p99", "max", "min")}
     return {
@@ -185,7 +143,6 @@ def stats(values: list[float]) -> dict[str, float]:
 
 
 def linear_slope(xs: list[float], ys: list[float]) -> float:
-    """Least-squares slope of ys vs xs (units of ys per unit of xs)."""
     n = len(xs)
     if n < 2:
         return 0.0
@@ -194,9 +151,6 @@ def linear_slope(xs: list[float], ys: list[float]) -> float:
     num = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys))
     den = sum((x - mean_x) ** 2 for x in xs)
     return num / den if den else 0.0
-
-
-# ── Producer/consumer run ────────────────────────────────────────────────
 
 
 def run_load_level(
@@ -210,16 +164,6 @@ def run_load_level(
     queue_maxsize: int = 0,
     max_drain_s: float = 600.0,
 ) -> LoadLevelResult:
-    """Run one offered-load level: producer paces arrivals at
-    offered_load x realtime for duration_s, a single ASR worker thread
-    drains the queue sequentially, then (arrivals stopped) the worker keeps
-    draining any backlog -- up to max_drain_s -- before this level ends.
-    Draining fully (rather than discarding backlog) is deliberate: nothing
-    is ever dropped from the queue, per the benchmark's requirements; the
-    drain itself is also useful signal (how long overload takes to recover
-    once arrivals stop). max_drain_s is only a safety ceiling against a
-    genuinely wedged worker, not a normal code path.
-    """
     interval_s = audio_duration_s / offered_load
     q: "queue.Queue[tuple[int, float, int]]" = queue.Queue(maxsize=queue_maxsize)
     records: list[RequestRecord] = []
@@ -250,9 +194,6 @@ def run_load_level(
                 time.sleep(sleep_s)
             iteration += 1
             arrival_time = time.monotonic()
-            # qsize() then +1, not qsize() after put(): avoids a race where
-            # the worker could dequeue this same item between put() and the
-            # qsize() read, which would otherwise undercount depth by one.
             depth_at_arrival = q.qsize() + 1
             q.put((iteration, arrival_time, depth_at_arrival))
             n_offered = iteration
@@ -364,9 +305,6 @@ def run_load_level(
         drain_s=drain_s,
         drain_timed_out=drain_timed_out,
     )
-
-
-# ── CSV output ───────────────────────────────────────────────────────────
 
 
 def write_csv(path: Path, rows: list, row_type: type) -> None:

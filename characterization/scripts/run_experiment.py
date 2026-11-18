@@ -1,71 +1,4 @@
 #!/usr/bin/env python3
-"""Speech-density characterization: E2E latency, throughput, CER, CPU/RSS.
-
-Measures the real PipelineOrchestrator's behavior (system treated as a
-black box -- no config changes, whatever configs/default.yaml + env
-currently is on this machine is what runs) against the three density test
-files built by build_test_audio.py:
-
-    extreme_density.wav (~95% speech occupancy, 0.15s gaps)
-    high_density.wav    (~85% speech occupancy, 0.5s gaps)
-    medium_density.wav  (~60% speech occupancy, 2.0s gaps)
-    low_density.wav     (~30% speech occupancy, 7.0s gaps)
-
-For each condition, the file is played through the pipeline once
-(real-time paced, single channel) per repeat, 5 repeats by default, each a
-fresh orchestrator build (independent trial, not a looped replay within
-one run) so RSS/CPU reflect a clean start every time.
-
-Each repeat starts with a WARM-UP: one throwaway utterance
-(testsegments/3s.wav) is published and its final transcript awaited and
-discarded before the timed condition file is published. Without this, the
-first STT inference call after a fresh orchestrator build is measurably
-slower than steady-state (ONNX Runtime kernel/threadpool warm-up, not a
-density effect) -- confirmed in an earlier run of this script, where
-low-density's 4-segment runs (one slow first call out of 4) showed a
-higher mean latency than high-density's 8-segment runs (same slow first
-call diluted across 8), even though every condition tiles the identical
-utterance. The warm-up removes that confound so cross-condition latency
-comparisons reflect density, not cold-start luck. RSS/CPU sample buffers
-are reset right after warm-up completes, so the warm-up's own startup
-transient doesn't bias this run's resource stats either.
-
-Per-repeat, four kinds of numbers come out:
-  - full_latency_ms / stt_latency_ms per finalized segment (same
-    instrumentation as scratch/bench_pipeline_load.py -- see that file's
-    docstring for exactly why these are read where they are).
-  - CER: reference is the known transcript of the tiled utterance repeated
-    N times (testaudio/metadata.json); hypothesis is the final transcripts
-    concatenated in arrival order. Single channel + in-order-per-channel
-    STT processing (see stt_worker.py) means arrival order == audio order,
-    so no alignment step is needed. See cer.py for why whitespace is
-    stripped before diffing.
-  - throughput: content-seconds of speech (from testaudio/metadata.json)
-    divided by the wall-clock time from first audio publish to the last
-    final transcript -- "how many seconds of speech content this run
-    processed per second of wall time," the same metric used in
-    docs/EXPERIMENT_LOG.md's speed-sweep experiments. Also reports
-    segments/s (jobs/s).
-  - RSS/CPU sampled across the whole run (ResourceSampler, ported from
-    bench_pipeline_load.py) -- to confirm density doesn't cause a resource
-    blowup, not to re-litigate the concurrency/memory findings already in
-    docs/EXPERIMENT_LOG.md (this script always runs a single channel).
-
-Across the 5 repeats per condition: segment-level latencies and RSS/CPU
-samples are POOLED (matching docs/EXPERIMENT_LOG.md's convention) before
-computing mean/std/p50/p95/p99. CER and throughput are one number per
-repeat (5 data points) -- percentiles on n=5 are approximate at best; take
-p95/p99 there as "close to the max of 5," not a real tail estimate.
-
-Requires a real MQTT broker (configs/default.yaml, localhost:1883 by
-default) and loads the real VAD/STT models -- same as
-scratch/bench_pipeline_load.py, deliberately not mocked.
-
-Usage:
-    python characterization/scripts/run_experiment.py
-    python characterization/scripts/run_experiment.py --repeats 5 --channel rx
-    python characterization/scripts/run_experiment.py --conditions high low
-"""
 
 from __future__ import annotations
 
@@ -75,18 +8,6 @@ import json
 import logging
 import os
 
-# Read by libmoonshine's onnxruntime session setup (native getenv), forcing
-# onnxruntime's intra-op thread pool to 1 -- must be set before the STT
-# worker process/model is created. This is NOT optional plumbing: cli.py
-# (the real `edge-voice` entry point) and deploy/edge-voice.service both set
-# this for every real deployment. This script drives PipelineOrchestrator
-# directly (bypassing cli.py, same as scratch/bench_pipeline_load.py), so
-# without setting it here too, onnxruntime defaults to spreading every
-# inference call's intra-op work across ALL available cores -- observed
-# directly on the RPi5 (htop showing all 4 cores busy on a single-channel
-# run, which should only ever occupy one dedicated core). That made an
-# earlier run of this script measure un-representative behavior, not a
-# density effect.
 os.environ.setdefault("MOONSHINE_ORT_SINGLE_THREAD", "1")
 
 import queue
@@ -113,22 +34,9 @@ TESTDATA_DIR = CHARACTERIZATION_DIR / "testsegments"
 TESTAUDIO_DIR = CHARACTERIZATION_DIR / "testaudio"
 RESULTS_DIR = CHARACTERIZATION_DIR / "results"
 
-# One throwaway utterance (+ baked-in trailing silence, see
-# build_test_audio.py), published and discarded before each timed run --
-# see module docstring's WARM-UP section. WARMUP_SETTLE_S is a flat sleep
-# after publishing it, covering the natural pause-detection + a full
-# decode (~1.6-2.0s on the RPi5) plus margin. This is TIME-based rather
-# than "wait for exactly one discarded transcript" because the raw
-# testsegments/3s.wav recording (used directly, before warmup.wav existed)
-# was observed to sometimes produce more than one final transcript around
-# its own boundary -- discarding everything for a fixed settle window
-# sidesteps needing to count discarded events at all.
 WARMUP_WAV = TESTAUDIO_DIR / "warmup.wav"
 WARMUP_SETTLE_S = 4.0
 
-# How long to keep waiting for trailing decodes after all expected segments
-# have arrived, and the hard ceiling if segments never fully arrive (a
-# dropped/merged segment shouldn't hang the whole sweep).
 GRACE_AFTER_COMPLETE_S = 3.0
 MAX_WAIT_AFTER_PUBLISH_S = 60.0
 
@@ -136,7 +44,6 @@ CLK_TCK = os.sysconf("SC_CLK_TCK")
 
 
 def _read_proc(pid: str = "self") -> tuple[float, int]:
-    """(rss_mb, cpu_ticks) for one process -- see bench_pipeline_load.py."""
     rss_kb = 0
     with open(f"/proc/{pid}/status") as f:
         for line in f:
@@ -162,7 +69,6 @@ def _read_proc_tree(extra_pids: list[int]) -> tuple[float, int]:
 
 
 class ResourceSampler:
-    """Background RSS/CPU sampler -- ported from bench_pipeline_load.py."""
 
     def __init__(self, interval_s: float, extra_pids) -> None:
         self._interval_s = interval_s
@@ -194,9 +100,6 @@ class ResourceSampler:
 
 
 class _SttLatencyCapture(logging.Handler):
-    """Per-segment STT decode time off the orchestrator's own log line --
-    see bench_pipeline_load.py's docstring for why this, not
-    orch._stt[...].last_latency_s, is race-free."""
 
     def __init__(self) -> None:
         super().__init__(level=logging.INFO)
@@ -220,17 +123,6 @@ class SegmentRecord:
     text: str
     full_latency_ms: float
     stt_latency_ms: float | None
-    # Content-seconds decoded per second of decode time -- audio duration /
-    # decode time, per utterance. Distinct from run-level throughput
-    # (content_s_per_wallclock_s in RunResult), which is pinned to file
-    # occupancy at real-time playback and doesn't reflect decode efficiency
-    # at all. This one does: it drops as speaking rate rises (decode cost
-    # doesn't shrink as fast as audio duration does), which is the actual
-    # "is decode keeping up with denser content" signal. Caveat: on badly
-    # degraded audio the decoder can abandon a segment early (hallucinate a
-    # short repetitive line and stop) rather than genuinely decoding faster
-    # -- this ratio looks artificially GOOD in that failure mode, so always
-    # read it alongside CER, not alone.
     audio_s_per_decode_s: float | None
 
 
@@ -247,11 +139,6 @@ class RunResult:
     rss_mean_mb: float
     rss_peak_mb: float
     cpu_mean_pct: float
-    # First-half vs second-half of THIS run's own sample history -- a single
-    # mean can't distinguish "steady 800MB the whole run" from "started at
-    # 700MB, climbing toward 900MB when we cut it off." The latter is a
-    # clog/backlog signature; the former isn't. Only meaningful for
-    # --disable-reliability runs long/unstable enough to have one.
     rss_first_half_mb: float
     rss_second_half_mb: float
     cpu_first_half_pct: float
@@ -259,8 +146,6 @@ class RunResult:
 
 
 def _first_second_half_means(values: list[float]) -> tuple[float, float]:
-    """(first-half mean, second-half mean) of a sample history, in the order
-    sampled -- the growth signature of a clog/backlog, see RunResult."""
     if not values:
         return float("nan"), float("nan")
     mid = max(1, len(values) // 2)
@@ -322,15 +207,6 @@ def run_one(
         )
     settings.mqtt.channels = [c for c in settings.mqtt.channels if c.channel_id == channel]
 
-    # Stress-testing only ("how far can this be pushed before it clogs or
-    # freezes, unmitigated"): the density experiment found combo5-style
-    # conditions triggering vad.idle_flush_s and vad.max_segment_s -- the
-    # very safety nets that stop a wedged/never-ending segment from actually
-    # showing the clog. Turning them off (plus reliability.enabled, the
-    # in-process supervisor that would otherwise restart a stalled worker
-    # within stall_timeout_s=10s) lets a genuine freeze or unbounded
-    # backlog actually manifest instead of being silently recovered from.
-    # Script-level override only -- configs/default.yaml is untouched.
     if disable_reliability:
         settings.vad.segment_limits_enabled = False
         settings.vad.idle_flush_s = 0.0
@@ -343,17 +219,6 @@ def run_one(
             max_wait_s,
         )
 
-    # Speaking-rate experiment only: the decoder's token budget is
-    # base_max_tokens_per_second * audio_duration_s -- when TSM compresses
-    # the same content into shorter audio, that budget shrinks even though
-    # the amount of content to decode hasn't, causing mid-sentence
-    # truncation unrelated to whether the speech is acoustically harder to
-    # recognize (confirmed via isolated single-utterance decodes outside
-    # this harness). Scaling the budget by the same `speed` factor used to
-    # compress the audio cancels that out, isolating the acoustic-difficulty
-    # question. Script-level override only -- configs/default.yaml (the
-    # real deployed system's config) is left untouched; density conditions
-    # have no "speed" key and are unaffected.
     speed = condition.get("speed")
     if speed is not None:
         base_rate = float(settings.stt.moonshine.max_tokens_per_second)
@@ -393,8 +258,6 @@ def run_one(
             if not ev.is_final:
                 continue
             if in_warmup.is_set():
-                # Discard everything until the warm-up settle window ends
-                # (main thread clears this flag) -- see WARMUP_SETTLE_S.
                 continue
             stt_s = stt_capture.by_segment.get(ev.segment_id)
             duration_s = ev.end - ev.start
@@ -422,7 +285,7 @@ def run_one(
     orch.start()
     drain_thread.start()
     sampler.start()
-    time.sleep(0.5)  # let workers come up before publishing
+    time.sleep(0.5)
 
     logger.info(
         "[%s repeat %d] warm-up: publishing %s, then a %.1fs settle window (all discarded, not measured)",
@@ -434,8 +297,6 @@ def run_one(
     wav_source.main(["--wav", str(WARMUP_WAV), "--channels", channel])
     time.sleep(WARMUP_SETTLE_S)
     in_warmup.clear()
-    # Drop whatever RSS/CPU samples the warm-up itself generated -- its own
-    # startup transient isn't part of this run's density measurement.
     sampler.rss_samples.clear()
     sampler.cpu_pct_samples.clear()
 
@@ -603,7 +464,6 @@ def main() -> None:
                 result.cpu_second_half_pct,
             )
 
-    # --- Per-segment CSV (raw rows across all conditions/repeats) ---
     seg_csv = args.results_dir / "segments.csv"
     with open(seg_csv, "w", newline="") as f:
         writer = csv.writer(f)
@@ -612,7 +472,6 @@ def main() -> None:
             writer.writerow([getattr(r, field.name) for field in fields(SegmentRecord)])
     logger.info("Wrote %d segment rows to %s", len(all_segment_records), seg_csv)
 
-    # --- Per-run CSV (one row per repeat) ---
     run_csv = args.results_dir / "runs.csv"
     with open(run_csv, "w", newline="") as f:
         writer = csv.writer(f)
@@ -621,15 +480,6 @@ def main() -> None:
             writer.writerow([getattr(r, field.name) for field in fields(RunResult)])
     logger.info("Wrote %d run rows to %s", len(all_run_results), run_csv)
 
-    # --- Aggregate summary per condition ---
-    # order==0 (the first counted segment of each run) is excluded from the
-    # LATENCY stats only: it's occasionally corrupted by a still-uncharacterized
-    # boundary artifact between the warm-up publish and the real file's publish
-    # (two separate wav_source.main()/MQTT-session calls on the same channel) --
-    # its duration_s/timing can be inflated by several seconds even though its
-    # transcribed TEXT is unaffected (confirmed correct against the reference).
-    # CER, throughput, and RSS/CPU don't depend on this segment's duration_s,
-    # so only full_latency_ms/stt_latency_ms filter it out here.
     summary = {}
     for label in args.conditions:
         seg_rows = [r for r in all_segment_records if r.condition == label]

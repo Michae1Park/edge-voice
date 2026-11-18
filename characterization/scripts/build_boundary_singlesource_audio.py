@@ -1,42 +1,4 @@
 #!/usr/bin/env python3
-"""Length sweep using ONE base recording, to isolate length from content.
-
-The two prior boundary experiments used a different real recording per
-length value (6s/7s/9s/10s.wav) -- necessary because no zero-gap-splice
-method survived contact with VAD (see build_boundary_audio.py's docstring),
-but it meant "length" and "which sentence" were confounded. That confound
-turned out to matter: 9s.wav failed at density/rate combos where 10s.wav
-was clean, and a control run showed 9s.wav itself isn't intrinsically
-VAD-hostile (clean at mild settings) -- so something about EACH recording's
-own content interacts differently with stress, on top of (or instead of)
-pure duration.
-
-This script isolates length from content directly: testsegments/17s.wav
-(one recording, confirmed via an offline Silero VAD pass to be a single
-continuous utterance with no internal pause the model itself detects -- see
-conversation) is truncated to a fixed set of shorter durations, all sharing
-the SAME leading content. length=9 is the first 9.0s of the 17.152s
-recording, length=15 is the first 15.0s, etc. -- every length variant is a
-strict prefix of every longer one.
-
-Caveat, stated rather than hidden: a fixed-time cut lands mid-word/phoneme
-for most target lengths (only ones landing near one of the recording's own
-natural micro-pauses, e.g. ~9.2s or ~13.1s, are close to a clean edge). That
-trades the (larger, already-demonstrated) different-recording confound for
-a smaller, CONSISTENT one -- an abrupt clipped ending -- present at every
-length rather than varying unpredictably by which sentence was used.
-
-Two density/rate combos per length, matching the two most informative
-points from the fine 10s.wav grid (build_boundary_fine_audio.py): the exact
-corner that failed there (97%/2.0x) and its nearest clean neighbor
-(95%/1.75x). Gap safety checked below at build time.
-
-Output: characterization/testaudio/boundary_ss_<label>.wav plus
-characterization/testaudio/metadata_boundary_singlesource.json.
-
-Usage:
-    python characterization/scripts/build_boundary_singlesource_audio.py
-"""
 
 from __future__ import annotations
 
@@ -59,7 +21,6 @@ from build_speed_audio import time_scale_modify  # noqa: E402
 
 SOURCE_FILE = "17s.wav"
 LENGTHS_S = [9, 10, 11, 12, 13, 14, 15]
-# (label_suffix, density, rate)
 COMBOS = [
     ("max", 0.97, 2.00),
     ("near", 0.95, 1.75),

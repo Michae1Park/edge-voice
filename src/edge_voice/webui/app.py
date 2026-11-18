@@ -1,24 +1,3 @@
-"""FastAPI app for the kiosk console UI.
-
-Runs in-process with cli.py/orchestrator (see docs/BUILDPLAN.md Milestone 5)
--- the deployment target has no network at all, so the only client is a
-kiosk browser on the device's own attached display, and there is no reverse
-proxy or IPC boundary to be gained by running this as a separate process.
-
-Two different data-access patterns on purpose:
-  - Transcripts are a stream of discrete events -> SSE, fed by
-    TranscriptHub's per-connection subscriber queue (pipeline/transcript_hub.py).
-  - Pipeline/worker status is current state, not a stream -> plain GET,
-    reading orchestrator.health() directly. No queue: a queue would just
-    accumulate stale status snapshots a client never drained. Milestone 7
-    moved the *assembly* of that status into health/reporting.py, but the
-    access pattern is unchanged and deliberately so -- it is still current
-    state, built synchronously per request.
-
-No MQTT anywhere in this module -- MQTT stays scoped to the audio_generation
-<-> audio_ingest process boundary it was built for.
-"""
-
 from __future__ import annotations
 
 import json
@@ -40,9 +19,6 @@ logger = logging.getLogger(__name__)
 _TEMPLATE_PATH = Path(__file__).parent / "templates" / "console.html"
 _STATIC_DIR = Path(__file__).parent / "static"
 
-# How long each blocking Queue.get() waits before looping back to check for
-# client disconnect. Not a "refresh rate" -- a new transcript interrupts the
-# wait immediately; this only bounds how late a disconnect is noticed.
 SSE_POLL_TIMEOUT_S = 1.0
 
 
@@ -56,28 +32,15 @@ def create_app(orchestrator: PipelineOrchestrator) -> FastAPI:
 
     @app.get("/api/status")
     def status() -> dict:
-        # A superset of get_status() -- see health/reporting.py. Left as a
-        # plain def with no run_in_threadpool: FastAPI already runs sync
-        # handlers in its own threadpool, and every input here is
-        # non-blocking (qsize() plus two short lock-guarded dict copies).
         return orchestrator.health()
 
-    # /api/start and /api/stop keep returning the bare get_status(): they
-    # answer "did this lifecycle call take effect", not "how healthy is the
-    # pipeline", and the full health object needs a metrics tick to be
-    # interesting anyway. The asymmetry with /api/status is deliberate.
     @app.post("/api/start")
     async def start() -> dict:
-        # start() itself is near-instant (just spawns threads), but run it
-        # off the event loop anyway so a slow model load on first start
-        # can't stall other requests (e.g. the status poll) in the meantime.
         await run_in_threadpool(orchestrator.start)
         return orchestrator.get_status()
 
     @app.post("/api/stop")
     async def stop() -> dict:
-        # stop() joins each worker in turn (see orchestrator.stop()) -- real
-        # blocking work, so it must not run on the event loop thread.
         await run_in_threadpool(orchestrator.stop)
         await run_in_threadpool(orchestrator.wait)
         return orchestrator.get_status()
@@ -88,8 +51,6 @@ def create_app(orchestrator: PipelineOrchestrator) -> FastAPI:
 
     @app.post("/api/transcripts/clear")
     def clear_transcripts() -> dict:
-        # Just a lock + deque.clear() -- no run_in_threadpool needed, same
-        # reasoning as /api/status.
         orchestrator.transcripts.clear()
         return {"cleared": True}
 
@@ -119,7 +80,5 @@ def _serialize(event: TranscriptEvent) -> dict:
         "start": event.start,
         "end": event.end,
         "created_at": event.created_at,
-        # False while the speaker is still talking. Clients key on segment_id
-        # and replace in place; the one is_final=True event closes it.
         "is_final": event.is_final,
     }

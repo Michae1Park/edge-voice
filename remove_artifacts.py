@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Remove generated artifacts: dumped audio (.wav) and log files (.log, incl. rotated backups)."""
 
 from pathlib import Path
 
 TARGETS = (
     ("dumped_audio", "*.wav"),
     ("dumped_vad_segments", "*.wav"),
-    ("logs", "*.log*"),  # *.log* also catches rotated backups like edge-voice-....log.1
+    ("logs", "*.log*"),
 )
 
 for name, pattern in TARGETS:

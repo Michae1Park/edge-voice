@@ -1,16 +1,3 @@
-"""Milestone 0 fake audio source.
-
-Stands in for the real audio_generation tools that arrive in Milestone 1:
-
-    mic_source.py  -> captures from the system microphone
-    wav_source.py  -> replays a .wav file at real-time pace
-
-Both of those will publish over MQTT, tagged by channel_id, exactly like a
-real call leg would. This fake version skips MQTT entirely and pushes
-synthetic AudioPackets straight onto the ingest queue on a timer, just to
-exercise the rest of the skeleton.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -25,20 +12,18 @@ logger = logging.getLogger(__name__)
 PACKET_INTERVAL_S = 0.02
 FAKE_SAMPLE_PAYLOAD = (
     b"\x00" * 640
-)  # 16000 samples/sec × 0.020 sec = 320 samples; each sample is 16-bit: 320 samples × 2 bytes = 640 bytes
-PUT_TIMEOUT_S = 0.01  # should be almost 0
+)
+PUT_TIMEOUT_S = 0.01
 
 
 class FakeAudioSource(threading.Thread):
-    """Emits a fake AudioPacket for each configured channel every
-    PACKET_INTERVAL_S seconds, round-robin, until stopped."""
 
     def __init__(
         self,
         ingest_queue: "queue.Queue[AudioPacket]",
         channel_ids: list[str],
     ) -> None:
-        super().__init__(name="FakeAudioSource", daemon=False)  # non-daemon; critical
+        super().__init__(name="FakeAudioSource", daemon=False)
         self._ingest_queue = ingest_queue
         self._channel_ids = channel_ids
         self._stop_event = threading.Event()

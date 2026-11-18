@@ -1,11 +1,3 @@
-"""Load the NPU model once in a throwaway process and exit 0 on success.
-
-sherpa-onnx calls exit() instead of raising when RKNN init fails (bad model,
-runtime/driver mismatch, NPU memory exhausted), which would take the whole
-STT process down with it. Running the first load here turns that into an
-exit code the caller can fall back on.
-"""
-
 from __future__ import annotations
 
 import json

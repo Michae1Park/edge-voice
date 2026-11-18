@@ -1,13 +1,3 @@
-"""
-Channel-aware audio router.
-
-Consumes AudioPackets from the ingest queue, validates and tags each with its
-channel_id, maintains per-channel bookkeeping (last-seen timestamp for
-freshness checks), re-packetizes audio to a fixed outgoing frame size, and
-forwards packets to the routed queue for downstream VAD/STT consumption.
-Optionally copies packets to a dump queue for debugging.
-"""
-
 from __future__ import annotations
 
 import queue
@@ -25,17 +15,8 @@ QUEUE_GET_TIMEOUT_S = 0.2
 QUEUE_PUT_TIMEOUT_S = 0.2
 
 
-# ── Repacketizer config ─────────────────────────────────────────────────────
-
-
 @dataclass(frozen=True, slots=True)
 class RepacketizerConfig:
-    """
-    incoming_ms  — frame size of packets arriving on the ingest queue
-    outgoing_ms  — frame size to emit downstream
-    sample_rate  — Hz
-    bytes_per_sample — 2 for 16-bit PCM mono (this codebase's format)
-    """
 
     incoming_ms: float = 20.0
     outgoing_ms: float = 32.0
@@ -44,7 +25,6 @@ class RepacketizerConfig:
 
 
 def _ms_to_bytes(ms: float, sample_rate: int, bytes_per_sample: int) -> int:
-    """Convert a millisecond duration to an exact byte count, or raise."""
     samples = ms * sample_rate / 1000.0
     rounded = round(samples)
     if abs(samples - rounded) > 1e-6:
@@ -56,21 +36,6 @@ def _ms_to_bytes(ms: float, sample_rate: int, bytes_per_sample: int) -> int:
 
 
 class Repacketizer:
-    """
-    Buffers incoming AudioPackets per channel and re-emits fixed-size
-    outgoing packets (e.g. 20ms in -> 32ms out).
-
-    Each call to process() may return 0, 1, or more outgoing packets,
-    since incoming/outgoing sizes don't generally divide evenly (e.g.
-    20ms in / 32ms out yields a new packet every 1.6 incoming packets
-    on average).
-
-    Assumes packets for a given channel_id arrive contiguously (no gaps
-    or drops) -- outgoing packet timestamps are derived by advancing a
-    per-channel clock, not by trusting every incoming packet's own
-    timestamp. If your ingest can drop packets or reconnect mid-stream,
-    call reset_channel() on that event or timestamps will drift silently.
-    """
 
     def __init__(self, config: RepacketizerConfig) -> None:
         self._config = config
@@ -86,7 +51,6 @@ class Repacketizer:
         self._buffer_start_ts: dict[str, float] = {}
 
     def process(self, packet: AudioPacket) -> list[AudioPacket]:
-        """Feed one incoming packet, return zero or more outgoing packets."""
         if len(packet.samples) != self._incoming_bytes:
             raise ValueError(
                 f"expected {self._incoming_bytes}-byte "
@@ -96,9 +60,6 @@ class Repacketizer:
 
         buf = self._buffers.setdefault(packet.channel_id, bytearray())
 
-        # Only re-anchor the clock when the buffer was empty *before* this
-        # packet -- if there's carry-over from a prior packet, its start
-        # timestamp must stay, or the outgoing timestamps will jump.
         if not buf:
             self._buffer_start_ts[packet.channel_id] = packet.timestamp
 
@@ -142,16 +103,11 @@ class Repacketizer:
         return outgoing
 
     def reset_channel(self, channel_id: str) -> None:
-        """Discard buffered partial audio for a channel (e.g. on reconnect)."""
         self._buffers.pop(channel_id, None)
         self._buffer_start_ts.pop(channel_id, None)
 
 
-# ── Router ───────────────────────────────────────────────────────────────────
-
-
 class ChannelRouter(threading.Thread):
-    """Validates, re-packetizes, and routes AudioPackets to the routed queue."""
 
     def __init__(
         self,
@@ -169,16 +125,8 @@ class ChannelRouter(threading.Thread):
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
         self._channel_last_seen: dict[str, float] = {}
-        # Most recent repacketize() duration per channel, for
-        # observability/metrics.py -- guarded by the same self._lock as
-        # _channel_last_seen above (same class of hazard: MetricsCollector
-        # reads a full dict(...) copy cross-thread, which needs protection
-        # against a concurrent new-key insert resizing the table).
         self._repacketize_latency_s: dict[str, float] = {}
         self._repacketizer = Repacketizer(repacketizer_config or RepacketizerConfig())
-        # Monotonic timestamp of the last packet handled, read by the
-        # supervisor's stall check (docs/BUILDPLAN.md Milestone 6). A plain
-        # float write/read is atomic under the GIL, so no lock is needed.
         self._last_activity = time.monotonic()
 
     def run(self) -> None:
@@ -226,7 +174,6 @@ class ChannelRouter(threading.Thread):
         logger.info("ChannelRouter stopped")
 
     def stop(self) -> None:
-        """Signal the router to stop."""
         self._stop_event.set()
 
     @property
@@ -235,11 +182,9 @@ class ChannelRouter(threading.Thread):
 
     @property
     def last_activity(self) -> float:
-        """Monotonic time of the last packet handled (for supervisor stall check)."""
         return self._last_activity
 
     def get_freshness(self, channel_id: str) -> float | None:
-        """Return seconds since last seen packet for a channel, or None."""
         with self._lock:
             last = self._channel_last_seen.get(channel_id)
         if last is None:
@@ -247,12 +192,8 @@ class ChannelRouter(threading.Thread):
         return time.time() - last
 
     def repacketize_latencies_s(self) -> dict[str, float]:
-        """Most recent repacketize() duration per channel (for
-        observability/metrics.py). Only recorded on success -- a rejected
-        packet has no meaningful repacketize latency."""
         with self._lock:
             return dict(self._repacketize_latency_s)
 
     def get_channel_ids(self) -> list[str]:
-        """Return the list of known valid channel IDs."""
         return sorted(self._channel_ids)

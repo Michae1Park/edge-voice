@@ -1,11 +1,3 @@
-"""
-MQTT subscriber worker for audio ingestion.
-
-Subscribes to per-channel MQTT topics and pushes raw AudioPacket objects
-onto the shared ingest queue. Handles reconnection with exponential backoff
-internally -- invisible to pipeline supervision.
-"""
-
 from __future__ import annotations
 
 import queue
@@ -27,12 +19,6 @@ CONNECT_TIMEOUT_S = 5.0
 
 
 class MqttAudioIngest(threading.Thread):
-    """Subscribes to per-channel MQTT topics and pushes AudioPackets to ingest_queue.
-
-    Each MQTT topic yields a separate channel_id (derived from subscription
-    configuration, not the message payload). The raw MQTT payload bytes are
-    used directly as PCM samples on the resulting AudioPacket.
-    """
 
     def __init__(
         self,
@@ -46,23 +32,16 @@ class MqttAudioIngest(threading.Thread):
         self._topic_to_channel = {ch.topic: ch.channel_id for ch in self._channels}
         self._stop_event = threading.Event()
         self._connected_event = threading.Event()
-        # Monotonic timestamp of the last message received. Exposed for a
-        # uniform worker interface (docs/BUILDPLAN.md Milestone 6); the
-        # supervisor does NOT stall-check this worker -- run() only blocks on
-        # the stop event, and paho owns reconnect internally.
         self._last_activity = time.monotonic()
         self._client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
         self._on_connected: list[Callable[[], None]] = []
-        # paho-mqtt 2.x built-in reconnect with exponential backoff
         self._client.reconnect_delay_set(min_delay=1, max_delay=30)
         self._client.reconnect_on_disconnect = True  # type: ignore[attr-defined]
 
     def on_connected(self, callback: Callable[[], None]) -> None:
-        """Register a callback to invoke once the broker connection is active."""
         self._on_connected.append(callback)
 
     def run(self) -> None:
-        """Connect, subscribe and loop until stop() is called."""
         logger.info(
             "MqttAudioIngest starting (host=%s:%d)",
             self._settings.broker_host,
@@ -79,14 +58,13 @@ class MqttAudioIngest(threading.Thread):
         if not self._connected_event.wait(timeout=CONNECT_TIMEOUT_S):
             logger.warning("Timed out waiting for MQTT connection")
 
-        self._stop_event.wait()  # main loop: block until stop() is called
+        self._stop_event.wait()
 
         self._client.loop_stop()
         self._client.disconnect()
         logger.info("MqttAudioIngest stopped")
 
     def stop(self) -> None:
-        """Signal the subscriber thread to stop."""
         self._stop_event.set()
 
     @property
@@ -95,17 +73,10 @@ class MqttAudioIngest(threading.Thread):
 
     @property
     def last_activity(self) -> float:
-        """Monotonic time of the last MQTT message received."""
         return self._last_activity
 
     @property
     def connected(self) -> bool:
-        """Whether the broker connection is currently up.
-
-        Set/cleared by the paho callbacks (_on_connect/_on_disconnect); paho
-        owns reconnect internally, so this only ever reflects the current
-        state, not whether a reconnect attempt is in progress.
-        """
         return self._connected_event.is_set()
 
     def _on_connect(

@@ -1,37 +1,4 @@
 #!/usr/bin/env python3
-"""Cross-SBC characterization: E2E latency + CER on one real recording.
-
-Unlike run_experiment.py (synthetic density-tiled single-sentence audio,
-built for the density-sweep experiment), this measures the real
-PipelineOrchestrator's behavior on an actual recording with a known,
-human-verified transcript -- wav/rx_recorded_1.wav by default, the same
-fixture tests/test_pipeline_integration.py uses to verify VAD segment
-counts (EXPECTED_SEGMENTS["rx"] == 4).
-
-Intended to be run unmodified on each SBC under comparison (same config,
-same file, same script) so results land side by side in
-characterization/results/sbc_compare/<hostname>.json.
-
-Per run:
-  - full_latency_ms / stt_latency_ms per finalized segment -- same
-    instrumentation as run_experiment.py / bench_pipeline_load.py.
-  - CER: reference is the fixture's transcript file (utterances separated
-    by a "-----" line); hypothesis is the final transcripts concatenated
-    in arrival order. Single channel + in-order-per-channel STT (see
-    stt_worker.py) means arrival order == audio order, so no alignment
-    step is needed. See cer.py for why whitespace is stripped before
-    diffing.
-
-Requires a real MQTT broker (configs/default.yaml, localhost:1883 by
-default) and loads the real VAD/STT models -- not mocked.
-
-Usage:
-    python characterization/scripts/measure_sbc.py
-    python characterization/scripts/measure_sbc.py --repeats 3
-    python characterization/scripts/measure_sbc.py --cores 4-7   # pin (big.LITTLE)
-    python characterization/scripts/measure_sbc.py --wav wav/tx_recorded_1.wav \\
-        --transcript wav/tx_recorded_1_transcription.txt --channel tx
-"""
 
 from __future__ import annotations
 
@@ -75,7 +42,6 @@ MAX_WAIT_AFTER_PUBLISH_S = 60.0
 
 
 def _parse_cores(spec: str) -> set[int]:
-    """Parse a taskset-style core list, e.g. "4-7" or "0,2,4-5"."""
     cores: set[int] = set()
     for part in spec.split(","):
         lo, _, hi = part.strip().partition("-")
@@ -84,7 +50,6 @@ def _parse_cores(spec: str) -> set[int]:
 
 
 def _load_reference(transcript_path: Path) -> list[str]:
-    """Split a "-----"-delimited transcript file into per-utterance lines."""
     raw = transcript_path.read_text(encoding="utf-8")
     parts = re.split(r"-{3,}", raw)
     lines = [p.strip() for p in parts if p.strip()]
@@ -208,7 +173,7 @@ def run_one(
 
     orch.start()
     drain_thread.start()
-    time.sleep(0.5)  # let workers come up before publishing
+    time.sleep(0.5)
 
     logger.info(
         "[repeat %d] warm-up: publishing %s, then a %.1fs settle window",
@@ -302,7 +267,6 @@ def main() -> None:
         raise SystemExit(f"{args.transcript} not found")
     reference_lines = _load_reference(args.transcript)
 
-    # Before any worker starts: children inherit affinity from the parent.
     if args.cores:
         os.sched_setaffinity(0, _parse_cores(args.cores))
     affinity = sorted(os.sched_getaffinity(0))
@@ -334,7 +298,7 @@ def main() -> None:
 
     latency_rows = [
         r for r in all_segment_records if r.order != 0
-    ]  # see run_experiment.py's note on order==0
+    ]
     summary = {
         "hostname": platform.node(),
         "machine": platform.machine(),

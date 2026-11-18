@@ -1,11 +1,3 @@
-"""Debug tool: collect SpeechSegment objects and save as WAV files after VAD segmentation.
-
-This worker sits between VAD and STT to verify what VAD actually passes downstream.
-It writes one WAV file per VAD segment, so you can compare the segmented audio
-against the original recording to inspect VAD boundaries (silence inclusion, hard cuts,
-soft-cut quality, etc).
-"""
-
 from __future__ import annotations
 
 import queue
@@ -22,11 +14,6 @@ logger = get_stage_logger(__name__, stage="audio_ingest")
 
 
 class SegmentAudioDumpWorker(threading.Thread):
-    """Consume SpeechSegments from the segment queue and write one WAV per VAD segment.
-
-    Each output file is named {channel}_{seg_index:03d}_{start:.2f}s-{end:.2f}s.wav
-    so you can see exactly what VAD captured per speech span.
-    """
 
     def __init__(
         self,
@@ -53,7 +40,6 @@ class SegmentAudioDumpWorker(threading.Thread):
                 continue
 
             with self._lock:
-                # Unpack PCM_16 bytes from SpeechSegment.audio → float for soundfile
                 pcm = np.frombuffer(seg.audio, dtype=np.int16)
                 self._counter += 1
                 idx = self._counter
@@ -78,7 +64,6 @@ class SegmentAudioDumpWorker(threading.Thread):
 
             written.clear()
 
-        # Flush trailing segments
         if written:
             for pcm, path, seg in written:
                 atomic_sf_write(str(path), pcm, self._sr, subtype="PCM_16")

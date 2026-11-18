@@ -1,13 +1,3 @@
-"""
-One-off: compare Silero VAD's torch.jit (torch.hub) backend against its
-onnxruntime backend, replicating the app's real per-channel usage (own
-model + VADIterator per channel, 320-sample/20ms chunks at 16kHz, from
-vad_worker.py's config -- see configs/default.yaml).
-
-Not wired into pytest; run directly:
-    python scratch/bench_vad_backend.py
-"""
-
 import time
 
 import numpy as np
@@ -15,15 +5,11 @@ import torch
 
 N_WARMUP = 50
 N_CALLS = 2000
-CHUNK_SAMPLES = 512  # matches configs/default.yaml vad.window_samples (32ms @ 16kHz)
+CHUNK_SAMPLES = 512
 SAMPLE_RATE = 16000
 
 
 def _load_jit():
-    # Old path: torch.hub.load(repo_or_dir="snakers4/silero-vad", ...) hits
-    # the same cached .jit artifact once downloaded -- load it directly from
-    # the local hub cache to isolate inference cost from hub's own
-    # ref-resolution/network overhead (measured separately below).
     from silero_vad.utils_vad import init_jit_model
     import importlib_resources as impresources
 
@@ -64,7 +50,7 @@ def bench(name, load_fn):
         vad_iter(x)
         latencies.append(time.perf_counter() - t0)
 
-    arr = np.array(latencies) * 1000  # ms
+    arr = np.array(latencies) * 1000
     print(f"\n=== {name} ===")
     print(f"load time:        {load_s * 1000:.1f} ms")
     print(f"per-call mean:    {arr.mean():.4f} ms")
@@ -77,9 +63,6 @@ def bench(name, load_fn):
 
 
 def bench_hub_load_overhead():
-    """torch.hub.load's own overhead (ref resolution etc.), separate from
-    inference -- this is what the old _load_model() paid once per channel,
-    on top of jit inference cost above."""
     import torch as _torch
 
     t0 = time.perf_counter()

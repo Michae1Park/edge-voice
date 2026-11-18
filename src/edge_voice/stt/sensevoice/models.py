@@ -1,10 +1,3 @@
-"""Resolve, and on first use download, SenseVoice model files.
-
-Prebuilt sherpa-onnx releases: an int8 ONNX model for CPU, and fixed-window
-fp16 RKNN builds for the RK3588 NPU. Several STT worker processes start at
-once, so downloads are serialized with a file lock and land atomically.
-"""
-
 from __future__ import annotations
 
 import fcntl

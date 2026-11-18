@@ -1,23 +1,4 @@
 #!/usr/bin/env python3
-"""Manual demo of the Milestone 7 observability plumbing (see docs/BUILDPLAN.md).
-
-Feeds a real WAV recording through the live pipeline with JSON logging
-enabled, then reconstructs one segment's full lifecycle -- audio_ingest ->
-channel -> vad -> stt -- from the JSON log sink alone by filtering on its
-segment_id. That reconstruction is exactly the Milestone 7 "Done when"
-criterion for observability/logging.py. queue_depths(), MQTT connectivity,
-and the supervisor's restart budget (all wired in 255513e but not yet read
-by any caller) are also printed as a sanity check ahead of metrics.py /
-health/reporting.py.
-
-No MQTT broker needed -- like scratch/demo_supervisor.py, this builds the
-real PipelineOrchestrator but pushes AudioPacket frames straight onto
-ingest_queue instead of going through MqttAudioIngest, so it works whether
-or not a broker happens to be reachable.
-
-Usage:
-    python scratch/demo_observability.py
-"""
 
 from __future__ import annotations
 
@@ -35,20 +16,11 @@ from edge_voice.observability.logging import JsonFormatter, configure_logging
 from edge_voice.pipeline.models import AudioPacket
 from edge_voice.pipeline.orchestrator import PipelineOrchestrator
 
-# Same fixture tests/test_pipeline_integration.py uses -- documented to
-# produce 4 distinct VAD segments over 30s of real speech-with-pauses,
-# unlike conversation_60s.wav (one uninterrupted utterance -> a single
-# segment only finalized at shutdown, which defeats the point of watching
-# queue depths drain mid-run).
 WAV_PATH = "wav/rx_recorded_1.wav"
 CHANNEL_ID = "rx"
 
 
 class _CaptureHandler(logging.Handler):
-    """Collects every formatted JSON line in memory, in addition to the live
-    copy configure_logging() sends to stderr -- so the trace-reconstruction
-    step below can filter on segment_id after the run instead of scraping
-    the terminal."""
 
     def __init__(self, formatter: logging.Formatter) -> None:
         super().__init__()
@@ -66,13 +38,6 @@ def section(title: str) -> None:
 def feed_wav(
     orch: PipelineOrchestrator, path: str, channel_id: str, incoming_ms: float, sample_rate: int
 ) -> None:
-    """Chunk a WAV file into incoming_ms frames and push them straight onto
-    ingest_queue, bypassing MqttAudioIngest entirely -- same trick
-    demo_supervisor.py uses to inject SpeechSegments straight onto
-    segment_queue. Only the first packet's timestamp matters (it anchors
-    the repacketizer's clock; see channel/router.py's Repacketizer.process),
-    so a monotonically-advancing fake clock is as good as a real one.
-    """
     data, file_sr = sf.read(path, dtype="int16")
     if data.ndim > 1:
         data = data[:, 0]
@@ -103,7 +68,7 @@ def reconstruct_one_segment(json_lines: list[str]) -> None:
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
-            continue  # shouldn't happen -- JsonFormatter is the only formatter attached
+            continue
         segment_id = payload.get("segment_id")
         if segment_id:
             by_segment[segment_id].append(payload)
@@ -112,7 +77,6 @@ def reconstruct_one_segment(json_lines: list[str]) -> None:
         print("No segment_id-tagged log lines captured -- no speech was detected in the fed audio.")
         return
 
-    # The segment with the most distinct stages is the fullest trace to show off.
     segment_id, records = max(
         by_segment.items(), key=lambda kv: len({r.get("stage") for r in kv[1]})
     )
@@ -124,10 +88,10 @@ def reconstruct_one_segment(json_lines: list[str]) -> None:
 
 def main() -> None:
     settings = Settings.load()
-    settings.logging_.is_json = True  # force JSON regardless of configs/local.yaml
-    settings.reliability.watchdog_enabled = False  # no systemd here
+    settings.logging_.is_json = True
+    settings.reliability.watchdog_enabled = False
 
-    configure_logging(settings.logging_)  # live JSON lines to stderr, as in production
+    configure_logging(settings.logging_)
     capture = _CaptureHandler(JsonFormatter())
     logging.getLogger().addHandler(capture)
 
@@ -157,9 +121,6 @@ def main() -> None:
     section("3. Live plumbing snapshot (Milestone 7 accessors, none wired to a caller yet)")
     print(f"get_status():   {orch.get_status()}")
     print(f"queue_depths(): {orch.queue_depths()}")
-    # Reaching into worker internals on purpose, same as demo_supervisor.py --
-    # orchestrator.get_status() doesn't surface these yet, so there's no
-    # public accessor to call instead.
     print(f"MQTT connected: {orch._audio_source.connected}")  # type: ignore[union-attr]
     sup = orch._supervisor
     if sup is not None:

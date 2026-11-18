@@ -63,7 +63,6 @@ def _segment(n_samples=16000, partial=False):
 
 @pytest.fixture
 def board(monkeypatch, tmp_path):
-    """A board with an NPU, sherpa-onnx installed, and both models cached."""
     _model_dir(tmp_path, "cpu")
     _model_dir(tmp_path, "npu")
     monkeypatch.setattr(factory, "rknpu_present", lambda: True)
