@@ -44,53 +44,19 @@ vad:
   preroll_chunks: 3
   min_silence_duration_ms: 100  # silence required before Silero fires `end` (raise if tail-clipping)
   speech_pad_ms: 0             # padding Silero appends around detected speech
-  # Emit an in-progress segment after this many seconds of NO packets on a
-  # channel. Every other boundary rule needs packets to keep arriving, so
-  # without this the final utterance of a stream waits until shutdown.
-  # Raise it if network jitter can stall a channel mid-speech; 0 disables.
+  # Emit an in-progress segment after this many seconds with no packets; 0 disables.
   idle_flush_s: 2.0
-  # Segment-length limits, for outlier cases only: speech that runs on with
-  # no pause long enough for Silero to fire `end`. Such a run otherwise
-  # buffers unbounded and the pipeline emits nothing until the speaker
-  # stops, so this bounds emission latency as much as segment length.
-  # Ordinary turn-taking never reaches soft_cut_s and pays nothing.
-  # Confirmed load-bearing on the RPi5 (bench_pipeline_load.py against a
-  # near-continuous-speech clip, no pauses for Silero to cut on): with this
-  # off, decode cost per segment grows worse than linearly with segment
-  # length, so an uncapped run snowballs into unbounded queue growth and the
-  # ingest/routed queues eventually drop live audio packets outright.
+  # Bounds segments with no pause long enough for Silero to fire `end`. Load-bearing on the RPi5:
+  # uncapped, decode cost grows superlinearly and queues eventually drop live audio.
   segment_limits_enabled: true
-  # Off: a soft cut backdates the emitted segment's end to the chosen pause
-  # (up to soft_cut_lookahead_s in the past), and the queued tail then waits
-  # behind the head's own decode on top of that. Measured on the RPi5: an
-  # ordinary ~3.3s utterance that soft_cut_s below would otherwise have
-  # split in two cost ~700-1750ms of this per piece, vs ~17ms as one
-  # segment with this off (see docs/BENCHMARK.md). The hard cap
-  # (max_segment_s) is unaffected by this flag and is what actually bounds
-  # worst-case backlog -- soft-cut only improves *where* the rare overrun
-  # gets chopped, at a real latency cost paid by every ordinary segment
-  # that runs past soft_cut_s. Long stretches without a pause long enough
-  # to reach max_segment_s are rare enough on real call turns that this
-  # trade isn't worth it here; re-enable if mid-word chops on those rare
-  # overruns turn out to matter more than this latency does.
+  # Off: a soft cut backdates `end` to the pause and delays the tail (~0.7-1.75s per piece on the
+  # RPi5 vs ~17ms uncut, see docs/BENCHMARK.md). The hard cap alone bounds backlog.
   soft_cut_enabled: false
   soft_cut_s: 3.0            # past this, look for a natural pause to cut at
   soft_cut_lookahead_s: 1.0  # how far back to scan for that pause
   soft_cut_min_dip: 0.10     # dip must be this far below the current score
-  # Revisable transcripts of the in-progress segment, so the UI shows text
-  # before the speaker stops. 0 disables (as with idle_flush_s). ko has no
-  # streaming model, so every partial re-transcribes the whole prefix from
-  # scratch -- this costs real inference and the multiplier grows with
-  # prefix length. Partials are dropped under backlog
-  # (stt.partial_max_queue_depth), never dumped, and never counted in STT
-  # latency metrics.
-  #
-  # Tuned for call turns, which are typically under 3s. At that length
-  # partial_min_segment_s is the knob that matters: first text lands at
-  # roughly min + its own inference cost, and there's little room left for
-  # refreshes, so the first appearance is nearly the whole benefit.
-  # Measured on a Ryzen 7 with ko-tiny (gain = how much earlier the first
-  # partial beats the final; cost = total inference vs no partials):
+  # Revisable in-progress transcripts; 0 disables. Each partial re-transcribes the whole prefix.
+  # Measured on a Ryzen 7 with ko-tiny (gain = first partial ahead of final; cost = inference vs none):
   #
   #   seg   min/iv    partials   gain    cost
   #   2.0s  1.5/1.5      1       0.60s   2.0x
@@ -98,11 +64,7 @@ vad:
   #   3.0s  1.5/1.5      2       1.61s   3.0x
   #   3.0s  1.0/1.0      2       2.15s   2.5x
   #
-  # 1.0/1.0 beats 1.5/1.5 on gain at every length and is cheaper at most,
-  # since a 1.0s prefix costs less to transcribe than a 1.5s one. Going
-  # finer buys almost nothing: 1.0/0.75 moves first text by 0.01s for 3.8x.
-  # Re-measure on the Pi before changing these -- watch the dropped:
-  # transcribed ratio from STTWorker.partial_stats().
+  # Re-measure on the target device; watch STTWorker.partial_stats() dropped:transcribed.
   partial_interval_s: 0.0
   partial_min_segment_s: 1.0  # skip partials on turns shorter than this
   max_segment_s: 5.0         # hard cap if no suitable pause is found
@@ -144,16 +106,11 @@ stt:
     # en publishes every arch; es publishes "base" only; every other language
     # publishes "tiny" and "base". An unavailable combination fails at startup
     # listing what that language does have.
-    # Five combinations ship on moonshine's CDN without a registry row pointing
-    # at them, and work only through _MODEL_REGISTRY_OVERRIDES in stt_worker.py:
-    # ko/base, plus ar|uk|vi|zh + tiny.
+    # ko/base and ar|uk|vi|zh tiny work only via _MODEL_REGISTRY_OVERRIDES in stt_worker.py.
     # Re-check with scratch/probe_moonshine_models.py after upgrading moonshine.
     model_arch: "tiny"
-    # Decoder token budget. Too low truncates mid-sentence: Korean at 13.0
-    # cut ~20% of every segment's tail ("무엇을 도?" for "무엇을 도와드릴까요?").
-    # Output saturates at ~20 with no latency cost and no repetition up to 75;
-    # 30 leaves headroom for fast speakers. Must be set -- omitting the option
-    # entirely truncates worse than any explicit value.
+    # Too low truncates: Korean at 13.0 cut ~20% of each segment's tail. Output saturates at ~20.
+    # Must be set -- omitting it truncates worse than any explicit value.
     max_tokens_per_second: "18.0"
     vad_threshold: "0"          # keeps the stt model's internal vad off
     identify_speakers: false
@@ -161,9 +118,7 @@ stt:
     save_input_wav_path: ""
     return_audio_data: false
 
-  # Backpressure guard for vad.partial_interval_s: skip a partial when the
-  # segment queue is this deep or deeper. 0 = drop whenever any real work is
-  # already waiting. Finals are never dropped.
+  # Skip a partial when the segment queue is at least this deep. Finals are never dropped.
   partial_max_queue_depth: 0
 
 webui:
@@ -172,10 +127,7 @@ webui:
   transcript_backlog: 50
 
 reliability:
-  # In-process worker supervision + OS-level watchdog. See docs/BUILDPLAN.md
-  # Milestone 6. The two layers catch different failures: supervision restarts
-  # a thread that crashes or wedges; the watchdog lets systemd restart the
-  # whole process when it hangs (which supervision, wedged alongside it, can't).
+  # Supervision restarts crashed/wedged workers; the systemd watchdog restarts a hung process.
   enabled: true
   tick_interval_s: 2.0     # supervisor scan + watchdog ping cadence; keep << WatchdogSec
   stall_timeout_s: 10.0    # alive + input backed up + no progress this long => wedged, restart
@@ -194,23 +146,11 @@ logging:
   backup_count: 5         # how many rotated (old) log files to keep before deleting the oldest
 
 metrics:
-  # Milestone 7: periodic aggregation of queue depths, STT latency, restart
-  # budget, and MQTT connectivity into one structured log line + in-memory
-  # snapshot for health/reporting.py to read later.
   enabled: true
   emit_interval_s: 10.0
-  # Decimal places the per-channel latency dicts (vad_silero, vad_rms_gate,
-  # router_repacketize, stt_channel) are rounded to in the log line -- full
-  # precision is always kept in the in-memory snapshot regardless. Router/VAD
-  # readings are often sub-millisecond, so they'll show as 0.0 at the default.
+  # Log line only; sub-ms router/VAD readings show as 0.0. The snapshot keeps full precision.
   latency_log_decimals: 3
 
 health:
-  # Flag a channel stale in /api/status if no audio packet has arrived on it
-  # for this long. Measured by ChannelRouter's wall clock (inbound packets),
-  # NOT segment finalization -- the field name predates that decision (see
-  # docs/BUILDPLAN.md Milestone 7). Per-channel only: a stale channel never
-  # turns the kiosk's overall status amber, since between calls every channel
-  # is legitimately stale.
+  # Seconds without inbound packets before a channel is flagged stale (per-channel only).
   stale_segment_warning_s: 30
-

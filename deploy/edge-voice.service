@@ -1,54 +1,28 @@
-# systemd unit for edge-voice (Milestone 6, layer 3 -- OS-level watchdog).
+# systemd unit for edge-voice. The app pings WATCHDOG=1 from the Supervisor; if pings stop
+# (hang, deadlock, OOM), systemd restarts the unit.
 #
-# This is the piece that delivers "restarts itself with nobody watching":
-# the app pings sd_notify WATCHDOG=1 from the Supervisor thread (see
-# pipeline/systemd_watchdog.py); if those pings stop -- process hung,
-# deadlocked, or OOM-killed, none of which in-process supervision can catch --
-# systemd kills and restarts the unit.
+# Install on the device: ./install.sh (templates the paths below), or `make install-service`
+# after editing them by hand.
 #
-# Install (on the device, not in CI):
-#   ./install.sh   -- templates User=/WorkingDirectory=/ExecStart=/
-#                     ReadWritePaths= below to this install path and user,
-#                     then installs, daemon-reloads, and enables the unit.
-#   systemctl status edge-voice     # watch it come up / auto-restart
-#
-# To redeploy after editing this file by hand instead: `make install-service`
-# (copies this file as-is -- edit User=/WorkingDirectory=/ExecStart=/
-# ReadWritePaths= below to match the install path first).
-#
-# Verifying the watchdog actually fires (the on-device half of the Milestone 6
-# "Done when" that can't be proven in CI):
-#   sudo systemctl kill -s SIGSTOP edge-voice   # simulate a hang (freeze it)
-#   # within ~WatchdogSec, journalctl shows systemd killing + restarting it
-#   journalctl -u edge-voice -f
+# Verify the watchdog fires:
+#   sudo systemctl kill -s SIGSTOP edge-voice && journalctl -u edge-voice -f
 
 [Unit]
 Description=edge-voice — real-time dual-channel call transcription
 After=network.target
 
-# Loop-breaker for a hang that recurs on every restart (e.g. a deterministic
-# deadlock, or a poison MQTT message). One crash-detect-restart cycle here
-# takes at least WatchdogSec + RestartSec (~13s), which already exceeds
-# systemd's own default StartLimitIntervalSec (10s) -- so without this, the
-# 5-in-10s default burst limit never trips and the unit restarts forever.
-# 300s comfortably spans several ~13s cycles, so 5 crashes within 5 minutes
-# instead flips the unit to `failed` (systemctl status shows
-# start-limit-hit) rather than crash-looping silently. Needs a manual
-# `systemctl reset-failed edge-voice` (or reboot) to clear.
+# A restart cycle (WatchdogSec + RestartSec, ~13s) exceeds systemd's default 10s limit window,
+# so widen it: 5 crashes in 5 minutes marks the unit failed instead of looping forever.
+# Clear with `systemctl reset-failed edge-voice`.
 StartLimitIntervalSec=300s
 StartLimitBurst=5
 
 [Service]
 Type=notify
 
-# WatchdogSec must be comfortably larger than reliability.tick_interval_s in
-# configs/default.yaml (the ping cadence). At the default 2.0s tick, 10s gives
-# a 5x margin -- a couple of missed ticks (a slow GC pause, a brief load spike)
-# won't trip a restart, but a real hang will within 10s.
+# Keep well above reliability.tick_interval_s (2s) so a missed tick doesn't trigger a restart.
 WatchdogSec=10s
 
-# Restart on ANY exit, including the watchdog-triggered kill above. The short
-# delay avoids a tight crash-loop hammering a constrained board.
 Restart=always
 RestartSec=3s
 
@@ -57,11 +31,9 @@ User=ai
 WorkingDirectory=/home/ai/workspace/edge-voice
 ExecStart=/home/ai/workspace/edge-voice/venv/bin/edge-voice
 
-# Forces onnxruntime's intra-op thread pool to 1 thread instead of spreading
-# a single short inference call across several
+# Multi-threading one short inference was measured slower than single-threaded.
 Environment=MOONSHINE_ORT_SINGLE_THREAD=1
 
-# Harden a bit; the app needs only its own dir (for config + dump output).
 NoNewPrivileges=true
 ProtectSystem=strict
 ReadWritePaths=/home/ai/workspace/edge-voice
