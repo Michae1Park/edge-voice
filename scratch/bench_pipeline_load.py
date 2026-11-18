@@ -653,6 +653,7 @@ def main() -> None:
     args = parser.parse_args()
 
     settings = Settings.load()
+    settings.stt.model = "moonshine"
 
     # Restrict the orchestrator's own channel set to the ones actually being
     # replayed. Without this, PipelineOrchestrator.build() spins up an STT
@@ -704,9 +705,9 @@ def main() -> None:
             "bounded only by --duration-s + --grace-s"
         )
     if args.token_budget_multiplier != 1.0:
-        base_rate = float(settings.stt.max_tokens_per_second)
+        base_rate = float(settings.stt.moonshine.max_tokens_per_second)
         scaled_rate = base_rate * args.token_budget_multiplier
-        settings.stt.max_tokens_per_second = str(scaled_rate)
+        settings.stt.moonshine.max_tokens_per_second = str(scaled_rate)
         logger.info(
             "Scaling max_tokens_per_second %.1f -> %.1f (multiplier=%.2gx)",
             base_rate,

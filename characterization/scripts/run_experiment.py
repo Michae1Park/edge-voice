@@ -314,6 +314,7 @@ def run_one(
     max_wait_s: float = MAX_WAIT_AFTER_PUBLISH_S,
 ) -> tuple[RunResult, list[SegmentRecord]]:
     settings = Settings.load()
+    settings.stt.model = "moonshine"
     configured_ids = {c.channel_id for c in settings.mqtt.channels}
     if channel not in configured_ids:
         raise SystemExit(
@@ -355,9 +356,9 @@ def run_one(
     # have no "speed" key and are unaffected.
     speed = condition.get("speed")
     if speed is not None:
-        base_rate = float(settings.stt.max_tokens_per_second)
+        base_rate = float(settings.stt.moonshine.max_tokens_per_second)
         scaled_rate = base_rate * speed
-        settings.stt.max_tokens_per_second = str(scaled_rate)
+        settings.stt.moonshine.max_tokens_per_second = str(scaled_rate)
         logger.info(
             "[%s] scaling max_tokens_per_second %.1f -> %.1f (speed=%.2gx)",
             condition["label"],

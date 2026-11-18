@@ -29,6 +29,7 @@ from edge_voice.channel.router import ChannelRouter, RepacketizerConfig
 from edge_voice.pipeline.transcript_hub import TranscriptHub
 from edge_voice.observability.logging import current_log_level, start_log_queue_listener
 from edge_voice.vad.vad_worker import VADWorker, VADWorkerConfig
+from edge_voice.stt.sensevoice.config import SenseVoiceConfig
 from edge_voice.stt.stt_process import STTProcessHandle, new_mp_context
 from edge_voice.stt.stt_worker import STTWorker, STTWorkerConfig
 from edge_voice.pipeline.supervisor import Supervisor, SupervisedTarget
@@ -158,6 +159,7 @@ class PipelineOrchestrator:
         self._router = self._build_router()
         self._vad = self._build_vad()
         # One dedicated STTWorker per channel -- see docs/ARCHITECTURE.md.
+        self._prefetch_stt_models()
         self._stt = {
             c.channel_id: self._build_stt(c.channel_id) for c in self._settings.mqtt.channels
         }
@@ -938,7 +940,7 @@ class PipelineOrchestrator:
             return STTProcessHandle(
                 channel_id=channel_id,
                 segment_queue=self._segment_queues[channel_id],
-                config=self._stt_config(),
+                config=self._stt_config(channel_id),
                 ctx=self._mp_ctx,
                 log_queue=self._log_queue,
                 log_level=current_log_level(),
@@ -962,28 +964,69 @@ class PipelineOrchestrator:
         return STTWorker(
             self._segment_queues[channel_id],
             _on_transcript,
-            config=self._stt_config(),
+            config=self._stt_config(channel_id),
             name=f"STTWorker-{channel_id}",
         )
 
-    def _stt_config(self) -> STTWorkerConfig:
+    def _stt_config(self, channel_id: str) -> STTWorkerConfig:
         """Plain values only -- must stay picklable, since process mode ships
-        this to the child at spawn."""
+        this to the child at spawn.
+
+        On the NPU each channel is pinned to its own NPU core by its position
+        in mqtt.channels. Past npu_max_channels, runtime "auto" puts the
+        extra channels on CPU (Settings rejects that case for "npu"), so
+        cores are never shared.
+        """
         stt = self._settings.stt
+        sv = stt.sensevoice
+        position = [c.channel_id for c in self._settings.mqtt.channels].index(channel_id)
+        runtime = stt.runtime
+        if runtime == "auto" and position >= sv.npu_max_channels:
+            runtime = "cpu"
         return STTWorkerConfig(
+            model=stt.model,
+            sensevoice=SenseVoiceConfig(
+                runtime=runtime,
+                language=stt.language,
+                use_itn=sv.use_itn,
+                cache_dir=sv.cache_dir,
+                cpu_model_dir=sv.cpu_model_dir,
+                cpu_threads=sv.cpu_threads,
+                npu_model_dir=sv.npu_model_dir,
+                npu_window_s=sv.npu_window_s,
+                npu_runtime_lib=sv.npu_runtime_lib,
+                npu_core=position if runtime != "cpu" else None,
+                probe_timeout_s=sv.npu_probe_timeout_s,
+            ),
             language=stt.language,
-            model_arch=stt.model_arch,
+            model_arch=stt.moonshine.model_arch,
             sample_rate=self._settings.audio.sample_rate,
             options={
-                "max_tokens_per_second": stt.max_tokens_per_second,
-                "vad_threshold": stt.vad_threshold,
-                "identify_speakers": str(stt.identify_speakers).lower(),
-                "log_api_calls": str(stt.log_api_calls).lower(),
-                "save_input_wav_path": stt.save_input_wav_path,
-                "return_audio_data": str(stt.return_audio_data).lower(),
+                "max_tokens_per_second": stt.moonshine.max_tokens_per_second,
+                "vad_threshold": stt.moonshine.vad_threshold,
+                "identify_speakers": str(stt.moonshine.identify_speakers).lower(),
+                "log_api_calls": str(stt.moonshine.log_api_calls).lower(),
+                "save_input_wav_path": stt.moonshine.save_input_wav_path,
+                "return_audio_data": str(stt.moonshine.return_audio_data).lower(),
             },
             partial_max_queue_depth=stt.partial_max_queue_depth,
         )
+
+    def _prefetch_stt_models(self) -> None:
+        """Download SenseVoice models once, here in the parent, before any
+        STT worker starts. Otherwise a first-start download (~420 MB for the
+        NPU build) would run inside every child and count against
+        stt.process_start_timeout_s. Best effort: a failure is logged and
+        each worker then resolves (and falls back) on its own."""
+        if self._settings.stt.model != "sensevoice":
+            return
+        from edge_voice.stt.sensevoice.factory import prefetch_models
+
+        configs = [self._stt_config(c.channel_id).sensevoice for c in self._settings.mqtt.channels]
+        try:
+            prefetch_models(configs)
+        except Exception as exc:
+            logger.warning("SenseVoice model prefetch failed, workers will retry: %s", exc)
 
     def _build_segment_dump(self) -> threading.Thread:
         if self._segment_dump_queue is None:

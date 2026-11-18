@@ -1,0 +1,4 @@
+{"config": "default (sensevoice, auto), 4 channels", "runtime": "npu:0", "channel": "npu0", "finals": 4, "lat_p50_ms": 295, "lat_p95_ms": 313, "lat_max_ms": 344, "cer": 0.062}
+{"config": "default (sensevoice, auto), 4 channels", "runtime": "npu:1", "channel": "npu1", "finals": 5, "lat_p50_ms": 251, "lat_p95_ms": 254, "lat_max_ms": 264}
+{"config": "default (sensevoice, auto), 4 channels", "runtime": "npu:2", "channel": "npu2", "finals": 13, "lat_p50_ms": 247, "lat_p95_ms": 328, "lat_max_ms": 355, "cer": 0.251}
+{"config": "default (sensevoice, auto), 4 channels", "runtime": "cpu", "channel": "npu3", "finals": 4, "lat_p50_ms": 420, "lat_p95_ms": 457, "lat_max_ms": 576, "cer": 0.115}

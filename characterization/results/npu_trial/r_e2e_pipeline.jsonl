@@ -1,0 +1,6 @@
+{"backend": "npu", "channel": "npu0", "finals": 4, "lat_p50_ms": 262, "lat_p95_ms": 270, "lat_max_ms": 282, "cer": 0.062}
+{"backend": "npu", "channel": "npu1", "finals": 5, "lat_p50_ms": 277, "lat_p95_ms": 280, "lat_max_ms": 310}
+{"backend": "npu", "channel": "npu2", "finals": 13, "lat_p50_ms": 255, "lat_p95_ms": 316, "lat_max_ms": 330, "cer": 0.251}
+{"backend": "moonshine", "channel": "npu0", "finals": 4, "lat_p50_ms": 3666, "lat_p95_ms": 3975, "lat_max_ms": 4385, "cer": 0.062}
+{"backend": "moonshine", "channel": "npu1", "finals": 5, "lat_p50_ms": 2116, "lat_p95_ms": 2140, "lat_max_ms": 2356}
+{"backend": "moonshine", "channel": "npu2", "finals": 14, "lat_p50_ms": 2609, "lat_p95_ms": 4294, "lat_max_ms": 4492, "cer": 0.32}

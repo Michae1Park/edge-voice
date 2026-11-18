@@ -50,6 +50,7 @@ def _minimal_settings(
         queues=q,
     )
     settings.stt.use_processes = use_processes
+    settings.stt.model = "moonshine"
     return settings
 
 

@@ -16,7 +16,9 @@ req:
 install:
 	sudo apt-get update
 	sudo apt-get install -y libportaudio2 mosquitto mosquitto-clients
-	pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[dev]"
+	pip install --extra-index-url https://download.pytorch.org/whl/cpu \
+		$(if $(shell grep -ls "DRIVER=RKNPU" /sys/class/drm/*/device/uevent),--find-links https://k2-fsa.github.io/sherpa/onnx/rk-npu.html) \
+		-e ".[dev]"
 
 # Deploys/restarts the systemd unit -- separate from `install` since this
 # needs sudo and restarts the live service, unlike a routine dependency
