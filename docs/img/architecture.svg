@@ -48,7 +48,7 @@
 
   <!-- ══════ the process boundary: everything but the sources and the broker ══════ -->
   <rect class="panel" x="400" y="30" width="750" height="730" rx="10" fill="#f7f9fb" stroke="#c7d3de" stroke-width="1.5"/>
-  <text class="ptitle" x="775" y="56" text-anchor="middle" font-size="14.5" font-weight="600" fill="#46586a">edge-voice process — one Python process</text>
+  <text class="ptitle" x="775" y="56" text-anchor="middle" font-size="14.5" font-weight="600" fill="#46586a">edge-voice — main process + one STT process per channel</text>
 
   <!-- ── pipeline column: worker threads and the queues between them ── -->
   <rect class="work" x="420" y="90" width="300" height="58" rx="7" fill="#e7f3ea" stroke="#4f8f61" stroke-width="1.5"/>
@@ -77,7 +77,7 @@
 
   <rect class="work" x="420" y="528" width="300" height="58" rx="7" fill="#e7f3ea" stroke="#4f8f61" stroke-width="1.5"/>
   <text class="name" x="570" y="551" text-anchor="middle" font-size="17" font-weight="600" fill="#132030">STTWorker</text>
-  <text class="sub" x="570" y="572" text-anchor="middle" font-size="14" fill="#4a5a68">Moonshine · per-segment pass</text>
+  <text class="sub" x="570" y="572" text-anchor="middle" font-size="14" fill="#4a5a68">SenseVoice | Moonshine · own process</text>
 
   <rect class="work" x="420" y="608" width="300" height="58" rx="7" fill="#e7f3ea" stroke="#4f8f61" stroke-width="1.5"/>
   <text class="name" x="570" y="631" text-anchor="middle" font-size="17" font-weight="600" fill="#132030">TranscriptHub</text>
