@@ -36,7 +36,7 @@ test -d venv || python3.12 -m venv venv
 echo "==> Installing edge-voice"
 PIP_ARGS=(--extra-index-url https://download.pytorch.org/whl/cpu)
 if grep -qs "DRIVER=RKNPU" /sys/class/drm/*/device/uevent; then
-    echo "    RKNPU detected: using sherpa-onnx's RKNN wheel (see README 'NPU acceleration')"
+    echo "    RKNPU detected: using sherpa-onnx's RKNN wheel (see README 'NPU board setup')"
     PIP_ARGS+=(--find-links https://k2-fsa.github.io/sherpa/onnx/rk-npu.html)
 fi
 venv/bin/pip install "${PIP_ARGS[@]}" -e .
