@@ -10,7 +10,6 @@ DEFAULT_CACHE_DIR = "~/.cache/edge_voice/sensevoice"
 
 @dataclass
 class SenseVoiceConfig:
-
     runtime: str = "auto"
     language: str = "ko"
     use_itn: bool = True

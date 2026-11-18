@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Dual-channel Moonshine STT with fully streaming Silero VAD pre-filtering.
 
 import argparse
 import os

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Cross-SBC characterization: E2E latency + CER on one real recording.
+# Usage: python characterization/scripts/measure_sbc.py
 
 from __future__ import annotations
 

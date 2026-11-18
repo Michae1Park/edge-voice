@@ -187,7 +187,6 @@ def test_worker_states_after_stop():
 
 
 class _FakeProcessWorker:
-
     def __init__(self, name: str = "FakeSTT", dies_on_kill: bool = True) -> None:
         self.name = name
         self.ident: int | None = 123
@@ -209,7 +208,6 @@ class _FakeProcessWorker:
 
 
 class _FakeThreadWorker:
-
     def __init__(self, name: str = "FakeThread", alive: bool = True) -> None:
         self.name = name
         self.ident: int | None = 456
@@ -251,7 +249,6 @@ def test_join_falls_back_to_a_warning_when_no_kill_is_available():
 
 
 class _FakeMpQueue:
-
     def __init__(self) -> None:
         self.cancelled = False
 

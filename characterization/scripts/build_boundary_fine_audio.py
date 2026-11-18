@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Dense follow-up grid around the boundary found in build_boundary_audio.py.
+# Usage: python characterization/scripts/build_boundary_fine_audio.py
 
 from __future__ import annotations
 

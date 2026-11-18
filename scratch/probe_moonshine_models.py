@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Enumerate the models moonshine actually publishes, vs. the ones it lists.
+# Usage: python scratch/probe_moonshine_models.py
 
 from __future__ import annotations
 

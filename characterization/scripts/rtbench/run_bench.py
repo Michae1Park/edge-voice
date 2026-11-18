@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Maximum-sustainable-throughput and overload characterization for a non-streaming ASR (complete
+# audio file/chunk in, transcription out).
+# Usage: python characterization/scripts/rtbench/run_bench.py
 
 from __future__ import annotations
 

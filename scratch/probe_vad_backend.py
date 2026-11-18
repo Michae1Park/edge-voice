@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# torch.hub Silero vs onnxruntime Silero: which explains the RPi5 speedup?
+# Usage: python scratch/probe_vad_backend.py
 
 from __future__ import annotations
 

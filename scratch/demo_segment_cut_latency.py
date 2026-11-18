@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Does cutting long VAD segments shorter reduce *total* STT inference time, or does it just spread
+# the same total latency across more, smaller numbers?
+# Usage: python scratch/demo_segment_cut_latency.py
 
 from __future__ import annotations
 
@@ -25,7 +28,6 @@ CUTOFFS: list[float | None] = [2.0, 3.0, 5.0, 7.0, 10.0, None]
 
 
 class _CaptureHandler(logging.Handler):
-
     def __init__(self, formatter: logging.Formatter) -> None:
         super().__init__()
         self.setFormatter(formatter)

@@ -17,7 +17,6 @@ PUT_TIMEOUT_S = 0.01
 
 
 class FakeAudioSource(threading.Thread):
-
     def __init__(
         self,
         ingest_queue: "queue.Queue[AudioPacket]",

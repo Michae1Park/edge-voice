@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Does moonshine_voice's native decode call release the GIL?
+# Usage: python scratch/probe_gil_release.py
 
 from __future__ import annotations
 

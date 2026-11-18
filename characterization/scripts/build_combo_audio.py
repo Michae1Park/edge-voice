@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Builds the five "limit testing" (한계치 측정) combo files -- the most demanding value from each of the
+# three prior experiments (density, speaking rate, segment length), combined into single test ...
 
 from __future__ import annotations
 

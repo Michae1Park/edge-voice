@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Speech-density characterization: E2E latency, throughput, CER, CPU/RSS.
+# Usage: python characterization/scripts/run_experiment.py
 
 from __future__ import annotations
 
@@ -69,7 +71,6 @@ def _read_proc_tree(extra_pids: list[int]) -> tuple[float, int]:
 
 
 class ResourceSampler:
-
     def __init__(self, interval_s: float, extra_pids) -> None:
         self._interval_s = interval_s
         self._extra_pids = extra_pids
@@ -100,7 +101,6 @@ class ResourceSampler:
 
 
 class _SttLatencyCapture(logging.Handler):
-
     def __init__(self) -> None:
         super().__init__(level=logging.INFO)
         self.by_segment: dict[str, float] = {}

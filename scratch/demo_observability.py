@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Manual demo of the Milestone 7 observability plumbing (see docs/BUILDPLAN.md).
+# Usage: python scratch/demo_observability.py
 
 from __future__ import annotations
 
@@ -21,7 +23,6 @@ CHANNEL_ID = "rx"
 
 
 class _CaptureHandler(logging.Handler):
-
     def __init__(self, formatter: logging.Formatter) -> None:
         super().__init__()
         self.setFormatter(formatter)

@@ -17,11 +17,14 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 logger = logging.getLogger(__name__)
 
+# Well under reliability.stall_timeout_s so sampling alone never looks stale.
 HEARTBEAT_INTERVAL_S = 0.5
 
+# Only matters if the parent's receiver died; blocking forever would wedge the child against shutdown.
 RESULT_PUT_TIMEOUT_S = 5.0
 
 
+# None means "no signal this tick"; raising would kill the bridge thread and with it stop handling.
 def _read_self_cpu_ticks() -> int | None:
     try:
         with open("/proc/self/stat") as f:
@@ -33,11 +36,11 @@ def _read_self_cpu_ticks() -> int | None:
 
 @dataclass(slots=True)
 class SttResult:
-
     event: TranscriptEvent
     stt_latency_s: float | None
 
 
+# Formatting stays in the parent so structured JSON fields match a single-process run.
 def _configure_child_logging(log_queue: Any, log_level: int) -> None:
     root = logging.getLogger()
     for handler in root.handlers[:]:
@@ -46,6 +49,9 @@ def _configure_child_logging(log_queue: Any, log_level: int) -> None:
     root.setLevel(log_level)
 
 
+# Liveness is CPU progress, not last dequeue: one long decode has no mid-call hook and would look
+# like a hang (reproduced on RPi5 with near-continuous speech). A truly wedged worker burns no CPU,
+# so its heartbeat still goes stale.
 def _bridge(
     worker: STTWorker,
     stop_event: Any,
@@ -64,6 +70,7 @@ def _bridge(
         last_ticks = ticks
 
 
+# Must stay module-level: spawn pickles the target by qualified name.
 def stt_child_main(
     channel_id: str,
     config: STTWorkerConfig,
@@ -75,6 +82,7 @@ def stt_child_main(
     log_queue: Any,
     log_level: int,
 ) -> None:
+    # The parent drives shutdown; otherwise Ctrl-C hits every child mid-decode.
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     _configure_child_logging(log_queue, log_level)
@@ -109,6 +117,7 @@ def stt_child_main(
 
     holder["worker"] = worker
 
+    # Seed before announcing readiness so the parent never trusts an initial 0.0.
     heartbeat.value = time.monotonic()
     ready_event.set()
 
@@ -118,8 +127,8 @@ def stt_child_main(
     worker.run()
 
 
+# Thread-shaped facade so orchestrator and supervisor treat processes and threads alike.
 class STTProcessHandle:
-
     def __init__(
         self,
         channel_id: str,
@@ -130,12 +139,15 @@ class STTProcessHandle:
         log_level: int,
     ) -> None:
         self.channel_id = channel_id
+        # Must match the orchestrator's SupervisedTarget name so status rows merge.
         self.name = f"STTWorker-{channel_id}"
         self.segment_queue = segment_queue
         self.transcript_queue = ctx.Queue()
         self._stop_event = ctx.Event()
         self._ready_event = ctx.Event()
         self._heartbeat = ctx.Value("d", 0.0)
+        # Keep a reference: Process.start() drops its args, and a collected queue closes the read end,
+        # blocking the child's first log record during model load.
         self._log_queue = log_queue
         self._proc = ctx.Process(
             target=stt_child_main,
@@ -151,10 +163,12 @@ class STTProcessHandle:
                 log_level,
             ),
             name=self.name,
+            # If the parent dies hard, children die with it.
             daemon=True,
         )
 
 
+    # pid, so orchestrator._join()'s `ident is None` never-started check still works.
     @property
     def ident(self) -> int | None:
         return self._proc.pid
@@ -175,6 +189,8 @@ class STTProcessHandle:
     def stopping(self) -> bool:
         return bool(self._stop_event.is_set())
 
+    # Reports "active now" until ready: model load (3.6-7.3s on RPi5) would otherwise look like a stall
+    # and cause an endless restart loop. CLOCK_MONOTONIC is system-wide, so values compare across processes.
     @property
     def last_activity(self) -> float:
         if not self._ready_event.is_set():
@@ -199,5 +215,6 @@ class STTProcessHandle:
             self._proc.kill()
 
 
+# spawn, never fork: forking after native ONNX Runtime/torch state is loaded can corrupt the child.
 def new_mp_context() -> "SpawnContext":
     return mp.get_context("spawn")

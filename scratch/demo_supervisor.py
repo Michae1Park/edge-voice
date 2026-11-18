@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Manual demo of Milestone 6 reliability: watch the real supervisor recover from a crash, a stall,
+# and finally give up after too many restarts.
+# Usage: python scratch/demo_supervisor.py
 
 import logging
 import os
@@ -12,7 +15,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(na
 
 
 class _BoomQueue:
-
     def get(self, *a, **kw):
         raise RuntimeError("boom (simulated crash for Milestone 6 demo)")
 

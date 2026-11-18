@@ -12,7 +12,6 @@ SAMPLE_RATE = 16000
 
 
 class _FakeSileroModel:
-
     def __init__(self, score: float) -> None:
         self.score = score
 

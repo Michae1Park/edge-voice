@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Where does "pre-STT overhead" (full latency - STT decode) go?
+# Usage: python characterization/scripts/profile_pre_stt.py --cores 4-7
 
 from __future__ import annotations
 
@@ -67,7 +69,6 @@ def _stats(v: list[float]) -> dict[str, float]:
 
 
 class Probe:
-
     def __init__(self) -> None:
         self.armed = False
         self.n_partials = 0

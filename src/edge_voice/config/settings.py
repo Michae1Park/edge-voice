@@ -45,29 +45,32 @@ class AudioSettings(BaseModel):
         return value
 
 
+# sample_rate always follows audio.sample_rate (see _check_repacketizer_matches_vad).
 class RepacketizerSettings(BaseModel):
-
     incoming_ms: float = Field(default=20.0, gt=0)
     outgoing_ms: float = Field(default=32.0, gt=0)
     bytes_per_sample: int = Field(default=2, ge=1)
 
 
 class VADSettings(BaseModel):
-
     threshold: float = 0.5
     window_samples: int = 512
     rms_gate_enabled: bool = True
+    # CALIBRATE: normalized float32 RMS, not raw int16.
     silence_rms_floor: float = 0.01
     preroll_chunks: int = 3
     min_silence_duration_ms: int = 100
     speech_pad_ms: int = 30
+    # Emit an in-progress segment after this many seconds without packets; 0 disables.
     idle_flush_s: float = 2.0
     segment_limits_enabled: bool = False
     max_segment_s: float = 7.0
+    # The hard cap alone bounds backlog; soft cut trades some latency for cutting on a pause instead of mid-word.
     soft_cut_enabled: bool = True
     soft_cut_s: float = 5.0
     soft_cut_lookahead_s: float = 1.0
     soft_cut_min_dip: float = 0.10
+    # 0 disables. On a non-streaming model every partial re-transcribes the whole prefix, so measure before raising.
     partial_interval_s: float = Field(default=0.0, ge=0)
     partial_min_segment_s: float = Field(default=1.5, gt=0)
 
@@ -86,8 +89,9 @@ class VADSettings(BaseModel):
         return self
 
 
+# stt.language + model_arch select the model. Not every arch exists per language (es has no tiny;
+# only en has streaming). Re-check with scratch/probe_moonshine_models.py after upgrading moonshine-voice.
 class MoonshineSettings(BaseModel):
-
     model_config = ConfigDict(extra="forbid")
 
     model_arch: Literal[
@@ -107,7 +111,6 @@ class MoonshineSettings(BaseModel):
 
 
 class SenseVoiceSettings(BaseModel):
-
     model_config = ConfigDict(extra="forbid")
 
     use_itn: bool = True
@@ -117,12 +120,12 @@ class SenseVoiceSettings(BaseModel):
     npu_model_dir: str = ""
     npu_window_s: Literal[5, 10, 15, 20, 25, 30] = 5
     npu_runtime_lib: str = ""
+    # One channel per NPU core: latency held to 3 streams on RK3588 but jumped once two shared a core.
     npu_max_channels: int = Field(default=RK3588_NPU_CORES, ge=1, le=RK3588_NPU_CORES)
     npu_probe_timeout_s: float = Field(default=60.0, gt=0)
 
 
 class STTSettings(BaseModel):
-
     model_config = ConfigDict(extra="forbid")
 
     model: Literal["sensevoice", "moonshine"] = "sensevoice"
@@ -130,8 +133,12 @@ class STTSettings(BaseModel):
     language: str = "ko"
     moonshine: MoonshineSettings = MoonshineSettings()
     sensevoice: SenseVoiceSettings = SenseVoiceSettings()
+    # Partials are skipped (never finals) when segment_queue is at least this deep.
     partial_max_queue_depth: int = Field(default=0, ge=0)
+    # Moonshine's native decode holds the GIL: two STT threads serialize (1.02x on RPi5), processes overlap (1.70x).
+    # False is the fast test default and the one-line rollback.
     use_processes: bool = True
+    # Model load alone is 3.6-7.3s on the RPi5, plus spawn and imports.
     process_start_timeout_s: float = Field(default=120.0, gt=0)
 
     @model_validator(mode="after")
@@ -158,6 +165,7 @@ class LoggingSettings(BaseModel):
 
 
 class WebUISettings(BaseModel):
+    # Kiosk-only deployment with no network, so bind loopback.
     host: str = "127.0.0.1"
     port: int = Field(default=8080, ge=1, le=65535)
     transcript_backlog: int = Field(default=50, ge=0)
@@ -168,37 +176,35 @@ class HealthSettings(BaseModel):
 
 
 class MetricsSettings(BaseModel):
-
     enabled: bool = True
     emit_interval_s: float = Field(default=10.0, gt=0)
     latency_log_decimals: int = Field(default=3, ge=0)
 
 
 class ReliabilitySettings(BaseModel):
-
     enabled: bool = True
+    # Keep well under systemd's WatchdogSec so one missed tick doesn't trigger a restart.
     tick_interval_s: float = Field(default=2.0, gt=0)
+    # Only workers with pending input are flagged; idle workers never stall.
     stall_timeout_s: float = Field(default=10.0, gt=0)
+    # Past this many restarts in restart_window_s a worker is "degraded" and the OS watchdog takes over.
     max_restarts: int = Field(default=3, ge=0)
     restart_window_s: float = Field(default=60.0, gt=0)
     watchdog_enabled: bool = True
 
 
 class DumpSettings(BaseModel):
-
     enabled: bool = False
     output_dir: str = "./dumped_audio"
     segment_secs: float = 10.0
 
 
 class SegmentDumpSettings(BaseModel):
-
     enabled: bool = False
     output_dir: str = "./dumped_vad_segments"
 
 
 class QueuesSettings(BaseModel):
-
     ingest: int = 256
     routed: int = 128
     segment: int = 64
@@ -206,7 +212,6 @@ class QueuesSettings(BaseModel):
 
 
 class Settings(BaseSettings):
-
     mqtt: MQTTSettings = MQTTSettings()
     audio: AudioSettings = AudioSettings()
     repacketizer: RepacketizerSettings = RepacketizerSettings()
@@ -228,6 +233,7 @@ class Settings(BaseSettings):
         extra="forbid",
     )
 
+    # Earlier sources win: init kwargs > env > local.yaml > default.yaml > code defaults.
     @classmethod
     def settings_customise_sources(
         cls,
@@ -275,7 +281,6 @@ class Settings(BaseSettings):
 
 
 class _YamlConfigSettingsSource(PydanticBaseSettingsSource):
-
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         return None, field_name, False
 

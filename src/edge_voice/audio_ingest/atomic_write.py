@@ -8,6 +8,7 @@ import numpy as np
 import soundfile as sf
 
 
+# Write to a same-directory temp file then os.replace, so a power cut never leaves a torn file.
 def atomic_sf_write(
     path: str | os.PathLike[str],
     data: np.ndarray,
@@ -17,6 +18,7 @@ def atomic_sf_write(
 ) -> None:
     dest = Path(path)
     tmp = dest.with_name(f".{dest.name}.tmp-{os.getpid()}")
+    # The temp name has no .wav suffix, so soundfile can't infer the format from it.
     kwargs.setdefault("format", dest.suffix.lstrip(".").upper() or None)
     try:
         sf.write(str(tmp), data, samplerate, subtype=subtype, **kwargs)

@@ -19,7 +19,6 @@ CONNECT_TIMEOUT_S = 5.0
 
 
 class MqttAudioIngest(threading.Thread):
-
     def __init__(
         self,
         settings: MQTTSettings,
@@ -35,6 +34,7 @@ class MqttAudioIngest(threading.Thread):
         self._last_activity = time.monotonic()
         self._client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
         self._on_connected: list[Callable[[], None]] = []
+        # paho owns reconnect, so the supervisor never stall-checks this worker.
         self._client.reconnect_delay_set(min_delay=1, max_delay=30)
         self._client.reconnect_on_disconnect = True  # type: ignore[attr-defined]
 

@@ -17,7 +17,6 @@ QUEUE_PUT_TIMEOUT_S = 0.2
 
 @dataclass(frozen=True, slots=True)
 class RepacketizerConfig:
-
     incoming_ms: float = 20.0
     outgoing_ms: float = 32.0
     sample_rate: int = 16000
@@ -35,8 +34,8 @@ def _ms_to_bytes(ms: float, sample_rate: int, bytes_per_sample: int) -> int:
     return rounded * bytes_per_sample
 
 
+# Output timestamps advance a per-channel clock, assuming contiguous input; call reset_channel() after a gap.
 class Repacketizer:
-
     def __init__(self, config: RepacketizerConfig) -> None:
         self._config = config
         self._incoming_bytes = _ms_to_bytes(
@@ -60,6 +59,7 @@ class Repacketizer:
 
         buf = self._buffers.setdefault(packet.channel_id, bytearray())
 
+        # Re-anchor only on an empty buffer, or carried-over audio would make timestamps jump.
         if not buf:
             self._buffer_start_ts[packet.channel_id] = packet.timestamp
 
@@ -108,7 +108,6 @@ class Repacketizer:
 
 
 class ChannelRouter(threading.Thread):
-
     def __init__(
         self,
         ingest_queue: queue.Queue[AudioPacket],

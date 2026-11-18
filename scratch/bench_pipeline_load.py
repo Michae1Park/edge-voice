@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# End-to-end (mic -> transcript) latency and RAM/CPU footprint, on the real pipeline under sustained
+# dual-channel load -- not the STT-only harness in bench_streaming_cost.py.
+# Usage: python scratch/bench_pipeline_load.py
 
 from __future__ import annotations
 
@@ -52,7 +55,6 @@ def _read_proc_tree(extra_pids: list[int]) -> tuple[float, int]:
 
 
 class ResourceSampler:
-
     def __init__(
         self,
         rss_interval_s: float,
@@ -134,7 +136,6 @@ def _pin_main_thread(cores: set[int]) -> None:
 
 
 class _SttLatencyCapture(logging.Handler):
-
     def __init__(self) -> None:
         super().__init__(level=logging.INFO)
         self.by_segment: dict[str, float] = {}
@@ -153,7 +154,6 @@ MERGE_THRESHOLD_MULT = 1.3
 
 
 class EarlyStopWatchdog:
-
     def __init__(self, atomic_cycle_s: float | None) -> None:
         self._atomic_cycle_s = atomic_cycle_s
         self._consecutive = 0

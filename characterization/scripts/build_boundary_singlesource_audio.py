@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Length sweep using ONE base recording, to isolate length from content.
+# Usage: python characterization/scripts/build_boundary_singlesource_audio.py
 
 from __future__ import annotations
 

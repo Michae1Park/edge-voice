@@ -16,14 +16,15 @@ STATE_RESTARTING = "restarting"
 STATE_DEGRADED = "degraded"
 
 
+# Callables must read the current worker each call so they observe a restart's replacement.
 @dataclass
 class SupervisedTarget:
-
     name: str
     is_alive: Callable[[], bool]
     is_stopping: Callable[[], bool]
     last_activity: Callable[[], float]
     restart: Callable[[], None]
+    # False for sources with no input queue, so they're never stall-restarted.
     input_pending: Callable[[], bool] = field(default=lambda: False)
     pending_loss: Callable[[], str | None] = field(default=lambda: None)
     stall_detection: bool = True
@@ -38,8 +39,8 @@ class _TargetState:
     state: str = STATE_RUNNING
 
 
+# Restarts run on short-lived threads so a slow model reload never delays the watchdog ping.
 class Supervisor(threading.Thread):
-
     def __init__(
         self,
         targets: list[SupervisedTarget],
@@ -87,6 +88,7 @@ class Supervisor(threading.Thread):
 
         while not self._stop_event.wait(self._tick_interval_s):
             if self._watchdog_enabled:
+                # Ping before detection/dispatch so the heartbeat never waits on restart bookkeeping.
                 systemd_watchdog.notify("WATCHDOG=1")
             self._scan()
 
@@ -159,6 +161,7 @@ class Supervisor(threading.Thread):
 
     def _restart_worker(self, ts: _TargetState) -> None:
         try:
+            # Log in-progress work the dead worker held before it's gone for good.
             loss = ts.target.pending_loss()
         except Exception:
             loss = None

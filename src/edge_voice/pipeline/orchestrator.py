@@ -33,12 +33,12 @@ RECEIVER_POLL_TIMEOUT_S = 0.2
 
 
 class PipelineOrchestrator:
-
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._ingest_queue: queue.Queue | None = None
         self._routed_queue: queue.Queue | None = None
         self._dump_queue: queue.Queue | None = None
+        # mp.Queue in process mode, queue.Queue otherwise; both share put/get/qsize and raise queue.Full/Empty.
         self._segment_queues: dict[str, Any] | None = None
         self._segment_dump_queue: queue.Queue | None = None
         self._audio_source: threading.Thread | None = None
@@ -52,6 +52,7 @@ class PipelineOrchestrator:
         self._log_listener: Any = None
         self._stt_receivers: dict[str, threading.Thread] = {}
         self._receivers_stop = threading.Event()
+        # Process mode can't read worker attributes, so receivers mirror SttResult latency here.
         self._stt_latency_lock = threading.Lock()
         self._stt_last_latency_s: dict[str, float] = {}
         self._supervisor: Supervisor | None = None
@@ -119,6 +120,7 @@ class PipelineOrchestrator:
         if self._running:
             return
         self._running = True
+        # Before any child starts, so its first log record has a drained queue to go to.
         if self._settings.stt.use_processes and self._log_queue is not None:
             self._log_listener = start_log_queue_listener(self._log_queue)
 
@@ -129,12 +131,14 @@ class PipelineOrchestrator:
             self._start_stt_receivers()
             self._await_stt_ready()
 
+        # Started last so its first scan never sees an unstarted or still-loading worker as crashed.
         if self._supervisor is not None:
             self._supervisor.start()
         if self._metrics is not None:
             self._metrics.start()
         logger.info("Pipeline started")
 
+    # Keeps model loading off the real-time path. A child that never reports ready is left for the supervisor.
     def _await_stt_ready(self) -> None:
         timeout = self._settings.stt.process_start_timeout_s
         deadline = time.monotonic() + timeout
@@ -150,12 +154,14 @@ class PipelineOrchestrator:
                 extra={"channel_id": channel_id},
             )
 
+    # Upstream-first with per-stage joins: VAD flushes its last segment on exit, so consumers must still be alive.
     def stop(self) -> None:
         self._running = False
         self._stop_event.set()
         if self._metrics is not None:
             self._signal(self._metrics)
             self._join(self._metrics)
+        # Stop before workers, or it races to restart workers we are deliberately stopping.
         if self._supervisor is not None:
             self._signal(self._supervisor)
             self._join(self._supervisor)
@@ -165,13 +171,17 @@ class PipelineOrchestrator:
                 self._signal(w)
                 self._join(w)
         finally:
+            # A second Ctrl-C can interrupt the drain; non-daemon workers left unsignalled would hang the process.
             for w in workers:
                 self._signal(w)
+            # Receivers stop last: a child holding undelivered transcripts cannot exit.
             if self._settings.stt.use_processes:
                 self._stop_stt_receivers()
                 self._stop_log_listener()
                 self._abandon_segment_queue_backlog()
 
+    # An unread mp.Queue backlog leaves its feeder thread stuck in pipe_write, and multiprocessing joins
+    # it without timeout at exit, hanging the whole process. Safe because STT is already stopped.
     def _abandon_segment_queue_backlog(self) -> None:
         if self._segment_queues is None:
             return
@@ -204,6 +214,7 @@ class PipelineOrchestrator:
         if not worker.is_alive():
             return
         logger.warning("Worker %s did not stop within %ss", worker.name, WORKER_JOIN_TIMEOUT_S)
+        # Unlike threads, a wedged STT process can be reclaimed; a long decode under backlog can exceed the join timeout.
         killer = getattr(worker, "kill", None)
         if callable(killer):
             logger.warning("Worker %s did not exit after signal -- killing it", worker.name)
@@ -220,6 +231,7 @@ class PipelineOrchestrator:
                 if name in workers and workers[name] == "running":
                     workers[name] = str(info["state"])
             degraded = self._supervisor.is_degraded()
+            # Nothing supervises the supervisor, so surface its own liveness.
             workers[self._supervisor.name] = "running" if self._supervisor.is_alive() else "stopped"
         return {"running": running, "degraded": degraded, "workers": workers}
 
@@ -273,6 +285,7 @@ class PipelineOrchestrator:
         self.run(duration_s=duration_s)
 
 
+    # Order is load-bearing: stop() shuts down producers before their consumers.
     def _get_workers(self) -> list[threading.Thread]:
         workers: list[threading.Thread | None] = [
             self._audio_source,
@@ -312,6 +325,7 @@ class PipelineOrchestrator:
             latency_log_decimals=m.latency_log_decimals,
         )
 
+    # Worst channel, i.e. the one closest to its real-time budget.
     def _stt_latency_s(self) -> float | None:
         values = list(self._stt_channel_latencies_s().values())
         return max(values) if values else None
@@ -341,6 +355,7 @@ class PipelineOrchestrator:
 
     def _stt_receiver_loop(self, channel_id: str) -> None:
         while not self._receivers_stop.is_set():
+            # Re-read each poll: a restart swaps in a new handle with a new transcript queue.
             handle = self._stt.get(channel_id)
             if handle is None:
                 return
@@ -349,6 +364,7 @@ class PipelineOrchestrator:
             except queue.Empty:
                 continue
             except (EOFError, OSError):
+                # Queue gone (child killed); wait for a supervisor restart rather than exiting.
                 self._receivers_stop.wait(RECEIVER_POLL_TIMEOUT_S)
                 continue
             try:
@@ -372,6 +388,7 @@ class PipelineOrchestrator:
     def _mqtt_connected(self) -> bool | None:
         return getattr(self._w("_audio_source"), "connected", None)
 
+    # Read through this rather than a captured reference so a restart's replacement worker is observed.
     def _w(self, attr: str) -> Any:
         return getattr(self, attr)
 
@@ -447,11 +464,13 @@ class PipelineOrchestrator:
             input_pending=input_pending,
         )
 
+    # A stalled thread can't be killed; it may linger as a zombie until the OS watchdog restarts the process.
     def _restart(self, attr: str, build_fn: Callable[[], threading.Thread]) -> None:
         old = getattr(self, attr)
         self._signal(old)
         self._join(old)
         if old.is_alive():
+            # A native decoder segfault shows up here as -11.
             logger.warning(
                 "Orchestrator: %s did not exit after signal -- a zombie thread may "
                 "linger on its input queue until a full process restart",
@@ -488,6 +507,7 @@ class PipelineOrchestrator:
         workers[key] = new
         if self._running and not self._stop_event.is_set():
             new.start()
+            # Wait for the model load, or the supervisor sees it as a stall and loops.
             waiter = getattr(new, "wait_ready", None)
             if callable(waiter):
                 waiter(self._settings.stt.process_start_timeout_s)
@@ -546,6 +566,7 @@ class PipelineOrchestrator:
         )
 
     def _publish_transcript(self, event, latency_s: float | None) -> None:
+        # last_latency_s belongs to the latest final, so partials must not use the lifecycle-close branch below.
         if not event.is_final:
             logger.debug(
                 "PARTIAL channel=%s segment=%s [%.2f-%.2f] %r",
@@ -610,6 +631,7 @@ class PipelineOrchestrator:
             name=f"STTWorker-{channel_id}",
         )
 
+    # Must stay picklable: process mode ships it to the child at spawn.
     def _stt_config(self, channel_id: str) -> STTWorkerConfig:
         stt = self._settings.stt
         sv = stt.sensevoice
@@ -646,6 +668,7 @@ class PipelineOrchestrator:
             partial_max_queue_depth=stt.partial_max_queue_depth,
         )
 
+    # Download once in the parent so ~420 MB doesn't count against every child's start timeout.
     def _prefetch_stt_models(self) -> None:
         if self._settings.stt.model != "sensevoice":
             return

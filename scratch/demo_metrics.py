@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Manual demo of Milestone 7's observability/metrics.py (see docs/BUILDPLAN.md).
+# Usage: python scratch/demo_metrics.py
 
 from __future__ import annotations
 

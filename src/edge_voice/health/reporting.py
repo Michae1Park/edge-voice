@@ -13,6 +13,8 @@ METRICS_PENDING = "pending"
 METRICS_DISABLED = "disabled"
 
 
+# queue_depths and channels are sampled live; mqtt_connected and restarts come from the last
+# metrics tick, whose age is reported in metrics.age_s.
 def build_health_report(
     status: dict,
     queue_depths: dict[str, int],
@@ -54,6 +56,7 @@ def _metrics_block(
     )
 
 
+# Drops per-worker state: the live, supervisor-refined copy already ships in `workers`.
 def _restarts(snapshot: MetricsSnapshot) -> dict | None:
     if snapshot.restart_status is None:
         return None
@@ -64,6 +67,8 @@ def _restarts(snapshot: MetricsSnapshot) -> dict | None:
     }
 
 
+# Omits the cross-channel stt_last_latency_s, which would disagree with the per-channel values.
+# vad_rms_gate times the gate-skip path (microseconds), not inference.
 def _latencies(snapshot: MetricsSnapshot) -> dict:
     return {
         "router": snapshot.router_repacketize_latencies_s,
@@ -73,6 +78,7 @@ def _latencies(snapshot: MetricsSnapshot) -> dict:
     }
 
 
+# Never-seen (None) is a startup state, not stale; it's also what every channel reads after a router restart.
 def _channels(freshness: dict[str, float | None], stale_after_s: float) -> dict:
     return {
         channel_id: {
@@ -83,6 +89,8 @@ def _channels(freshness: dict[str, float | None], stale_after_s: float) -> dict:
     }
 
 
+# Channel staleness and unknown MQTT state deliberately don't affect the verdict: channels are
+# legitimately idle between conversations, and an always-amber kiosk teaches operators to ignore it.
 def _verdict(running: bool, degraded: object, mqtt_connected: bool | None) -> str:
     if not running:
         return STATUS_DOWN

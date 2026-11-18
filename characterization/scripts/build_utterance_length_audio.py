@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Builds test files for the utterance-LENGTH question, holding occupancy fixed -- isolates "does the
+# base speech unit's own duration matter" from density (already tested with a 3s unit) and speaking
+# ...
+# Usage: python characterization/scripts/build_utterance_length_audio.py --file 7s.wav
 
 from __future__ import annotations
 

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Same cell as ss_len10_max (97% occupancy, 2.0x rate, 10s crop) but with a few DIFFERENT source
+# recordings, to test how often the repetitive-decode collapse (found in p2_b_max, absent in
+# ss_len10_max) ...
+# Usage: python characterization/scripts/build_content_check_audio.py
 
 from __future__ import annotations
 

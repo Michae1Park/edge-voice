@@ -14,7 +14,6 @@ logger = get_stage_logger(__name__, stage="audio_ingest")
 
 
 class SegmentAudioDumpWorker(threading.Thread):
-
     def __init__(
         self,
         segment_queue: queue.Queue[SpeechSegment],

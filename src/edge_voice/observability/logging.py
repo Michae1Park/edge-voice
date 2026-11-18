@@ -15,7 +15,6 @@ _STRUCTURED_FIELDS = ("stage", "channel_id", "segment_id", "stt_latency_s")
 
 
 class JsonFormatter(logging.Formatter):
-
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, object] = {
             "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
@@ -29,11 +28,12 @@ class JsonFormatter(logging.Formatter):
                 payload[field] = value
         if record.exc_info:
             payload["exc_info"] = self.formatException(record.exc_info)
+        # Keep Korean transcripts readable instead of \uXXXX escapes.
         return json.dumps(payload, default=str, ensure_ascii=False)
 
 
+# The stdlib LoggerAdapter overwrites a call's extra= instead of merging it.
 class _MergingAdapter(logging.LoggerAdapter[logging.Logger]):
-
     def process(
         self, msg: Any, kwargs: MutableMapping[str, Any]
     ) -> tuple[Any, MutableMapping[str, Any]]:
@@ -51,6 +51,7 @@ def current_log_level() -> int:
     return logging.getLogger().getEffectiveLevel()
 
 
+# Must run even with no handlers: it also drains the queue, and an unread queue blocks the child.
 def start_log_queue_listener(log_queue: Any) -> QueueListener:
     root = logging.getLogger()
     listener = QueueListener(log_queue, *root.handlers, respect_handler_level=True)

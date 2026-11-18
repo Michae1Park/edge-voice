@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Streaming vs non-streaming: how long does each update take, and what does it say?
+# Usage: python scratch/bench_streaming_cost.py
 
 import time
 from typing import TypedDict

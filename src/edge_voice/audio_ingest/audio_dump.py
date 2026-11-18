@@ -16,7 +16,6 @@ BYTES_PER_SAMPLE = 2
 
 
 class AudioDumpWorker(threading.Thread):
-
     def __init__(
         self,
         dump_queue: queue.Queue[AudioPacket],

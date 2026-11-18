@@ -19,6 +19,7 @@
   var modCache = {};
   var DASH = "—";
 
+  // STT has one row per channel; `channel` makes the row read its own latency instead of the worst across channels.
   var MODULES = [
     { worker: "MqttAudioIngest", label: "Ingest", latency: null },
     { worker: "ChannelRouter", label: "Router", latency: "router" },
@@ -76,6 +77,8 @@
     return { wrap: wrap, bubble: bubble, time: time };
   }
 
+  // Order by when spoken, not when received: per-channel decoders finish independently, so a short
+  // utterance can overtake a longer one spoken earlier.
   function insertByTimestamp(wrap) {
     var startTs = parseFloat(wrap.dataset.start);
     var existing = inner.querySelectorAll(".msg[data-start]");
@@ -101,12 +104,15 @@
     if (wasNearBottom) {
       scrollToBottom(true);
     } else if (insertedAbove && wrap.offsetTop < prevTop) {
+      // Compensate for content inserted above the reader so scrollback doesn't jump.
       feed.scrollTop = prevTop + (feed.scrollHeight - prevHeight);
     } else {
       jumpBtn.hidden = false;
     }
   }
 
+  // Partials share their final's segment_id and are rewritten in place; the entry is dropped once the
+  // final lands, which is safe because nothing for an id arrives after its final.
   var liveBubbles = Object.create(null);
 
   function applyMessage(m) {
@@ -130,6 +136,7 @@
   });
 
   clearBtn.addEventListener("click", function () {
+    // Touchscreen kiosk invites stray taps.
     if (!window.confirm("Clear all transcripts?")) return;
     fetch("/api/transcripts/clear", { method: "POST" }).catch(function () {});
     liveBubbles = Object.create(null);
@@ -167,6 +174,7 @@
 
   function formatAge(seconds) {
     if (seconds === null || seconds === undefined) return DASH;
+    // The router uses wall-clock time, so a clock step could yield a negative age.
     var s = Math.max(0, seconds);
     return s < 10 ? s.toFixed(1) + "s" : Math.round(s) + "s";
   }

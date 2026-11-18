@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class MetricsSnapshot:
-
     queue_depths: dict[str, int]
     stt_last_latency_s: float | None
     mqtt_connected: bool | None
@@ -25,12 +24,12 @@ class MetricsSnapshot:
     taken_at: float = field(default_factory=time.monotonic)
 
 
+# Log line only; sub-ms readings show as 0.0 at the default precision. snapshot() keeps full precision.
 def _rounded(latencies: dict[str, float], decimals: int) -> dict[str, float]:
     return {channel: round(value, decimals) for channel, value in latencies.items()}
 
 
 class MetricsCollector(threading.Thread):
-
     def __init__(
         self,
         queue_depths: Callable[[], dict[str, int]],

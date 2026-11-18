@@ -14,7 +14,6 @@ from edge_voice.pipeline.supervisor import (
 
 
 class FakeWorker:
-
     def __init__(self) -> None:
         self.alive = True
         self._stopping = False

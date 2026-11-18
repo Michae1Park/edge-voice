@@ -1,3 +1,8 @@
+# One-off: compare Silero VAD's torch.jit (torch.hub) backend against its onnxruntime backend,
+# replicating the app's real per-channel usage (own model + VADIterator per channel, 320-sample/20ms
+# chunks ...
+# Usage: python scratch/bench_vad_backend.py
+
 import time
 
 import numpy as np

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Recompute summary.json (and the terminal report) from an existing requests.csv +
+# queue_samples.csv, without re-running the benchmark.
 
 from __future__ import annotations
 

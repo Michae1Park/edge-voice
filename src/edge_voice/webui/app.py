@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 _TEMPLATE_PATH = Path(__file__).parent / "templates" / "console.html"
 _STATIC_DIR = Path(__file__).parent / "static"
 
+# Bounds how late a client disconnect is noticed; new transcripts wake the wait immediately.
 SSE_POLL_TIMEOUT_S = 1.0
 
 
@@ -36,6 +37,7 @@ def create_app(orchestrator: PipelineOrchestrator) -> FastAPI:
 
     @app.post("/api/start")
     async def start() -> dict:
+        # Off the event loop so a slow first model load can't stall the status poll.
         await run_in_threadpool(orchestrator.start)
         return orchestrator.get_status()
 

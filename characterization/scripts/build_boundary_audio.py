@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Builds test files for the systematic boundary-search experiment.
+# Usage: python characterization/scripts/build_boundary_audio.py
 
 from __future__ import annotations
 

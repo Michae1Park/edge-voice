@@ -88,6 +88,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     while not connected:
         time.sleep(0.05)
 
+    # Most mics only support fixed native rates, so capture natively and resample per chunk.
     native_sr = int(sd.query_devices(args.device, "input")["default_samplerate"])
     resampler = None
     native_chunk = args.chunk
@@ -116,6 +117,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     start = time.time()
     try:
         while True:
+            # The blocking read paces this loop at real time.
             raw, _overflowed = stream.read(native_chunk)
             data = np.frombuffer(bytes(raw), dtype=np.int16)
             if resampler is not None:

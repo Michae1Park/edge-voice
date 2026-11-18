@@ -25,8 +25,8 @@ class _Transcript:
     lines: list[_Line] = field(default_factory=list)
 
 
+# Fixed-shape NPU models silently truncate past their window, so longer audio is split into window-sized chunks.
 class UtteranceTranscriber:
-
     def __init__(self, recognizer: UtteranceRecognizer, window_s: float | None = None) -> None:
         self._recognizer = recognizer
         self._window_s = window_s

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Objective pass/fail for one boundary-search cell's sustained run.
+# Usage: python characterization/scripts/analyze_boundary_run.py <label> <csv_path> <log_path> [metadata_path]
 
 from __future__ import annotations
 

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Runs the length=9-15s single-source boundary sweep (built by build_boundary_singlesource_audio.py)
+# through bench_pipeline_load.py, one condition at a time, with the SAME flags used for the p1_/p2_
+# ...
+# Usage: python characterization/scripts/run_singlesource_sweep.py [--labels ss_len9_max ...]
 
 from __future__ import annotations
 

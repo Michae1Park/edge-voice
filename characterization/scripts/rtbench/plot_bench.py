@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Plots for run_bench.py's output -- reads requests.csv, queue_samples.csv, and summary.json from a
+# results directory, writes PNGs to <results-dir>/plots.
+# Usage: python characterization/scripts/rtbench/plot_bench.py --results-dir characterization/results/rtbench
 
 from __future__ import annotations
 

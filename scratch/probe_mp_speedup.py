@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Do two STT *processes* decode in parallel, where two threads did not?
+# Usage: python scratch/probe_mp_speedup.py
 
 from __future__ import annotations
 

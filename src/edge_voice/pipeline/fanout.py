@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_PUT_TIMEOUT_S = 0.2
 
 
+# Tag drop logs with channel_id/segment_id so a lost segment can be found by filtering on its id.
 def _item_context(item: object) -> dict[str, object]:
     context: dict[str, object] = {}
     for field in ("channel_id", "segment_id"):

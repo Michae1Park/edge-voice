@@ -15,7 +15,6 @@ PUT_TIMEOUT_S = 0.1
 
 
 class TranscriptHub:
-
     def __init__(self, backlog: int = DEFAULT_BACKLOG) -> None:
         self._backlog: deque[TranscriptEvent] = deque(maxlen=backlog)
         self._subscribers: set[queue.Queue[TranscriptEvent]] = set()
@@ -23,6 +22,7 @@ class TranscriptHub:
 
     def publish(self, event: TranscriptEvent) -> None:
         with self._lock:
+            # The backlog keeps finals only, so superseded partials don't push real transcripts out of replay.
             if event.is_final:
                 self._backlog.append(event)
             subscribers = list(self._subscribers)
@@ -32,6 +32,8 @@ class TranscriptHub:
             except queue.Full:
                 logger.warning("webui subscriber queue full -- dropping transcript")
 
+    # Backlog is replayed sorted by `start`: channels decode independently, so publish order can differ
+    # from speaking order.
     def subscribe(self) -> "queue.Queue[TranscriptEvent]":
         sub: "queue.Queue[TranscriptEvent]" = queue.Queue(maxsize=DEFAULT_SUBSCRIBER_MAXSIZE)
         with self._lock:

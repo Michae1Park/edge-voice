@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Builds the three speech-density test files used by run_experiment.py.
 
 from __future__ import annotations
 

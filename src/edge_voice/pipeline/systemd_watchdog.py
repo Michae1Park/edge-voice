@@ -7,11 +7,13 @@ import socket
 logger = logging.getLogger(__name__)
 
 
+# No-op when $NOTIFY_SOCKET is unset (dev, CI, off-device). Never raises: it must not crash the pinging thread.
 def notify(state: str) -> bool:
     addr = os.environ.get("NOTIFY_SOCKET")
     if not addr:
         return False
 
+    # Abstract-namespace socket: '@' is encoded as a leading NUL byte.
     if addr.startswith("@"):
         addr = "\0" + addr[1:]
     elif not addr.startswith("/"):
@@ -23,6 +25,7 @@ def notify(state: str) -> bool:
             sock.connect(addr)
             sock.sendall(state.encode("utf-8"))
         return True
+    # If pings genuinely stop arriving, that is the signal the watchdog exists for.
     except OSError:
         logger.debug("sd_notify(%r) failed", state, exc_info=True)
         return False

@@ -1,3 +1,6 @@
+# On-board check of the NPU STT backend through the production worker path.
+# Usage: python npu_worker_check.py DATA_DIR MODEL_DIR RUNTIME_LIB [CHANNELS]
+
 from __future__ import annotations
 
 import json

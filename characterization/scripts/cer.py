@@ -1,3 +1,5 @@
+# Character Error Rate (CER) -- no external dependency (no jiwer/etc).
+
 from __future__ import annotations
 
 

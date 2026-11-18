@@ -15,32 +15,43 @@ from edge_voice.pipeline.models import AudioPacket, SpeechSegment
 
 logger = get_stage_logger(__name__, stage="vad")
 
+INT16_SAMPLE_BYTES = 2
+INT16_FULL_SCALE = 32768.0
+
 
 @dataclass
 class VADWorkerConfig:
     threshold: float = 0.5
     sample_rate: int = 16000
     rms_gate_enabled: bool = True
+    # CALIBRATE: normalized float32 RMS, not raw int16.
     silence_rms_floor: float = 0.01
     preroll_chunks: int = 3
     min_silence_duration_ms: int = 100
     speech_pad_ms: int = 30
 
+    # Every other boundary rule needs packets to keep arriving, so a sender that just stops
+    # would leave its segment buffered until shutdown. 0 disables.
     idle_flush_s: float = 2.0
 
+    # For speech with no pause long enough for Silero to fire `end`; bounds emission latency and segment size.
     segment_limits_enabled: bool = False
     max_segment_s: float = 7.0
+    # A soft cut backdates `.end` to the chosen pause, which inflates latency measured against `.end`
+    # (~0.7-1.75s per piece on RPi5, see docs/BENCHMARK.md). The hard cap is what bounds backlog.
     soft_cut_enabled: bool = True
     soft_cut_s: float = 5.0
     soft_cut_lookahead_s: float = 1.0
     soft_cut_min_dip: float = 0.10
 
+    # Partials never reach dump_queue and are dropped rather than queued when STT is behind.
     partial_interval_s: float = 0.0
     partial_min_segment_s: float = 1.5
 
 
+# Captures the exact score VADIterator used, without a second forward pass that would
+# also feed Silero's stateful RNN each window twice.
 class _ScoreCapturingModel:
-
     def __init__(self, model: Any) -> None:
         self._model = model
         self.last_score = 0.0
@@ -70,7 +81,6 @@ class _ChannelState:
 
 
 class VADWorker(threading.Thread):
-
     def __init__(
         self,
         routed_queue: "queue.Queue[AudioPacket]",
@@ -95,6 +105,7 @@ class VADWorker(threading.Thread):
         self._stop_event = threading.Event()
         self._last_activity = time.monotonic()
 
+        # A real lock: a new key can resize the dict while MetricsCollector copies it from another thread.
         self._latency_lock = threading.Lock()
         self._silero_latency_s: dict[str, float] = {}
         self._rms_gate_latency_s: dict[str, float] = {}
@@ -110,11 +121,12 @@ class VADWorker(threading.Thread):
     def last_activity(self) -> float:
         return self._last_activity
 
+    # Lets the supervisor log a crash that ate a live utterance before replacing the worker.
     def pending_loss(self) -> str | None:
         parts = []
         for channel_id, state in self._channels.items():
             if state.segment_start_ts is not None and state.segment_chunks:
-                n_samples = sum(len(c) for c in state.segment_chunks) // 2
+                n_samples = sum(len(c) for c in state.segment_chunks) // INT16_SAMPLE_BYTES
                 parts.append(f"{channel_id}={n_samples / self.config.sample_rate:.2f}s")
         return ", ".join(parts) if parts else None
 
@@ -148,6 +160,7 @@ class VADWorker(threading.Thread):
                     extra={"channel_id": packet.channel_id},
                 )
 
+            # Checked after packets too: the other channel can keep the queue busy so `Empty` never arrives.
             self._flush_idle()
 
         self.flush("shutdown")
@@ -171,7 +184,7 @@ class VADWorker(threading.Thread):
     def _flush_channel(self, channel_id: str, state: _ChannelState, reason: str) -> int:
         if state.segment_start_ts is None or not state.segment_chunks:
             return 0
-        n_samples = sum(len(c) for c in state.segment_chunks) // 2
+        n_samples = sum(len(c) for c in state.segment_chunks) // INT16_SAMPLE_BYTES
         duration_s = n_samples / self.config.sample_rate
         logger.info(
             "VADWorker: flushing in-progress segment on channel=%s (%s, %.2fs)",
@@ -183,6 +196,7 @@ class VADWorker(threading.Thread):
         self._finalize_segment(channel_id, state, end_ts=state.segment_start_ts + duration_s)
         state.triggered = False
         state.scores.clear()
+        # Otherwise VADIterator still thinks it's mid-speech and swallows the next `start`.
         state.vad_iter.reset_states()
         return 1
 
@@ -220,6 +234,7 @@ class VADWorker(threading.Thread):
         elif state.triggered:
             self._continue_segment(packet, state)
         else:
+            # Silero needs a chunk or two of signal before `start`, so preroll keeps the true onset even with the gate off.
             self._push_preroll(state, packet)
 
     def _start_segment(self, packet: AudioPacket, state: _ChannelState) -> None:
@@ -239,6 +254,7 @@ class VADWorker(threading.Thread):
     def _continue_segment(self, packet: AudioPacket, state: _ChannelState) -> None:
         if self.config.segment_limits_enabled:
             self._maybe_cut(packet.channel_id, state, packet)
+        # After the cut check, or the partial would describe audio its own final is about to supersede.
         if self.config.partial_interval_s > 0:
             self._maybe_emit_partial(packet.channel_id, state, packet)
 
@@ -247,7 +263,8 @@ class VADWorker(threading.Thread):
         self, channel_id: str, state: _ChannelState, packet: AudioPacket
     ) -> None:
         cfg = self.config
-        samples_per_chunk = len(packet.samples) // 2
+        # Paced by accumulated speech, not wall clock, so live and replayed audio behave identically.
+        samples_per_chunk = len(packet.samples) // INT16_SAMPLE_BYTES
         start_ts = state.segment_start_ts
         if samples_per_chunk <= 0 or start_ts is None or not state.segment_chunks:
             return
@@ -264,6 +281,7 @@ class VADWorker(threading.Thread):
     def _emit_partial(
         self, channel_id: str, state: _ChannelState, start_ts: float, seg_s: float
     ) -> None:
+        # put_nowait, not fanout_put: blocking this real-time thread for throwaway work STT would drop is worse.
         segment = SpeechSegment(
             channel_id=channel_id,
             start=start_ts,
@@ -282,9 +300,11 @@ class VADWorker(threading.Thread):
             )
 
 
+    # Past soft_cut_s, cut just after the deepest VAD-confidence dip in the lookahead window;
+    # at max_segment_s cut unconditionally.
     def _maybe_cut(self, channel_id: str, state: _ChannelState, packet: AudioPacket) -> None:
         cfg = self.config
-        samples_per_chunk = len(packet.samples) // 2
+        samples_per_chunk = len(packet.samples) // INT16_SAMPLE_BYTES
         if samples_per_chunk <= 0:
             return
         chunk_s = samples_per_chunk / cfg.sample_rate
@@ -363,6 +383,8 @@ class VADWorker(threading.Thread):
         state.last_partial_s = 0.0
 
 
+    # Each channel needs its own model: the LSTM state lives in the model, and sharing it
+    # doubled segment counts on recorded calls. A second model costs ~0.06s and ~4MB.
     def _new_channel_state(self) -> _ChannelState:
         model = self.model if self.model is not None else self._load_model()
         scorer = _ScoreCapturingModel(model)
@@ -386,7 +408,7 @@ class VADWorker(threading.Thread):
         )
 
     def _bytes_to_float_tensor(self, pcm_bytes: bytes) -> torch.Tensor:
-        arr = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+        arr = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / INT16_FULL_SCALE
         return torch.from_numpy(arr)
 
     def _rms(self, float_tensor: torch.Tensor) -> float:
@@ -397,6 +419,8 @@ class VADWorker(threading.Thread):
         if len(state.preroll) > self.config.preroll_chunks:
             state.preroll.pop(0)
 
+    # UNRESOLVED: discards the in-progress segment. Right for a reconnect gap, wrong for call end
+    # (use flush-then-reset there). Currently unwired.
     def reset_channel(self, channel_id: str) -> None:
         if channel_id in self._channels:
             state = self._channels[channel_id]

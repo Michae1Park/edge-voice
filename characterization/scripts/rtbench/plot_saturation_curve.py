@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Combines summary.json from multiple rtbench result directories (e.g. a coarse sweep plus a denser
+# follow-up sweep over a narrower load range) into one utilization/queue-growth-vs-offered-load
+# curve ...
 
 from __future__ import annotations
 

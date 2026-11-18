@@ -132,7 +132,6 @@ class _FakeTranscript:
 
 
 class _FakeTranscriber:
-
     def __init__(self, partial_text: str = "안녕하세요") -> None:
         self.partial_text = partial_text
         self.without_streaming_calls = 0

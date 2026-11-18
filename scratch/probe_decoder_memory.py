@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# How much RSS does a second Transcriber instance actually cost, on THIS hardware/model/moonshine-
+# voice version -- not the "~175MB" figure in stt_worker.py's module docstring, which wasn't
+# necessarily ...
+# Usage: python scratch/probe_decoder_memory.py
 
 from __future__ import annotations
 

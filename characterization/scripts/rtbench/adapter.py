@@ -1,3 +1,5 @@
+# ASR adapters: transcribe(audio_path) -> str.
+
 from __future__ import annotations
 
 import os
@@ -15,7 +17,6 @@ class AsrAdapter(Protocol):
 
 
 class DummyAdapter:
-
     def __init__(
         self, service_s: float = 1.0, jitter_s: float = 0.0, rtf: float | None = None
     ) -> None:
@@ -36,7 +37,6 @@ class DummyAdapter:
 
 
 class MoonshineAdapter:
-
     REPETITIVE_RATIO = 0.45
 
     def __init__(

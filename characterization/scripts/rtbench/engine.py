@@ -1,3 +1,5 @@
+# Producer/consumer throughput-benchmark engine.
+
 from __future__ import annotations
 
 import csv
@@ -53,7 +55,6 @@ def _read_cpu_temp_c() -> float:
 
 
 class _CpuPercentTracker:
-
     def __init__(self) -> None:
         self._last_ticks = _read_cpu_ticks()
         self._last_t = time.monotonic()

@@ -8,6 +8,7 @@ import numpy as np
 from edge_voice.stt.sensevoice.config import RK3588_NPU_CORES, SenseVoiceConfig
 from edge_voice.stt.sensevoice.models import MODEL_FILES, TOKENS_FILE
 
+# sherpa-onnx overloads num_threads as the RKNN core mask: 1 = auto, 0/-1/-2 = core 0/1/2.
 _AUTO_CORE_MASK = 1
 _CORE_MASKS = {0: 0, 1: -1, 2: -2}
 
@@ -20,6 +21,7 @@ def core_mask(core: int | None) -> int:
     return _CORE_MASKS[core]
 
 
+# Once a library with this soname is mapped, the linker reuses it, so a user-dir copy works without sudo.
 def preload_npu_runtime(runtime_lib: str) -> None:
     ctypes.CDLL(runtime_lib or "librknnrt.so", mode=ctypes.RTLD_GLOBAL)
 
@@ -31,6 +33,7 @@ class SenseVoiceRecognizer:
             provider, threads = "rknn", core_mask(config.npu_core)
         else:
             provider, threads = "cpu", config.cpu_threads
+            # The RKNN build of sherpa-onnx links librknnrt.so even on CPU.
             if config.npu_runtime_lib:
                 preload_npu_runtime(config.npu_runtime_lib)
         import sherpa_onnx

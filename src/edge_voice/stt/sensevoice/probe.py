@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# sherpa-onnx calls exit() when RKNN init fails, so the first NPU load runs here to turn that into an exit code.
 import json
 import sys
 from pathlib import Path
