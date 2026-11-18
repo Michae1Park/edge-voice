@@ -152,10 +152,9 @@ stt:
 | **SenseVoice** via [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | int8 ONNX | fp16 RKNN, one channel per core |
 | **Moonshine** (`stt.moonshine`) | ✅ | — |
 
-- **`auto`** uses the NPU if present, otherwise the CPU.
-- **Fallback:** an NPU that can't be used falls back to SenseVoice on CPU, with the reason logged.
-- **Channel cap:** 3 NPU channels (`npu_max_channels`). Extra channels run on CPU under `auto` and fail startup under `npu`.
-- **Models** download on first start to `~/.cache/edge_voice/sensevoice` (~160 MB CPU, ~420 MB NPU).
+- **`auto`:** NPU if present, else CPU. An unusable NPU falls back to CPU.
+- **Channel cap:** 3 on the NPU; extras run on CPU (`auto`) or fail (`npu`).
+- **Models** download on first start to `~/.cache/edge_voice/sensevoice`.
 
 On the Orange Pi 5 Plus, SenseVoice on the NPU is **~10× faster than Moonshine on CPU** (~260 ms vs 2–4 s per segment) and uses ~10× less CPU time (`characterization/results/npu_trial`).
 

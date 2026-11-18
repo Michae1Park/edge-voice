@@ -1,0 +1,3 @@
+{"board": "opi6plus", "runtime": "cpu", "channel": "npu0", "finals": 4, "lat_p50_ms": 265, "lat_p95_ms": 267, "lat_max_ms": 362, "cer": 0.115}
+{"board": "opi6plus", "runtime": "cpu", "channel": "npu1", "finals": 5, "lat_p50_ms": 177, "lat_p95_ms": 184, "lat_max_ms": 186}
+{"board": "opi6plus", "runtime": "cpu", "channel": "npu2", "finals": 14, "lat_p50_ms": 325, "lat_p95_ms": 367, "lat_max_ms": 397, "cer": 0.182}
