@@ -139,7 +139,7 @@ Settings are layered, lowest to highest precedence:
 <details>
 <summary><b>STT models and runtimes (CPU / RK3588 NPU)</b></summary>
 
-Model and hardware are two independent settings:
+Set in `configs/default.yaml`:
 
 ```yaml
 stt:
@@ -149,44 +149,19 @@ stt:
 
 | | `cpu` | `npu` (RK3588) |
 |---|---|---|
-| **SenseVoice** (zh/en/ja/ko/yue), via [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | int8 ONNX | fp16 RKNN, one channel per NPU core |
-| **Moonshine** (see `stt.moonshine` in `configs/default.yaml`) | ✅ | — (config error) |
+| **SenseVoice** via [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | int8 ONNX | fp16 RKNN, one channel per core |
+| **Moonshine** (`stt.moonshine`) | ✅ | — |
 
-- **`auto`** uses the NPU when the board has one and the model supports it, otherwise the CPU. `npu` and `cpu` force one.
-- **Fallback.** A requested NPU (`npu` or `auto`) that can't be used falls back to **the same model on CPU** and logs `NPU unavailable, running SenseVoice on CPU: <reason>`. A missing NPU device is logged at INFO under `auto`, and at WARNING otherwise. There is no fallback from CPU: if the CPU model can't load, the worker fails to start with the reason.
-- **Model files** download on first start into `stt.sensevoice.cache_dir` (`~/.cache/edge_voice/sensevoice`): the int8 ONNX build (~160 MB) for CPU, and the RK3588 RKNN build (~420 MB) for the NPU. The parent process downloads them once before the STT workers start. `cpu_model_dir` and `npu_model_dir` point at an existing copy instead.
-- **Why SenseVoice for the NPU.** Moonshine's encoder is only ~4–30% of its decode time on the board (the autoregressive decoder dominates), so offloading just the encoder buys little. SenseVoice decodes in one pass, so the whole model runs on the NPU.
+- **`auto`** uses the NPU if present, otherwise the CPU.
+- **Fallback:** an NPU that can't be used falls back to SenseVoice on CPU, with the reason logged.
+- **Channel cap:** 3 NPU channels (`npu_max_channels`). Extra channels run on CPU under `auto` and fail startup under `npu`.
+- **Models** download on first start to `~/.cache/edge_voice/sensevoice` (~160 MB CPU, ~420 MB NPU).
 
-**Measured on Orange Pi 5 Plus** (`characterization/results/npu_trial/r_worker_check_model_runtime.jsonl`, same 25 segments ≤5 s per row, 3 channels):
+On the Orange Pi 5 Plus, SenseVoice on the NPU is **~10× faster than Moonshine on CPU** (~260 ms vs 2–4 s per segment) and uses ~10× less CPU time (`characterization/results/npu_trial`).
 
-| Model, runtime | CER | STT latency p50 / p95 |
-|---|---|---|
-| Moonshine `tiny`, CPU | 7.8% | 0.6–1.2 s / 1.6–3.3 s |
-| SenseVoice, CPU (1 thread) | 11.3% | 230 ms / 445 ms |
-| SenseVoice, NPU (5 s window) | 8.7% | 260–270 ms / 275–285 ms |
+#### NPU board setup
 
-On the NPU, SenseVoice also uses ~10× less CPU time than Moonshine.
-
-Full pipeline (MQTT → VAD → STT → web UI, 3 channels replayed at once): per-segment STT latency p50 255–277 ms on the NPU vs 2.1–3.7 s on Moonshine, at equal or better CER (`r_e2e_pipeline.jsonl`).
-
-Concurrency: one stream per NPU core holds p95 under 270 ms up to 3 streams; a 4th stream shares a core and roughly doubles its tail latency; a 6th fails to allocate NPU memory.
-
-#### NPU channel cap
-
-Each channel gets its own NPU core, in `mqtt.channels` order. `stt.sensevoice.npu_max_channels` defaults to 3 (the RK3588 core count) and can only be lowered.
-
-- With `runtime: npu`, more channels than that fails at startup.
-- With `runtime: auto`, the extra channels run SenseVoice on CPU.
-
-#### NPU board setup (no sudo needed)
-
-`install.sh` detects the RKNPU and installs sherpa-onnx's RKNN wheel instead of PyPI's CPU-only one. For a manual install:
-
-```bash
-pip install -e . -f https://k2-fsa.github.io/sherpa/onnx/rk-npu.html
-```
-
-The NPU runtime library isn't packaged. Put it anywhere and point the config at it:
+`make install` / `install.sh` install the RKNN build of sherpa-onnx when an RKNPU is detected. Then:
 
 ```bash
 mkdir -p ~/npu/lib
@@ -198,35 +173,23 @@ curl -L -o ~/npu/lib/librknnrt.so \
 # configs/local.yaml
 stt:
   sensevoice:
-    npu_runtime_lib: /home/ai/npu/lib/librknnrt.so   # "" = system /usr/lib/librknnrt.so
+    npu_runtime_lib: /home/ai/npu/lib/librknnrt.so   # "" = system lib
 ```
 
-The service user must be in the `video` group to open the NPU's DRM node (`/dev/dri/card1` on the Orange Pi 5 Plus; check with `id`).
+Add the service user to the `video` group for NPU access.
 
-Before loading the NPU model in the STT process, each worker loads it once in a throwaway subprocess. sherpa-onnx calls `exit()` rather than raising when RKNN init fails, so this probe is what stops a bad model or a runtime mismatch from killing the worker. It adds ~1.5 s per channel to startup.
-
-#### Pinned versions
-
-| Component | Version | Notes |
-|---|---|---|
-| Board | Orange Pi 5 Plus (RK3588), Ubuntu 24.04, kernel 6.1 rockchip | |
-| RKNPU driver | 0.9.7 | `dmesg \| grep "Initialized rknpu"`; ≥0.9.2 required |
-| `librknnrt.so` | **2.2.0** | sherpa-onnx docs: 2.3.x/2.4.x may crash |
-| `sherpa-onnx` | **2.0.1** | RKNN wheel on the board, PyPI elsewhere |
-| CPU model | `sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17` | |
-| NPU model | `sherpa-onnx-rk3588-{5..30}-seconds-sense-voice-zh-en-ja-ko-yue-2024-07-17` | picked by `npu_window_s` |
-
-#### Adding a model or NPU
-
-A whole-utterance model only has to implement `transcribe(samples, sample_rate) -> str` (`stt/utterance_transcriber.py`'s `UtteranceRecognizer`); `UtteranceTranscriber` adapts it to the worker. SenseVoice's runtime selection and fallback live in `stt/sensevoice/factory.py`, and `STTWorker._new_transcriber` picks the model.
+| Pinned | Version |
+|---|---|
+| `librknnrt.so` | **2.2.0** (2.3.x/2.4.x may crash) |
+| `sherpa-onnx` | 2.0.1 |
+| RKNPU driver | ≥ 0.9.2 (tested 0.9.7) |
 
 #### Known limitations
 
-- **Fixed NPU window.** RKNN needs static shapes, so every NPU call costs a full window: a 1 s segment takes as long as a 5 s one. Segments longer than `npu_window_s` are split into consecutive windows (no overlap), which can cut a word at the boundary. Keep `npu_window_s` ≥ `vad.max_segment_s` (both 5 s by default).
-- **Accuracy.** SenseVoice's Korean CER was ~1 point worse than Moonshine `tiny-ko` on segments ≤5 s, and ~3.5 points worse up to 10 s. It writes numbers as digits ("5만 8231" → "58231") and can turn silence into a short filler ("그.").
-- **Memory.** Each NPU channel loads its own ~480 MB model into NPU memory.
-- **Partials.** Supported, but on the NPU each one costs a full window.
-- **Board coverage.** The NPU path is only tested on the Orange Pi 5 Plus with the versions above. Other RK3588 boards should work the same way but haven't been verified.
+- **Fixed NPU window:** every call costs a full `npu_window_s`. Keep it ≥ `vad.max_segment_s`.
+- **Accuracy:** CER is ~1 pt worse than Moonshine on short segments. Numbers come out as digits.
+- **Startup:** +1.5 s per NPU channel for the init probe.
+- **Tested** only on the Orange Pi 5 Plus.
 
 </details>
 
